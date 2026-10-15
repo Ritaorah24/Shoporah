@@ -1,7 +1,9 @@
 package com.rita.ecommerceplatform.controller
 
+import com.rita.ecommerceplatform.dto.request.LoginRequest
 import com.rita.ecommerceplatform.dto.request.RegisterRequest
 import com.rita.ecommerceplatform.dto.response.CustomerProfileResponse
+import com.rita.ecommerceplatform.dto.response.TokenResponse
 import com.rita.ecommerceplatform.service.AuthService
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
@@ -19,4 +21,8 @@ class AuthController(private val authService: AuthService) {
     @ResponseStatus(HttpStatus.CREATED)
     fun register(@Valid @RequestBody request: RegisterRequest): CustomerProfileResponse =
         authService.register(request)
+
+    @PostMapping("/login")
+    fun login(@Valid @RequestBody request: LoginRequest): TokenResponse =
+        authService.login(request)
 }

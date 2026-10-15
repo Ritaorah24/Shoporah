@@ -27,6 +27,8 @@ class SecurityConfig {
             sessionManagement { sessionCreationPolicy = SessionCreationPolicy.STATELESS }
             authorizeHttpRequests {
                 authorize("/api/auth/**", permitAll)
+                // Only the admin login is open; other /api/admin/auth/* endpoints (e.g. change password) need a token.
+                authorize("/api/admin/auth/login", permitAll)
                 authorize("/v3/api-docs/**", permitAll)
                 authorize("/swagger-ui/**", permitAll)
                 authorize("/swagger-ui.html", permitAll)

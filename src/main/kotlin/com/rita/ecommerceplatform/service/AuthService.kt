@@ -1,10 +1,22 @@
 package com.rita.ecommerceplatform.service
 
+import com.rita.ecommerceplatform.dto.request.LoginRequest
 import com.rita.ecommerceplatform.dto.request.RegisterRequest
 import com.rita.ecommerceplatform.dto.response.CustomerProfileResponse
+import com.rita.ecommerceplatform.dto.response.TokenResponse
+import com.rita.ecommerceplatform.exception.AccountNotActiveException
 import com.rita.ecommerceplatform.exception.ConflictException
+import com.rita.ecommerceplatform.exception.InvalidCredentialsException
+import com.rita.ecommerceplatform.model.AdminAuthStatus
+import com.rita.ecommerceplatform.model.AdminStatus
+import com.rita.ecommerceplatform.model.CustomerAuthStatus
+import com.rita.ecommerceplatform.model.CustomerStatus
+import com.rita.ecommerceplatform.model.PasswordStatus
+import com.rita.ecommerceplatform.repository.AdminAuthRepository
+import com.rita.ecommerceplatform.repository.AdminRepository
 import com.rita.ecommerceplatform.repository.CustomerAuthRepository
 import com.rita.ecommerceplatform.repository.CustomerRepository
+import com.rita.ecommerceplatform.security.UserType
 import org.springframework.dao.DuplicateKeyException
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
@@ -14,8 +26,15 @@ import org.springframework.transaction.annotation.Transactional
 class AuthService(
     private val customerRepository: CustomerRepository,
     private val customerAuthRepository: CustomerAuthRepository,
+    private val adminRepository: AdminRepository,
+    private val adminAuthRepository: AdminAuthRepository,
     private val passwordEncoder: PasswordEncoder,
+    private val jwtService: JwtService,
 ) {
+
+    // Checked against when the email is unknown, so that path takes as long as a real
+    // password check (BCrypt is slow on purpose). Otherwise response time reveals which emails exist.
+    private val dummyHash: String by lazy { passwordEncoder.encode("timing-equaliser-not-a-real-password")!! }
 
     /**
      * Creates the customer profile and its credentials in one transaction:
@@ -49,5 +68,57 @@ class AuthService(
         val customer = customerRepository.findById(customerId)
             ?: error("Customer $customerId not found right after insert")
         return CustomerProfileResponse.from(customer)
+    }
+
+    fun login(request: LoginRequest): TokenResponse {
+        val email = request.email!!.lowercase()
+        val password = request.password!!
+
+        val customer = customerRepository.findByEmail(email)
+        val auth = customer?.let { customerAuthRepository.findByCustomerId(it.customerId) }
+        if (customer == null || auth == null) {
+            passwordEncoder.matches(password, dummyHash)
+            throw InvalidCredentialsException()
+        }
+        if (!passwordEncoder.matches(password, auth.passwordHash)) {
+            throw InvalidCredentialsException()
+        }
+        // Status is checked only after the password, so strangers cannot probe which accounts are suspended.
+        if (customer.status != CustomerStatus.ACTIVE || auth.status != CustomerAuthStatus.ACTIVE) {
+            throw AccountNotActiveException()
+        }
+
+        customerAuthRepository.updateLastLoginAt(customer.customerId)
+        return TokenResponse(
+            accessToken = jwtService.createToken(customer.customerId, UserType.CUSTOMER, listOf("CUSTOMER")),
+            expiresIn = jwtService.expirySeconds,
+        )
+    }
+
+    fun adminLogin(request: LoginRequest): TokenResponse {
+        val email = request.email!!.lowercase()
+        val password = request.password!!
+
+        val admin = adminRepository.findByEmail(email)
+        val auth = admin?.let { adminAuthRepository.findByAdminId(it.adminId) }
+        // ec_admin_auth allows a NULL hash: treat it like an unknown email.
+        val hash = auth?.passwordHash
+        if (admin == null || hash == null) {
+            passwordEncoder.matches(password, dummyHash)
+            throw InvalidCredentialsException()
+        }
+        if (!passwordEncoder.matches(password, hash)) {
+            throw InvalidCredentialsException()
+        }
+        if (admin.status != AdminStatus.ACTIVE || auth.status != AdminAuthStatus.ACTIVE) {
+            throw AccountNotActiveException()
+        }
+
+        adminAuthRepository.updateLastLoginAt(admin.adminId)
+        return TokenResponse(
+            accessToken = jwtService.createToken(admin.adminId.toLong(), UserType.ADMIN, listOf(admin.roleName.uppercase())),
+            expiresIn = jwtService.expirySeconds,
+            mustChangePassword = auth.passwordStatus == PasswordStatus.MUST_CHANGE,
+        )
     }
 }
