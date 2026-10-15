@@ -19,8 +19,11 @@ class JwtService(
 
     val expirySeconds: Long = expiryMinutes * 60
 
-    /** Signed access token. The payload is readable by anyone, so it holds IDs and roles only. */
-    fun createToken(subjectId: Long, userType: UserType, roles: List<String>): String {
+    /**
+     * Signed access token. The payload is readable by anyone, so it holds IDs and roles only.
+     * mustChangePassword is set for admin tokens only (D4); customer tokens leave it out.
+     */
+    fun createToken(subjectId: Long, userType: UserType, roles: List<String>, mustChangePassword: Boolean? = null): String {
         val now = Instant.now()
         val claims = JwtClaimsSet.builder()
             .issuer(issuer)
@@ -29,6 +32,7 @@ class JwtService(
             .expiresAt(now.plusSeconds(expirySeconds))
             .claim("userType", userType.name)
             .claim("roles", roles)
+            .apply { if (mustChangePassword != null) claim("mustChangePassword", mustChangePassword) }
             .build()
         val header = JwsHeader.with(MacAlgorithm.HS256).build()
         return jwtEncoder.encode(JwtEncoderParameters.from(header, claims)).tokenValue

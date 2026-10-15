@@ -1,12 +1,15 @@
 package com.rita.ecommerceplatform.service
 
+import com.rita.ecommerceplatform.dto.request.ChangePasswordRequest
 import com.rita.ecommerceplatform.dto.request.LoginRequest
 import com.rita.ecommerceplatform.dto.request.RegisterRequest
 import com.rita.ecommerceplatform.dto.response.CustomerProfileResponse
 import com.rita.ecommerceplatform.dto.response.TokenResponse
 import com.rita.ecommerceplatform.exception.AccountNotActiveException
+import com.rita.ecommerceplatform.exception.BadRequestException
 import com.rita.ecommerceplatform.exception.ConflictException
 import com.rita.ecommerceplatform.exception.InvalidCredentialsException
+import com.rita.ecommerceplatform.model.Admin
 import com.rita.ecommerceplatform.model.AdminAuthStatus
 import com.rita.ecommerceplatform.model.AdminStatus
 import com.rita.ecommerceplatform.model.CustomerAuthStatus
@@ -115,10 +118,43 @@ class AuthService(
         }
 
         adminAuthRepository.updateLastLoginAt(admin.adminId)
-        return TokenResponse(
-            accessToken = jwtService.createToken(admin.adminId.toLong(), UserType.ADMIN, listOf(admin.roleName.uppercase())),
-            expiresIn = jwtService.expirySeconds,
-            mustChangePassword = auth.passwordStatus == PasswordStatus.MUST_CHANGE,
-        )
+        return adminTokenResponse(admin, mustChangePassword = auth.passwordStatus == PasswordStatus.MUST_CHANGE)
     }
+
+    /**
+     * D4: the admin proves who they are with the current password, sets a new one, and gets a
+     * fresh token without mustChangePassword so other admin endpoints open up straight away.
+     */
+    fun changeAdminPassword(adminId: Int, request: ChangePasswordRequest): TokenResponse {
+        val currentPassword = request.currentPassword!!
+        val newPassword = request.newPassword!!
+
+        val admin = adminRepository.findById(adminId) ?: throw InvalidCredentialsException("Admin account not found")
+        val auth = adminAuthRepository.findByAdminId(adminId)
+        val hash = auth?.passwordHash
+        if (hash == null || !passwordEncoder.matches(currentPassword, hash)) {
+            throw InvalidCredentialsException("Current password is incorrect")
+        }
+        if (admin.status != AdminStatus.ACTIVE || auth.status != AdminAuthStatus.ACTIVE) {
+            throw AccountNotActiveException()
+        }
+        // Otherwise MUST_CHANGE could be cleared by "changing" the temporary password to itself.
+        if (passwordEncoder.matches(newPassword, hash)) {
+            throw BadRequestException("New password must be different from the current password")
+        }
+
+        adminAuthRepository.updatePassword(adminId, passwordEncoder.encode(newPassword)!!)
+        return adminTokenResponse(admin, mustChangePassword = false)
+    }
+
+    private fun adminTokenResponse(admin: Admin, mustChangePassword: Boolean) = TokenResponse(
+        accessToken = jwtService.createToken(
+            subjectId = admin.adminId.toLong(),
+            userType = UserType.ADMIN,
+            roles = listOf(admin.roleName.uppercase()),
+            mustChangePassword = mustChangePassword,
+        ),
+        expiresIn = jwtService.expirySeconds,
+        mustChangePassword = mustChangePassword,
+    )
 }
