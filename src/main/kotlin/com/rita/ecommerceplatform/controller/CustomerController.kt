@@ -1,11 +1,14 @@
 package com.rita.ecommerceplatform.controller
 
+import com.rita.ecommerceplatform.config.OpenApiConfig
 import com.rita.ecommerceplatform.dto.request.UpdateProfileRequest
 import com.rita.ecommerceplatform.dto.response.CustomerProfileResponse
 import com.rita.ecommerceplatform.exception.AccountNotActiveException
 import com.rita.ecommerceplatform.security.CurrentUser
 import com.rita.ecommerceplatform.security.UserType
 import com.rita.ecommerceplatform.service.CustomerService
+import io.swagger.v3.oas.annotations.security.SecurityRequirement
+import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.security.oauth2.jwt.Jwt
@@ -16,6 +19,8 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 
 /** "me" endpoints: the customer is always the one in the token, never an ID from the request. */
+@Tag(name = "Customer profile", description = "The logged-in customer's own profile")
+@SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
 @RestController
 @RequestMapping("/api/customer")
 class CustomerController(private val customerService: CustomerService) {

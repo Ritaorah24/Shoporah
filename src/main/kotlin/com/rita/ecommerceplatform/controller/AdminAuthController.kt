@@ -1,5 +1,6 @@
 package com.rita.ecommerceplatform.controller
 
+import com.rita.ecommerceplatform.config.OpenApiConfig
 import com.rita.ecommerceplatform.dto.request.ChangePasswordRequest
 import com.rita.ecommerceplatform.dto.request.LoginRequest
 import com.rita.ecommerceplatform.dto.response.TokenResponse
@@ -7,6 +8,8 @@ import com.rita.ecommerceplatform.exception.AccountNotActiveException
 import com.rita.ecommerceplatform.security.CurrentUser
 import com.rita.ecommerceplatform.security.UserType
 import com.rita.ecommerceplatform.service.AuthService
+import io.swagger.v3.oas.annotations.security.SecurityRequirement
+import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.security.oauth2.jwt.Jwt
@@ -16,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 
+@Tag(name = "Admin auth", description = "Admin login and change password")
 @RestController
 @RequestMapping("/api/admin/auth")
 class AdminAuthController(private val authService: AuthService) {
@@ -25,6 +29,7 @@ class AdminAuthController(private val authService: AuthService) {
         authService.adminLogin(request)
 
     /** The admin is identified by the token, never by an ID in the request. */
+    @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
     @PatchMapping("/password")
     fun changePassword(
         @AuthenticationPrincipal jwt: Jwt,
