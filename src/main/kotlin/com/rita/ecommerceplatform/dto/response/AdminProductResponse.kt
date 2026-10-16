@@ -1,0 +1,44 @@
+package com.rita.ecommerceplatform.dto.response
+
+import com.rita.ecommerceplatform.model.Product
+import java.math.BigDecimal
+import java.time.LocalDateTime
+
+/** Product as shown to admins: everything, including the exact stock and status. */
+data class AdminProductResponse(
+    val productId: Long,
+    val name: String,
+    val description: String?,
+    val sku: String,
+    val categoryId: Int,
+    val categoryName: String,
+    val price: BigDecimal,
+    val discountPrice: BigDecimal?,
+    val sellingPrice: BigDecimal,
+    val stockQuantity: Int,
+    val lowStockThreshold: Int?,
+    val status: String,
+    val createdByAdminId: Int,
+    val createdAt: LocalDateTime,
+    val updatedAt: LocalDateTime,
+) {
+    companion object {
+        fun from(product: Product) = AdminProductResponse(
+            productId = product.productId,
+            name = product.name,
+            description = product.description,
+            sku = product.sku,
+            categoryId = product.categoryId,
+            categoryName = product.categoryName,
+            price = product.price,
+            discountPrice = product.discountPrice,
+            sellingPrice = product.sellingPrice,
+            stockQuantity = product.stockQuantity,
+            lowStockThreshold = product.lowStockThreshold,
+            status = product.status.name,
+            createdByAdminId = product.createdByAdminId,
+            createdAt = product.createdAt,
+            updatedAt = product.updatedAt,
+        )
+    }
+}

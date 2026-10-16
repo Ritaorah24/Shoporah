@@ -110,6 +110,17 @@ class ProductRepository(private val jdbcClient: JdbcClient) {
             .orElse(null)
 
     /**
+     * Same as findById, but locks the product row until the transaction ends, so a stock edit
+     * cannot overwrite a concurrent stock change (e.g. a paid order). Must be called inside @Transactional.
+     */
+    fun findByIdForUpdate(productId: Long): Product? =
+        jdbcClient.sql("$selectWithCategory WHERE p.productid = :productId FOR UPDATE OF p")
+            .param("productId", productId)
+            .query(rowMapper)
+            .optional()
+            .orElse(null)
+
+    /**
      * Updates the editable fields of a product that is not deleted. The service merges a partial
      * PATCH with the current row first, so every field is passed. Returns rows updated (0 or 1).
      */
