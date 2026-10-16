@@ -49,6 +49,8 @@ class SecurityConfig(
                 authorize("/swagger-ui.html", permitAll)
                 // Spring forwards errors (400, 409, ...) to /error; it must be open or every error turns into 401.
                 authorize("/error", permitAll)
+                // Public catalogue browsing: GET only, so writes to these URLs still need a token.
+                authorize(HttpMethod.GET, "/api/categories/**", permitAll)
 
                 authorize("/api/customer/**", hasRole("CUSTOMER"))
                 // Allowed even while MUST_CHANGE: it is how the admin clears it (D4).

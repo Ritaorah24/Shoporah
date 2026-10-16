@@ -11,6 +11,7 @@ import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.test.context.ActiveProfiles
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.MvcResult
+import org.springframework.test.web.servlet.patch
 import org.springframework.test.web.servlet.post
 import tools.jackson.databind.JsonNode
 import tools.jackson.databind.json.JsonMapper
@@ -108,7 +109,28 @@ abstract class IntegrationTestBase {
         return readJson(result)["accessToken"].asString()
     }
 
+    /**
+     * Resets the seed admin, changes its password and returns the new token: the state needed to use
+     * admin endpoints, since MUST_CHANGE blocks everything under /api/admin except the password change.
+     */
+    protected fun loginActiveAdmin(): String {
+        val result = mockMvc.patch("/api/admin/auth/password") {
+            header("Authorization", "Bearer ${loginSeedAdmin()}")
+            contentType = MediaType.APPLICATION_JSON
+            content = json("currentPassword" to seedAdminPassword, "newPassword" to CHANGED_ADMIN_PASSWORD)
+        }.andExpect { status { isOk() } }.andReturn()
+        return readJson(result)["accessToken"].asString()
+    }
+
+    /** The seed admin's id, for inserting rows that need a creating admin. */
+    protected fun seedAdminId(): Int =
+        jdbcClient.sql("SELECT adminid FROM public.ec_admin WHERE adminemail = :email")
+            .param("email", seedAdminEmail)
+            .query(Int::class.javaObjectType)
+            .single()
+
     companion object {
         const val DEFAULT_PASSWORD = "secret123"
+        const val CHANGED_ADMIN_PASSWORD = "changed123"
     }
 }
