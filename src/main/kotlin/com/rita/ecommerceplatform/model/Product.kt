@@ -24,7 +24,20 @@ data class Product(
     val status: ProductStatus,
     val createdAt: LocalDateTime,
     val updatedAt: LocalDateTime,
-)
+) {
+    /**
+     * What the public sees instead of the exact stock (D4). LOW_STOCK only applies when the
+     * admin has set a threshold.
+     */
+    fun availability(): Availability = when {
+        stockQuantity <= 0 -> Availability.OUT_OF_STOCK
+        lowStockThreshold != null && stockQuantity <= lowStockThreshold -> Availability.LOW_STOCK
+        else -> Availability.IN_STOCK
+    }
+}
+
+/** Public stock indicator derived from the stock quantity; never stored. */
+enum class Availability { IN_STOCK, LOW_STOCK, OUT_OF_STOCK }
 
 /** Allowed values of ec_product.productstatus (ck__ec_product__status). DELETED is a soft delete. */
 enum class ProductStatus { ACTIVE, INACTIVE, DELETED }

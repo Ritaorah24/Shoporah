@@ -109,6 +109,16 @@ class ProductRepository(private val jdbcClient: JdbcClient) {
             .optional()
             .orElse(null)
 
+    /** The product only if the public may see it: product ACTIVE and its category ACTIVE (same rule as public listings). */
+    fun findPublicById(productId: Long): Product? =
+        jdbcClient.sql(
+            "$selectWithCategory WHERE p.productid = :productId AND p.productstatus = 'ACTIVE' AND c.categorystatus = 'ACTIVE'"
+        )
+            .param("productId", productId)
+            .query(rowMapper)
+            .optional()
+            .orElse(null)
+
     /**
      * Same as findById, but locks the product row until the transaction ends, so a stock edit
      * cannot overwrite a concurrent stock change (e.g. a paid order). Must be called inside @Transactional.

@@ -51,6 +51,7 @@ class SecurityConfig(
                 authorize("/error", permitAll)
                 // Public catalogue browsing: GET only, so writes to these URLs still need a token.
                 authorize(HttpMethod.GET, "/api/categories/**", permitAll)
+                authorize(HttpMethod.GET, "/api/products/**", permitAll)
 
                 authorize("/api/customer/**", hasRole("CUSTOMER"))
                 // Allowed even while MUST_CHANGE: it is how the admin clears it (D4).

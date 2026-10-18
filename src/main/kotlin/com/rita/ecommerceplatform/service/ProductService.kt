@@ -5,6 +5,7 @@ import com.rita.ecommerceplatform.dto.request.UpdateProductRequest
 import com.rita.ecommerceplatform.dto.request.UpdateStatusRequest
 import com.rita.ecommerceplatform.dto.response.AdminProductResponse
 import com.rita.ecommerceplatform.dto.response.PageResponse
+import com.rita.ecommerceplatform.dto.response.ProductResponse
 import com.rita.ecommerceplatform.exception.BadRequestException
 import com.rita.ecommerceplatform.exception.ConflictException
 import com.rita.ecommerceplatform.exception.NotFoundException
@@ -27,6 +28,29 @@ class ProductService(
     private val categoryRepository: CategoryRepository,
     private val inventoryMovementRepository: InventoryMovementRepository,
 ) {
+
+    /**
+     * Public list: only ACTIVE products in ACTIVE categories, newest first. A categoryId that is
+     * inactive, deleted or unknown simply gives an empty page.
+     */
+    fun listPublic(page: Int, size: Int, search: String?, categoryId: Int?): PageResponse<ProductResponse> {
+        val criteria = ProductSearchCriteria(
+            statuses = listOf(ProductStatus.ACTIVE),
+            activeCategoryOnly = true,
+            nameContains = search?.trim()?.ifEmpty { null },
+            categoryId = categoryId,
+        )
+        val safePage = Paging.page(page)
+        val safeSize = Paging.size(size)
+        val products = productRepository.search(criteria, safeSize, Paging.offset(safePage, safeSize))
+        return PageResponse.of(products.map(ProductResponse::from), safePage, safeSize, productRepository.count(criteria))
+    }
+
+    /** Public details. A hidden product is 404, not 403, so the public cannot tell that it exists. */
+    fun getPublic(productId: Long): ProductResponse {
+        val product = productRepository.findPublicById(productId) ?: throw productNotFound()
+        return ProductResponse.from(product)
+    }
 
     /** Admin list: ACTIVE and INACTIVE (or just one, via status), in any category status. Never DELETED. */
     fun listForAdmin(page: Int, size: Int, search: String?, categoryId: Int?, status: String?): PageResponse<AdminProductResponse> {
