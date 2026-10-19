@@ -286,6 +286,36 @@ class CategoryAdminTest : IntegrationTestBase() {
         }.andExpect { status { isUnauthorized() } }
     }
 
+    // Acceptance check 1.2: customers cannot edit, deactivate or delete (not only create).
+    @Test
+    fun `customers cannot edit, deactivate or delete a category`() {
+        val name = uniqueName()
+        val categoryId = createCategory(name)
+        val customerToken = newCustomerToken()
+
+        mockMvc.patch("/api/admin/categories/$categoryId") {
+            header("Authorization", "Bearer $customerToken")
+            contentType = MediaType.APPLICATION_JSON
+            content = json("name" to uniqueName())
+        }.andExpect { status { isForbidden() } }
+        mockMvc.patch("/api/admin/categories/$categoryId/status") {
+            header("Authorization", "Bearer $customerToken")
+            contentType = MediaType.APPLICATION_JSON
+            content = json("status" to "INACTIVE")
+        }.andExpect { status { isForbidden() } }
+        mockMvc.delete("/api/admin/categories/$categoryId") {
+            header("Authorization", "Bearer $customerToken")
+        }.andExpect { status { isForbidden() } }
+
+        mockMvc.get("/api/admin/categories/$categoryId") {
+            header("Authorization", "Bearer $adminToken")
+        }.andExpect {
+            status { isOk() }
+            jsonPath("$.name") { value(name) }
+            jsonPath("$.status") { value("ACTIVE") }
+        }
+    }
+
     @Test
     fun `an admin whose password must still be changed is blocked`() {
         mockMvc.get("/api/admin/categories") {

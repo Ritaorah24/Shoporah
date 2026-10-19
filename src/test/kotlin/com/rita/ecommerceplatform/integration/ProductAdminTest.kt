@@ -361,4 +361,65 @@ class ProductAdminTest : IntegrationTestBase() {
 
         mockMvc.get("/api/admin/products").andExpect { status { isUnauthorized() } }
     }
+
+    // Acceptance check 1.2: "price and stock cannot be negative", on create and on edit.
+    @Test
+    fun `negative price, discount and stock are rejected on create and on PATCH`() {
+        postProduct(productBody("price" to -5)).andExpect {
+            status { isBadRequest() }
+            jsonPath("$.fieldErrors[0].field") { value("price") }
+        }
+        postProduct(productBody("discountPrice" to -1)).andExpect {
+            status { isBadRequest() }
+            jsonPath("$.fieldErrors[0].field") { value("discountPrice") }
+        }
+
+        val productId = createProduct("lowStockThreshold" to 5)
+        listOf("price" to -5, "discountPrice" to -1, "stockQuantity" to -1, "lowStockThreshold" to -1).forEach { (field, badValue) ->
+            patchProduct(productId, json(field to badValue)).andExpect {
+                status { isBadRequest() }
+                jsonPath("$.fieldErrors[0].field") { value(field) }
+            }
+        }
+
+        // Nothing was changed by the rejected requests.
+        mockMvc.get("/api/admin/products/$productId") {
+            header("Authorization", "Bearer $adminToken")
+        }.andExpect {
+            status { isOk() }
+            jsonPath("$.price") { value(1000.00) }
+            jsonPath("$.discountPrice") { value(null) }
+            jsonPath("$.stockQuantity") { value(10) }
+            jsonPath("$.lowStockThreshold") { value(5) }
+        }
+    }
+
+    // Acceptance check 1.2: customers cannot edit, deactivate or delete (not only create).
+    @Test
+    fun `customers cannot edit, deactivate or delete a product`() {
+        val productId = createProduct()
+        val customerToken = newCustomerToken()
+
+        mockMvc.patch("/api/admin/products/$productId") {
+            header("Authorization", "Bearer $customerToken")
+            contentType = MediaType.APPLICATION_JSON
+            content = json("name" to "Hacked")
+        }.andExpect { status { isForbidden() } }
+        mockMvc.patch("/api/admin/products/$productId/status") {
+            header("Authorization", "Bearer $customerToken")
+            contentType = MediaType.APPLICATION_JSON
+            content = json("status" to "INACTIVE")
+        }.andExpect { status { isForbidden() } }
+        mockMvc.delete("/api/admin/products/$productId") {
+            header("Authorization", "Bearer $customerToken")
+        }.andExpect { status { isForbidden() } }
+
+        mockMvc.get("/api/admin/products/$productId") {
+            header("Authorization", "Bearer $adminToken")
+        }.andExpect {
+            status { isOk() }
+            jsonPath("$.name") { value("Test phone") }
+            jsonPath("$.status") { value("ACTIVE") }
+        }
+    }
 }
