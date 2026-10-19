@@ -53,6 +53,17 @@ class CustomerRepository(private val jdbcClient: JdbcClient) {
             .optional()
             .orElse(null)
 
+    /**
+     * Locks the customer row until the transaction ends, so changes to one customer's data
+     * (e.g. their addresses) run one at a time. Must be called inside @Transactional.
+     */
+    fun lockById(customerId: Long) {
+        jdbcClient.sql("SELECT customerid FROM public.ec_customer WHERE customerid = :customerId FOR UPDATE")
+            .param("customerId", customerId)
+            .query(Long::class.javaObjectType)
+            .optional()
+    }
+
     fun findByEmail(email: String): Customer? =
         jdbcClient.sql("SELECT * FROM public.ec_customer WHERE customeremail = :email")
             .param("email", email)
