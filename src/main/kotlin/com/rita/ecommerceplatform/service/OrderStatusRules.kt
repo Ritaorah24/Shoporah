@@ -1,0 +1,47 @@
+package com.rita.ecommerceplatform.service
+
+import com.rita.ecommerceplatform.exception.ConflictException
+import com.rita.ecommerceplatform.exception.ForbiddenException
+import com.rita.ecommerceplatform.model.OrderStatus
+import com.rita.ecommerceplatform.model.OrderStatus.CANCELLED
+import com.rita.ecommerceplatform.model.OrderStatus.CONFIRMED
+import com.rita.ecommerceplatform.model.OrderStatus.DELIVERED
+import com.rita.ecommerceplatform.model.OrderStatus.PENDING
+import com.rita.ecommerceplatform.model.OrderStatus.PROCESSING
+import com.rita.ecommerceplatform.model.OrderStatus.REFUNDED
+import com.rita.ecommerceplatform.model.OrderStatus.SHIPPED
+
+/** Who makes a status change. SYSTEM covers automatic changes, e.g. a verified payment. */
+enum class OrderStatusActor { CUSTOMER, ADMIN, SYSTEM }
+
+/**
+ * The only place that decides which order status changes are allowed, and by whom (S1).
+ * Every status change must call ensureCanChange first. CANCELLED and REFUNDED are final.
+ */
+object OrderStatusRules {
+
+    private val allowed: Map<Pair<OrderStatus, OrderStatus>, Set<OrderStatusActor>> = mapOf(
+        // Only a verified payment confirms an order, so an admin cannot confirm an unpaid order by hand.
+        (PENDING to CONFIRMED) to setOf(OrderStatusActor.SYSTEM),
+        // Customers may cancel only before paying.
+        (PENDING to CANCELLED) to setOf(OrderStatusActor.CUSTOMER, OrderStatusActor.ADMIN),
+        (CONFIRMED to PROCESSING) to setOf(OrderStatusActor.ADMIN),
+        (CONFIRMED to CANCELLED) to setOf(OrderStatusActor.ADMIN),
+        (PROCESSING to SHIPPED) to setOf(OrderStatusActor.ADMIN),
+        (SHIPPED to DELIVERED) to setOf(OrderStatusActor.ADMIN),
+        (DELIVERED to REFUNDED) to setOf(OrderStatusActor.ADMIN),
+    )
+
+    /**
+     * Throws 409 if the change is not in the table (including "changing" to the same status),
+     * or 403 if it is but this actor may not make it.
+     */
+    fun ensureCanChange(from: OrderStatus, to: OrderStatus, actor: OrderStatusActor) {
+        val actors = allowed[from to to] ?: throw ConflictException("Order status cannot change from $from to $to")
+        if (actor !in actors) throw ForbiddenException("$actor cannot change an order from $from to $to")
+    }
+
+    /** The statuses this actor may move the order to next, in lifecycle order (empty for final statuses). */
+    fun nextStatuses(from: OrderStatus, actor: OrderStatusActor): List<OrderStatus> =
+        OrderStatus.entries.filter { to -> actor in allowed[from to to].orEmpty() }
+}
