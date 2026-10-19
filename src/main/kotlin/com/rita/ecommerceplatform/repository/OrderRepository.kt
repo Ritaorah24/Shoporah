@@ -103,6 +103,13 @@ class OrderRepository(private val jdbcClient: JdbcClient) {
             .query(Long::class.javaObjectType)
             .single()
 
+    /** True if any order already uses this reference (case-insensitive: CITEXT). */
+    fun existsByReference(reference: String): Boolean =
+        jdbcClient.sql("SELECT EXISTS (SELECT 1 FROM public.ec_order WHERE orderreference = :reference)")
+            .param("reference", reference)
+            .query(Boolean::class.javaObjectType)
+            .single()
+
     fun findById(orderId: Long, customerId: Long): Order? =
         jdbcClient.sql("SELECT * FROM public.ec_order WHERE orderid = :orderId AND ordercustomerid = :customerId")
             .param("orderId", orderId)
