@@ -28,7 +28,7 @@ import java.util.UUID
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@Import(TestDatabaseReset::class)
+@Import(TestDatabaseReset::class, FakePaymentGateway::class)
 abstract class IntegrationTestBase {
 
     @Autowired
@@ -47,6 +47,10 @@ abstract class IntegrationTestBase {
     // Declared here, not in that test, so every test still shares one Spring context. Reset after each test.
     @MockitoSpyBean
     protected lateinit var cartRepositorySpy: CartRepository
+
+    // Paystack's stand-in (imported above, so every test shares one context and none calls Paystack).
+    @Autowired
+    protected lateinit var paymentGateway: FakePaymentGateway
 
     @Value("\${spring.flyway.placeholders.seed_admin_email}")
     protected lateinit var seedAdminEmail: String
