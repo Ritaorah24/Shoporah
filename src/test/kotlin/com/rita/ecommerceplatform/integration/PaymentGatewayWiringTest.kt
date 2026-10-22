@@ -1,6 +1,6 @@
 package com.rita.ecommerceplatform.integration
 
-import com.rita.ecommerceplatform.service.PaymentGateway
+import com.rita.ecommerceplatform.repository.api.PaymentGateway
 import com.rita.ecommerceplatform.support.FakePaymentGateway
 import com.rita.ecommerceplatform.support.IntegrationTestBase
 import org.junit.jupiter.api.Test

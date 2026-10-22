@@ -1,6 +1,9 @@
-package com.rita.ecommerceplatform.service
+package com.rita.ecommerceplatform.repository.api.paystack
 
 import com.rita.ecommerceplatform.exception.BadGatewayException
+import com.rita.ecommerceplatform.repository.api.GatewayInitRequest
+import com.rita.ecommerceplatform.repository.api.GatewayInitResult
+import com.rita.ecommerceplatform.repository.api.GatewayPaymentStatus
 import org.junit.jupiter.api.Test
 import org.springframework.http.HttpMethod
 import org.springframework.http.HttpStatus

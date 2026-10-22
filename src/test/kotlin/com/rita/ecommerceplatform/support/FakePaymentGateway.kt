@@ -1,12 +1,12 @@
 package com.rita.ecommerceplatform.support
 
 import com.rita.ecommerceplatform.exception.BadGatewayException
-import com.rita.ecommerceplatform.service.GatewayInitRequest
-import com.rita.ecommerceplatform.service.GatewayInitResult
-import com.rita.ecommerceplatform.service.GatewayPaymentStatus
-import com.rita.ecommerceplatform.service.GatewayVerifyResult
-import com.rita.ecommerceplatform.service.PaymentGateway
-import com.rita.ecommerceplatform.service.PaystackGateway
+import com.rita.ecommerceplatform.repository.api.GatewayInitRequest
+import com.rita.ecommerceplatform.repository.api.GatewayInitResult
+import com.rita.ecommerceplatform.repository.api.GatewayPaymentStatus
+import com.rita.ecommerceplatform.repository.api.GatewayVerifyResult
+import com.rita.ecommerceplatform.repository.api.PaymentGateway
+import com.rita.ecommerceplatform.repository.api.paystack.PaystackGateway
 import org.springframework.boot.test.context.TestComponent
 import org.springframework.context.annotation.Primary
 import java.util.concurrent.ConcurrentHashMap

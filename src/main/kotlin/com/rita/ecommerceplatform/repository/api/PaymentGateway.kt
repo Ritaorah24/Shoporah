@@ -1,4 +1,4 @@
-package com.rita.ecommerceplatform.service
+package com.rita.ecommerceplatform.repository.api
 
 import java.time.OffsetDateTime
 

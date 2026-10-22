@@ -1,4 +1,4 @@
-package com.rita.ecommerceplatform.config
+package com.rita.ecommerceplatform.repository.api.paystack
 
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean

@@ -1,6 +1,11 @@
-package com.rita.ecommerceplatform.service
+package com.rita.ecommerceplatform.repository.api.paystack
 
 import com.rita.ecommerceplatform.exception.BadGatewayException
+import com.rita.ecommerceplatform.repository.api.GatewayInitRequest
+import com.rita.ecommerceplatform.repository.api.GatewayInitResult
+import com.rita.ecommerceplatform.repository.api.GatewayPaymentStatus
+import com.rita.ecommerceplatform.repository.api.GatewayVerifyResult
+import com.rita.ecommerceplatform.repository.api.PaymentGateway
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.http.HttpStatusCode
