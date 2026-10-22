@@ -1,5 +1,6 @@
 package com.rita.ecommerceplatform.support
 
+import com.rita.ecommerceplatform.repository.CartRepository
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.test.context.SpringBootTest
@@ -9,6 +10,7 @@ import org.springframework.http.MediaType
 import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.test.context.ActiveProfiles
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.MvcResult
 import org.springframework.test.web.servlet.patch
@@ -40,6 +42,11 @@ abstract class IntegrationTestBase {
 
     @Autowired
     private lateinit var passwordEncoder: PasswordEncoder
+
+    // Behaves exactly like the real CartRepository unless a test tells it to fail (CheckoutRollbackTest).
+    // Declared here, not in that test, so every test still shares one Spring context. Reset after each test.
+    @MockitoSpyBean
+    protected lateinit var cartRepositorySpy: CartRepository
 
     @Value("\${spring.flyway.placeholders.seed_admin_email}")
     protected lateinit var seedAdminEmail: String
