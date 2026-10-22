@@ -2,8 +2,11 @@ package com.rita.ecommerceplatform.service
 
 import com.rita.ecommerceplatform.dto.request.CheckoutRequest
 import com.rita.ecommerceplatform.dto.response.OrderResponse
+import com.rita.ecommerceplatform.dto.response.OrderSummaryResponse
+import com.rita.ecommerceplatform.dto.response.PageResponse
 import com.rita.ecommerceplatform.exception.BadRequestException
 import com.rita.ecommerceplatform.exception.ConflictException
+import com.rita.ecommerceplatform.exception.NotFoundException
 import com.rita.ecommerceplatform.model.CustomerAddress
 import com.rita.ecommerceplatform.model.Order
 import com.rita.ecommerceplatform.model.OrderStatus
@@ -108,6 +111,25 @@ class OrderService(
         return CheckoutResult(toResponse(orderRepository.findById(orderId, customerId)!!), created = true)
     }
 
+    /** The customer's orders, newest first, as summaries (H1). Paging is capped like the product list (D6). */
+    fun list(customerId: Long, page: Int, size: Int): PageResponse<OrderSummaryResponse> {
+        val safePage = Paging.page(page)
+        val safeSize = Paging.size(size)
+        val orders = orderRepository.findByCustomer(customerId, safeSize, Paging.offset(safePage, safeSize))
+        // One grouped query for the whole page, not one per order.
+        val quantities = orderItemRepository.quantitiesByOrderIds(orders.map { it.orderId })
+        return PageResponse.of(
+            orders.map { OrderSummaryResponse.from(it, quantities[it.orderId] ?: 0) },
+            safePage,
+            safeSize,
+            orderRepository.countByCustomer(customerId),
+        )
+    }
+
+    /** One of the customer's own orders; another customer's order is "not found" too. */
+    fun get(customerId: Long, orderId: Long): OrderResponse =
+        toResponse(orderRepository.findById(orderId, customerId) ?: throw NotFoundException("Order not found"))
+
     /** The chosen address (must be the customer's own), or the default when none is chosen. */
     private fun deliveryAddress(customerId: Long, addressId: Long?): CustomerAddress =
         if (addressId != null) {
@@ -127,7 +149,11 @@ class OrderService(
     }
 
     private fun toResponse(order: Order): OrderResponse =
-        OrderResponse.from(order, orderItemRepository.findByOrderId(order.orderId))
+        OrderResponse.from(
+            order,
+            orderItemRepository.findByOrderId(order.orderId),
+            statusHistoryRepository.findByOrderId(order.orderId),
+        )
 
     companion object {
         // Until delivery methods arrive in V2, every order uses the seeded STANDARD method.

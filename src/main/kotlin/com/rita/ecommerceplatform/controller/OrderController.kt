@@ -3,11 +3,14 @@ package com.rita.ecommerceplatform.controller
 import com.rita.ecommerceplatform.config.OpenApiConfig
 import com.rita.ecommerceplatform.dto.request.CheckoutRequest
 import com.rita.ecommerceplatform.dto.response.OrderResponse
+import com.rita.ecommerceplatform.dto.response.OrderSummaryResponse
+import com.rita.ecommerceplatform.dto.response.PageResponse
 import com.rita.ecommerceplatform.exception.AccountNotActiveException
 import com.rita.ecommerceplatform.exception.BadRequestException
 import com.rita.ecommerceplatform.security.CurrentUser
 import com.rita.ecommerceplatform.security.UserType
 import com.rita.ecommerceplatform.service.OrderService
+import com.rita.ecommerceplatform.service.Paging
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
@@ -15,10 +18,13 @@ import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.security.oauth2.jwt.Jwt
+import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
 
@@ -43,6 +49,19 @@ class OrderController(private val orderService: OrderService) {
         val result = orderService.checkout(customerId(jwt), parseKey(idempotencyKey), request)
         return ResponseEntity.status(if (result.created) HttpStatus.CREATED else HttpStatus.OK).body(result.order)
     }
+
+    /** The customer's orders, newest first. Page size is capped at 50. */
+    @GetMapping
+    fun list(
+        @AuthenticationPrincipal jwt: Jwt,
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "${Paging.DEFAULT_SIZE}") size: Int,
+    ): PageResponse<OrderSummaryResponse> = orderService.list(customerId(jwt), page, size)
+
+    /** Items, totals, delivery address and status history of one of the customer's own orders. */
+    @GetMapping("/{orderId}")
+    fun get(@AuthenticationPrincipal jwt: Jwt, @PathVariable orderId: Long): OrderResponse =
+        orderService.get(customerId(jwt), orderId)
 
     // Read as a String and checked here, so a missing or malformed key gets a clear message.
     private fun parseKey(value: String?): UUID {

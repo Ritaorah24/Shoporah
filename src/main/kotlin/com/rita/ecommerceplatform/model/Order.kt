@@ -38,6 +38,14 @@ data class OrderItem(
     val createdAt: LocalDateTime,
 )
 
+/** One row of public.ec_order_status_history, without the actor (customers are not shown who made a change). */
+data class OrderStatusChange(
+    val fromStatus: OrderStatus?,
+    val toStatus: OrderStatus,
+    val note: String?,
+    val createdAt: LocalDateTime,
+)
+
 /** Allowed values of ec_order.orderstatus (ck__ec_order__status). The allowed changes between them come in Step 4. */
 enum class OrderStatus { PENDING, CONFIRMED, PROCESSING, SHIPPED, DELIVERED, CANCELLED, REFUNDED }
 

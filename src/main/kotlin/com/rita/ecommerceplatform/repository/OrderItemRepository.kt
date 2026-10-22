@@ -50,4 +50,21 @@ class OrderItemRepository(private val jdbcClient: JdbcClient) {
             .param("orderId", orderId)
             .query(rowMapper)
             .list()
+
+    /** Total quantity per order, for a whole page of orders in one query (H1). Orders without items are absent. */
+    fun quantitiesByOrderIds(orderIds: Collection<Long>): Map<Long, Int> {
+        if (orderIds.isEmpty()) return emptyMap()
+        return jdbcClient.sql(
+            """
+            SELECT orderitemorderid, SUM(orderitemquantity) AS quantity
+            FROM public.ec_order_item
+            WHERE orderitemorderid IN (:orderIds)
+            GROUP BY orderitemorderid
+            """
+        )
+            .param("orderIds", orderIds)
+            .query { rs, _ -> rs.getLong("orderitemorderid") to rs.getInt("quantity") }
+            .list()
+            .toMap()
+    }
 }

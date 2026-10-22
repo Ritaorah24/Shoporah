@@ -3,6 +3,7 @@ package com.rita.ecommerceplatform.dto.response
 import com.rita.ecommerceplatform.model.AddressDetails
 import com.rita.ecommerceplatform.model.Order
 import com.rita.ecommerceplatform.model.OrderItem
+import com.rita.ecommerceplatform.model.OrderStatusChange
 import java.math.BigDecimal
 import java.time.LocalDateTime
 
@@ -18,10 +19,12 @@ data class OrderResponse(
     val discountAmount: BigDecimal,
     val total: BigDecimal,
     val deliveryAddress: DeliveryAddressResponse,
+    // Every status the order has had, oldest first (H2), so the customer can track it.
+    val statusHistory: List<StatusChangeResponse>,
     val createdAt: LocalDateTime,
 ) {
     companion object {
-        fun from(order: Order, items: List<OrderItem>) = OrderResponse(
+        fun from(order: Order, items: List<OrderItem>, history: List<OrderStatusChange>) = OrderResponse(
             orderId = order.orderId,
             reference = order.reference,
             status = order.status.name,
@@ -32,6 +35,7 @@ data class OrderResponse(
             discountAmount = order.discountAmount,
             total = order.total,
             deliveryAddress = DeliveryAddressResponse.from(order.deliveryAddress),
+            statusHistory = history.map(StatusChangeResponse::from),
             createdAt = order.createdAt,
         )
     }
@@ -77,6 +81,21 @@ data class DeliveryAddressResponse(
             state = details.state,
             country = details.country,
             postalCode = details.postalCode,
+        )
+    }
+}
+
+/** One step in the order's status timeline. Who made the change is not shown to the customer. */
+data class StatusChangeResponse(
+    val status: String,
+    val changedAt: LocalDateTime,
+    val note: String?,
+) {
+    companion object {
+        fun from(change: OrderStatusChange) = StatusChangeResponse(
+            status = change.toStatus.name,
+            changedAt = change.createdAt,
+            note = change.note,
         )
     }
 }
