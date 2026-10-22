@@ -118,6 +118,20 @@ class OrderRepository(private val jdbcClient: JdbcClient) {
             .optional()
             .orElse(null)
 
+    /**
+     * The customer's order by reference, locked until the transaction ends, so two payment starts
+     * for one order run one at a time. Must be called inside a transaction.
+     */
+    fun lockByReference(reference: String, customerId: Long): Order? =
+        jdbcClient.sql(
+            "SELECT * FROM public.ec_order WHERE orderreference = :reference AND ordercustomerid = :customerId FOR UPDATE"
+        )
+            .param("reference", reference)
+            .param("customerId", customerId)
+            .query(rowMapper)
+            .optional()
+            .orElse(null)
+
     /** The order this customer already created with this idempotency key, if any (a retried checkout). */
     fun findByIdempotencyKey(customerId: Long, idempotencyKey: UUID): Order? =
         jdbcClient.sql(
