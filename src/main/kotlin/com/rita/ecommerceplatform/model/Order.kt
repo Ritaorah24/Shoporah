@@ -38,12 +38,17 @@ data class OrderItem(
     val createdAt: LocalDateTime,
 )
 
-/** One row of public.ec_order_status_history, without the actor (customers are not shown who made a change). */
+/**
+ * One row of public.ec_order_status_history. At most one actor is set; neither means SYSTEM.
+ * Only admin views show the actor (customers are not shown who made a change).
+ */
 data class OrderStatusChange(
     val fromStatus: OrderStatus?,
     val toStatus: OrderStatus,
     val note: String?,
     val createdAt: LocalDateTime,
+    val changedByAdminId: Int? = null,
+    val changedByCustomerId: Long? = null,
 )
 
 /** Allowed values of ec_order.orderstatus (ck__ec_order__status). The allowed changes between them come in Step 4. */

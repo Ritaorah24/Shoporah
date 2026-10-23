@@ -103,6 +103,13 @@ class PaymentRepository(private val jdbcClient: JdbcClient) {
             .optional()
             .orElse(null)
 
+    /** Every payment attempt for the order, oldest first (uses ix__ec_payment__orderid). */
+    fun findByOrder(orderId: Long): List<Payment> =
+        jdbcClient.sql("SELECT * FROM public.ec_payment WHERE paymentorderid = :orderId ORDER BY paymentcreatedat, paymentid")
+            .param("orderId", orderId)
+            .query(rowMapper)
+            .list()
+
     /** The order's newest PENDING attempt, if any (uses ix__ec_payment__orderid). */
     fun findOpenAttempt(orderId: Long): Payment? =
         jdbcClient.sql(

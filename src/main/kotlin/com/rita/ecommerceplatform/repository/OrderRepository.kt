@@ -25,7 +25,17 @@ data class NewOrder(
     val total: BigDecimal,
 )
 
-/** Customer queries are scoped by customerId, so a customer only ever sees their own orders. */
+/** An order with the customer who placed it, for the admin views. */
+data class OrderWithCustomer(
+    val order: Order,
+    val customerName: String,
+    val customerEmail: String,
+)
+
+/**
+ * Customer queries are scoped by customerId, so a customer only ever sees their own orders.
+ * Admin queries (findAllWithCustomer, findByIdWithCustomer, countAll, updateStatus) are not scoped.
+ */
 @Repository
 class OrderRepository(private val jdbcClient: JdbcClient) {
 
@@ -189,4 +199,64 @@ class OrderRepository(private val jdbcClient: JdbcClient) {
             .param("customerId", customerId)
             .query(Long::class.javaObjectType)
             .single()
+
+    private val withCustomerMapper = RowMapper { rs, rowNum ->
+        OrderWithCustomer(
+            order = rowMapper.mapRow(rs, rowNum)!!,
+            customerName = "${rs.getString("customerfirstname")} ${rs.getString("customerlastname")}",
+            customerEmail = rs.getString("customeremail"),
+        )
+    }
+
+    /** One page of every customer's orders, newest first; only those with `status` when it is given. */
+    fun findAllWithCustomer(status: OrderStatus?, limit: Int, offset: Long): List<OrderWithCustomer> =
+        jdbcClient.sql(
+            """
+            SELECT o.*, c.customerfirstname, c.customerlastname, c.customeremail
+            FROM public.ec_order o
+            JOIN public.ec_customer c ON c.customerid = o.ordercustomerid
+            WHERE (CAST(:status AS text) IS NULL OR o.orderstatus = :status)
+            ORDER BY o.ordercreatedat DESC, o.orderid DESC
+            LIMIT :limit OFFSET :offset
+            """
+        )
+            .param("status", status?.name)
+            .param("limit", limit)
+            .param("offset", offset)
+            .query(withCustomerMapper)
+            .list()
+
+    fun countAll(status: OrderStatus?): Long =
+        jdbcClient.sql("SELECT COUNT(*) FROM public.ec_order WHERE (CAST(:status AS text) IS NULL OR orderstatus = :status)")
+            .param("status", status?.name)
+            .query(Long::class.javaObjectType)
+            .single()
+
+    fun findByIdWithCustomer(orderId: Long): OrderWithCustomer? =
+        jdbcClient.sql(
+            """
+            SELECT o.*, c.customerfirstname, c.customerlastname, c.customeremail
+            FROM public.ec_order o
+            JOIN public.ec_customer c ON c.customerid = o.ordercustomerid
+            WHERE o.orderid = :orderId
+            """
+        )
+            .param("orderId", orderId)
+            .query(withCustomerMapper)
+            .optional()
+            .orElse(null)
+
+    /** Moves the order from `from` to `to`. Returns rows updated: 0 means it was no longer `from`. */
+    fun updateStatus(orderId: Long, from: OrderStatus, to: OrderStatus): Int =
+        jdbcClient.sql(
+            """
+            UPDATE public.ec_order
+            SET orderstatus = :to, orderupdatedat = $SQL_NOW
+            WHERE orderid = :orderId AND orderstatus = :from
+            """
+        )
+            .param("orderId", orderId)
+            .param("from", from.name)
+            .param("to", to.name)
+            .update()
 }

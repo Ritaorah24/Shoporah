@@ -17,6 +17,8 @@ class OrderStatusHistoryRepository(private val jdbcClient: JdbcClient) {
             toStatus = OrderStatus.valueOf(rs.getString("orderstatushistorytostatus").uppercase()),
             note = rs.getString("orderstatushistorynote"),
             createdAt = rs.getObject("orderstatushistorycreatedat", LocalDateTime::class.java),
+            changedByAdminId = rs.getObject("orderstatushistorychangedbyadminid", Int::class.javaObjectType),
+            changedByCustomerId = rs.getObject("orderstatushistorychangedbycustomerid", Long::class.javaObjectType),
         )
     }
 
