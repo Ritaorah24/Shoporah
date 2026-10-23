@@ -52,6 +52,8 @@ class SecurityConfig(
                 // Public catalogue browsing: GET only, so writes to these URLs still need a token.
                 authorize(HttpMethod.GET, "/api/categories/**", permitAll)
                 authorize(HttpMethod.GET, "/api/products/**", permitAll)
+                // Paystack has no token; the webhook checks Paystack's signature instead.
+                authorize(HttpMethod.POST, "/api/webhooks/paystack", permitAll)
 
                 authorize("/api/customer/**", hasRole("CUSTOMER"))
                 // Allowed even while MUST_CHANGE: it is how the admin clears it (D4).

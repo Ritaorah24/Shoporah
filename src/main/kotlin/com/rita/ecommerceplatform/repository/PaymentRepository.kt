@@ -79,6 +79,14 @@ class PaymentRepository(private val jdbcClient: JdbcClient) {
             .optional()
             .orElse(null)
 
+    /** The payment with this reference, whoever's order it is (for the provider's webhook). Case-insensitive: CITEXT. */
+    fun findByReference(reference: String): Payment? =
+        jdbcClient.sql("SELECT * FROM public.ec_payment WHERE paymentreference = :reference")
+            .param("reference", reference)
+            .query(rowMapper)
+            .optional()
+            .orElse(null)
+
     /** Locks the payment row until the transaction ends (after its order's row). Must be called inside a transaction. */
     fun lockById(paymentId: Long): Payment? =
         jdbcClient.sql("SELECT * FROM public.ec_payment WHERE paymentid = :paymentId FOR UPDATE")

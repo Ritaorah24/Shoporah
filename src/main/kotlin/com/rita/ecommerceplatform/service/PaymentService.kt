@@ -2,7 +2,9 @@ package com.rita.ecommerceplatform.service
 
 import com.rita.ecommerceplatform.dto.response.PaymentInitResponse
 import com.rita.ecommerceplatform.dto.response.PaymentVerifyResponse
+import com.rita.ecommerceplatform.exception.BadRequestException
 import com.rita.ecommerceplatform.exception.ConflictException
+import com.rita.ecommerceplatform.exception.InvalidCredentialsException
 import com.rita.ecommerceplatform.exception.NotFoundException
 import com.rita.ecommerceplatform.model.Order
 import com.rita.ecommerceplatform.model.OrderPaymentStatus
@@ -14,9 +16,13 @@ import com.rita.ecommerceplatform.repository.OrderRepository
 import com.rita.ecommerceplatform.repository.PaymentRepository
 import com.rita.ecommerceplatform.repository.api.GatewayInitRequest
 import com.rita.ecommerceplatform.repository.api.PaymentGateway
+import com.rita.ecommerceplatform.repository.api.paystack.PaystackWebhookEvent
+import com.rita.ecommerceplatform.repository.api.paystack.PaystackWebhookVerifier
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.support.TransactionTemplate
+import tools.jackson.databind.json.JsonMapper
 import java.math.BigDecimal
 import java.util.UUID
 
@@ -30,12 +36,16 @@ class PaymentService(
     private val customerRepository: CustomerRepository,
     private val paymentGateway: PaymentGateway,
     private val paymentSettlement: PaymentSettlement,
+    private val webhookVerifier: PaystackWebhookVerifier,
+    private val jsonMapper: JsonMapper,
     // Transactions are opened in code, not with @Transactional: the Paystack call in the middle of
     // initialize must run outside any transaction, and @Transactional on a method called from inside
     // this same class would be ignored (Spring applies it through a proxy that such calls bypass).
     private val transactionTemplate: TransactionTemplate,
     @Value("\${app.paystack.callback-url}") private val callbackUrl: String,
 ) {
+
+    private val log = LoggerFactory.getLogger(PaymentService::class.java)
 
     /**
      * Starts paying for one of the customer's PENDING, UNPAID orders and returns the provider's payment page.
@@ -85,6 +95,39 @@ class PaymentService(
         }
         val order = orderRepository.findById(settled.orderId, customerId)!!
         return PaymentVerifyResponse.from(settled, order)
+    }
+
+    /**
+     * Handles a webhook from Paystack, which reaches us even if the customer closed the browser after paying.
+     * The body is only a signal: after the signature check we ask Paystack about the payment ourselves and
+     * settle it exactly like verify does, so a webhook, a repeated webhook and a verify can never settle twice.
+     * Returning normally means 200 (Paystack stops sending it); an exception means Paystack retries later.
+     */
+    fun handleWebhook(body: ByteArray, signature: String?) {
+        if (!webhookVerifier.isValid(body, signature)) {
+            log.warn("Rejected a Paystack webhook with a missing or wrong signature")
+            throw InvalidCredentialsException("Invalid webhook signature")
+        }
+        val event = PaystackWebhookEvent.parse(jsonMapper, body) ?: run {
+            log.error("Paystack webhook has a valid signature but an unreadable body: {}", body.toString(Charsets.UTF_8).take(500))
+            throw BadRequestException("Unreadable webhook body")
+        }
+        if (!event.isChargeSuccess || event.reference == null) {
+            log.info("Ignored Paystack webhook {} for {}", event.event, event.reference)
+            return
+        }
+
+        // Not ours (e.g. another app on the same Paystack account): retrying would not help, so it is not an error.
+        val payment = paymentRepository.findByReference(event.reference) ?: run {
+            log.warn("Paystack webhook {} for unknown reference {}", event.event, event.reference)
+            return
+        }
+        if (payment.status != PaymentStatus.PENDING) return
+
+        // Outside any transaction, like verify. If Paystack cannot be reached this is a 502 and Paystack retries.
+        val result = paymentGateway.verify(payment.reference)
+        val settled = paymentSettlement.settle(payment.paymentId, result)
+        log.info("Paystack webhook {} settled payment {} as {}", event.event, settled.reference, settled.status)
     }
 
     /** Runs in one short transaction: checks the order and returns its open attempt or a new PENDING one. */
