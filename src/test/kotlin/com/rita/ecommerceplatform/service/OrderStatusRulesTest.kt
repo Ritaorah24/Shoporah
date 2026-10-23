@@ -24,7 +24,7 @@ class OrderStatusRulesTest {
     // The expected table, written out separately from the code so a change to either is caught.
     private val expected: Map<Pair<OrderStatus, OrderStatus>, Set<OrderStatusActor>> = mapOf(
         (PENDING to CONFIRMED) to setOf(SYSTEM),
-        (PENDING to CANCELLED) to setOf(CUSTOMER, ADMIN),
+        (PENDING to CANCELLED) to setOf(CUSTOMER, ADMIN, SYSTEM),
         (CONFIRMED to PROCESSING) to setOf(ADMIN),
         (CONFIRMED to CANCELLED) to setOf(ADMIN),
         (PROCESSING to SHIPPED) to setOf(ADMIN),
@@ -80,7 +80,7 @@ class OrderStatusRulesTest {
     fun `nextStatuses lists only what this actor may do next`() {
         assertEquals(listOf(CANCELLED), OrderStatusRules.nextStatuses(PENDING, CUSTOMER))
         assertEquals(listOf(CANCELLED), OrderStatusRules.nextStatuses(PENDING, ADMIN))
-        assertEquals(listOf(CONFIRMED), OrderStatusRules.nextStatuses(PENDING, SYSTEM))
+        assertEquals(listOf(CONFIRMED, CANCELLED), OrderStatusRules.nextStatuses(PENDING, SYSTEM))
         assertEquals(listOf(PROCESSING, CANCELLED), OrderStatusRules.nextStatuses(CONFIRMED, ADMIN))
         assertEquals(emptyList(), OrderStatusRules.nextStatuses(CONFIRMED, CUSTOMER))
         assertEquals(listOf(SHIPPED), OrderStatusRules.nextStatuses(PROCESSING, ADMIN))

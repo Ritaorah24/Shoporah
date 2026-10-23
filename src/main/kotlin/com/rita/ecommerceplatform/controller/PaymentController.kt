@@ -3,6 +3,7 @@ package com.rita.ecommerceplatform.controller
 import com.rita.ecommerceplatform.config.OpenApiConfig
 import com.rita.ecommerceplatform.dto.request.InitializePaymentRequest
 import com.rita.ecommerceplatform.dto.response.PaymentInitResponse
+import com.rita.ecommerceplatform.dto.response.PaymentVerifyResponse
 import com.rita.ecommerceplatform.exception.AccountNotActiveException
 import com.rita.ecommerceplatform.security.CurrentUser
 import com.rita.ecommerceplatform.security.UserType
@@ -14,6 +15,8 @@ import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.security.oauth2.jwt.Jwt
+import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
@@ -39,6 +42,15 @@ class PaymentController(private val paymentService: PaymentService) {
         val result = paymentService.initialize(customerId(jwt), request.orderReference!!)
         return ResponseEntity.status(if (result.created) HttpStatus.CREATED else HttpStatus.OK).body(result.payment)
     }
+
+    /**
+     * Asks Paystack what happened to the payment (call it after Paystack sends the customer back with ?reference=).
+     * On success the order becomes CONFIRMED and PAID and stock is taken. Safe to call any number of times:
+     * a payment is settled only once.
+     */
+    @GetMapping("/verify/{reference}")
+    fun verify(@AuthenticationPrincipal jwt: Jwt, @PathVariable reference: String): PaymentVerifyResponse =
+        paymentService.verify(customerId(jwt), reference.trim())
 
     // Roles already restrict /api/customer/** to customer tokens; this guards against a mis-issued token.
     private fun customerId(jwt: Jwt): Long {

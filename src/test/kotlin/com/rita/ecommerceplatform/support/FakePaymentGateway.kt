@@ -24,6 +24,7 @@ class FakePaymentGateway : PaymentGateway {
 
     private val payments = ConcurrentHashMap<String, GatewayVerifyResult>()
     private val initRequests = CopyOnWriteArrayList<GatewayInitRequest>()
+    private val verifyRequests = CopyOnWriteArrayList<String>()
 
     /** While true, every call fails like an unreachable Paystack (502). Reset it in a finally block. */
     @Volatile
@@ -41,8 +42,12 @@ class FakePaymentGateway : PaymentGateway {
 
     override fun verify(reference: String): GatewayVerifyResult? {
         failIfDown()
+        verifyRequests += reference
         return payments[reference]
     }
+
+    /** How many times "Paystack" was asked about this reference, so a test can check it was not asked again. */
+    fun verifyCalls(reference: String): Int = verifyRequests.count { it == reference }
 
     /** Paystack now says the payment succeeded; amount and currency can be overridden to test tampering. */
     fun pay(reference: String, amountKobo: Long? = null, currency: String? = null) =

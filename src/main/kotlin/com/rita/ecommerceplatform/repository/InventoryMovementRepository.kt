@@ -19,14 +19,15 @@ class InventoryMovementRepository(private val jdbcClient: JdbcClient) {
         stockAfter: Int,
         adminId: Int?,
         note: String?,
+        orderId: Long? = null,
     ) {
         jdbcClient.sql(
             """
             INSERT INTO public.ec_inventory_movement (
                 inventorymovementproductid, inventorymovementtype, inventorymovementquantitychange,
-                inventorymovementstockafter, inventorymovementadminid, inventorymovementnote
+                inventorymovementstockafter, inventorymovementadminid, inventorymovementnote, inventorymovementorderid
             )
-            VALUES (:productId, :type, :quantityChange, :stockAfter, :adminId, :note)
+            VALUES (:productId, :type, :quantityChange, :stockAfter, :adminId, :note, :orderId)
             """
         )
             .param("productId", productId)
@@ -35,6 +36,7 @@ class InventoryMovementRepository(private val jdbcClient: JdbcClient) {
             .param("stockAfter", stockAfter)
             .param("adminId", adminId)
             .param("note", note)
+            .param("orderId", orderId)
             .update()
     }
 }

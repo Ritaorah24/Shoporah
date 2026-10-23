@@ -1,12 +1,14 @@
 package com.rita.ecommerceplatform.service
 
 import com.rita.ecommerceplatform.dto.response.PaymentInitResponse
+import com.rita.ecommerceplatform.dto.response.PaymentVerifyResponse
 import com.rita.ecommerceplatform.exception.ConflictException
 import com.rita.ecommerceplatform.exception.NotFoundException
 import com.rita.ecommerceplatform.model.Order
 import com.rita.ecommerceplatform.model.OrderPaymentStatus
 import com.rita.ecommerceplatform.model.OrderStatus
 import com.rita.ecommerceplatform.model.Payment
+import com.rita.ecommerceplatform.model.PaymentStatus
 import com.rita.ecommerceplatform.repository.CustomerRepository
 import com.rita.ecommerceplatform.repository.OrderRepository
 import com.rita.ecommerceplatform.repository.PaymentRepository
@@ -27,6 +29,7 @@ class PaymentService(
     private val paymentRepository: PaymentRepository,
     private val customerRepository: CustomerRepository,
     private val paymentGateway: PaymentGateway,
+    private val paymentSettlement: PaymentSettlement,
     // Transactions are opened in code, not with @Transactional: the Paystack call in the middle of
     // initialize must run outside any transaction, and @Transactional on a method called from inside
     // this same class would be ignored (Spring applies it through a proxy that such calls bypass).
@@ -63,6 +66,25 @@ class PaymentService(
         paymentRepository.saveAuthorizationUrl(start.payment.paymentId, page.authorizationUrl)
         val payment = paymentRepository.findById(start.payment.paymentId)!!
         return PaymentInitResult(PaymentInitResponse.from(payment, start.order.reference), created = true)
+    }
+
+    /**
+     * Asks the provider what happened to one of the customer's payments and settles it (PaymentSettlement).
+     * The client only names the payment; whether it was paid always comes from the provider. A payment that is
+     * already settled is returned as stored, without asking the provider again.
+     */
+    fun verify(customerId: Long, paymentReference: String): PaymentVerifyResponse {
+        val payment = paymentRepository.findByReferenceForCustomer(paymentReference, customerId)
+            ?: throw NotFoundException("Payment not found")
+        val settled = if (payment.status != PaymentStatus.PENDING) {
+            payment
+        } else {
+            // Outside any transaction, like initialize: no lock is held while the provider answers.
+            val result = paymentGateway.verify(payment.reference)
+            paymentSettlement.settle(payment.paymentId, result)
+        }
+        val order = orderRepository.findById(settled.orderId, customerId)!!
+        return PaymentVerifyResponse.from(settled, order)
     }
 
     /** Runs in one short transaction: checks the order and returns its open attempt or a new PENDING one. */

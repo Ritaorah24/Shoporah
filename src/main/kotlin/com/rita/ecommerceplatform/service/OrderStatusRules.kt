@@ -23,8 +23,8 @@ object OrderStatusRules {
     private val allowed: Map<Pair<OrderStatus, OrderStatus>, Set<OrderStatusActor>> = mapOf(
         // Only a verified payment confirms an order, so an admin cannot confirm an unpaid order by hand.
         (PENDING to CONFIRMED) to setOf(OrderStatusActor.SYSTEM),
-        // Customers may cancel only before paying.
-        (PENDING to CANCELLED) to setOf(OrderStatusActor.CUSTOMER, OrderStatusActor.ADMIN),
+        // Customers may cancel only before paying. SYSTEM cancels a paid order whose stock ran out (refund needed).
+        (PENDING to CANCELLED) to setOf(OrderStatusActor.CUSTOMER, OrderStatusActor.ADMIN, OrderStatusActor.SYSTEM),
         (CONFIRMED to PROCESSING) to setOf(OrderStatusActor.ADMIN),
         (CONFIRMED to CANCELLED) to setOf(OrderStatusActor.ADMIN),
         (PROCESSING to SHIPPED) to setOf(OrderStatusActor.ADMIN),

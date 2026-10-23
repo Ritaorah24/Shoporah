@@ -131,6 +131,25 @@ class ProductRepository(private val jdbcClient: JdbcClient) {
             .orElse(null)
 
     /**
+     * Takes `quantity` from stock only if there is enough, and returns the stock left; null if there was not enough
+     * (the conditional update from the 1.3 decision; ck__ec_product__stockquantity is the last guard).
+     */
+    fun decreaseStock(productId: Long, quantity: Int): Int? =
+        jdbcClient.sql(
+            """
+            UPDATE public.ec_product
+            SET productstockquantity = productstockquantity - :quantity, productupdatedat = $SQL_NOW
+            WHERE productid = :productId AND productstockquantity >= :quantity
+            RETURNING productstockquantity
+            """
+        )
+            .param("productId", productId)
+            .param("quantity", quantity)
+            .query(Int::class.javaObjectType)
+            .optional()
+            .orElse(null)
+
+    /**
      * Updates the editable fields of a product that is not deleted. The service merges a partial
      * PATCH with the current row first, so every field is passed. Returns rows updated (0 or 1).
      */

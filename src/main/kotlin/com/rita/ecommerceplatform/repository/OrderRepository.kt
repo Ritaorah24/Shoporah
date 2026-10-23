@@ -132,6 +132,31 @@ class OrderRepository(private val jdbcClient: JdbcClient) {
             .optional()
             .orElse(null)
 
+    /** Locks the order row until the transaction ends (settle: order → payment → products). Must be called inside a transaction. */
+    fun lockById(orderId: Long): Order? =
+        jdbcClient.sql("SELECT * FROM public.ec_order WHERE orderid = :orderId FOR UPDATE")
+            .param("orderId", orderId)
+            .query(rowMapper)
+            .optional()
+            .orElse(null)
+
+    /**
+     * Marks a PENDING, UNPAID order PAID and moves it to `status` (CONFIRMED, or CANCELLED when stock ran out).
+     * Returns rows updated: 0 means it was no longer PENDING + UNPAID, so it was never paid twice.
+     */
+    fun markPaid(orderId: Long, status: OrderStatus, paidAt: LocalDateTime): Int =
+        jdbcClient.sql(
+            """
+            UPDATE public.ec_order
+            SET orderstatus = :status, orderpaymentstatus = 'PAID', orderpaidat = :paidAt, orderupdatedat = $SQL_NOW
+            WHERE orderid = :orderId AND orderstatus = 'PENDING' AND orderpaymentstatus = 'UNPAID'
+            """
+        )
+            .param("orderId", orderId)
+            .param("status", status.name)
+            .param("paidAt", paidAt)
+            .update()
+
     /** The order this customer already created with this idempotency key, if any (a retried checkout). */
     fun findByIdempotencyKey(customerId: Long, idempotencyKey: UUID): Order? =
         jdbcClient.sql(
