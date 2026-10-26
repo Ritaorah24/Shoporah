@@ -37,6 +37,31 @@ class CustomerAuthFlowTest : IntegrationTestBase() {
     }
 
     @Test
+    fun `register rejects an email whose domain has no dot or no proper ending`() {
+        val name = uniqueEmail().substringBefore("@")
+        listOf("$name@gmailcom", "$name@localhost", "$name@example.c", "$name@example.123").forEach { email ->
+            mockMvc.post("/api/auth/register") {
+                contentType = MediaType.APPLICATION_JSON
+                content = registerBody(email)
+            }.andExpect {
+                status { isBadRequest() }
+                jsonPath("$.fieldErrors.length()") { value(1) }
+                jsonPath("$.fieldErrors[0].field") { value("email") }
+                jsonPath("$.fieldErrors[0].message") { value("must be a well-formed email address") }
+            }
+        }
+        val saved = jdbcClient.sql("SELECT COUNT(*) FROM public.ec_customer WHERE customeremail LIKE :prefix")
+            .param("prefix", "$name@%").query(Int::class.javaObjectType).single()
+        assertEquals(0, saved)
+
+        // A subdomain and a country ending are fine.
+        mockMvc.post("/api/auth/register") {
+            contentType = MediaType.APPLICATION_JSON
+            content = registerBody("$name.obi@mail.example.co.uk")
+        }.andExpect { status { isCreated() } }
+    }
+
+    @Test
     fun `register with an email already used returns 409`() {
         val email = uniqueEmail()
         registerCustomer(email)

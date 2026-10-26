@@ -21,9 +21,11 @@ data class RegisterRequest(
     val lastName: String?,
 
     // Trimmed before validation, so " ada@example.com " is accepted as "ada@example.com".
+    // The regexp is checked on top of @Email's own rules, which allow a domain without a dot
+    // (ada@localhost, ada@gmailcom) that payment providers reject: the domain needs a dot and 2+ final letters.
     @JsonDeserialize(using = TrimStringDeserializer::class)
     @field:NotBlank
-    @field:Email
+    @field:Email(regexp = "^[^@\\s]+@[^@\\s]+\\.[A-Za-z]{2,}$")
     @field:Size(max = 254)
     val email: String?,
 
