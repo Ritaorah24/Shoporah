@@ -4,7 +4,7 @@ import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Pattern
 import jakarta.validation.constraints.Size
 
-/** Body of PATCH /api/admin/auth/password. */
+/** Body of PATCH /api/admin/auth/password and PATCH /api/customer/me/password. */
 data class ChangePasswordRequest(
     @field:NotBlank
     @field:Size(max = 72)

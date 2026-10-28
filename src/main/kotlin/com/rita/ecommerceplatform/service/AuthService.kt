@@ -98,6 +98,30 @@ class AuthService(
         )
     }
 
+    /**
+     * No new token is returned: customers have no MUST_CHANGE flag to clear, and tokens
+     * cannot be revoked (no refresh tokens), so the current one stays valid until it expires.
+     */
+    fun changeCustomerPassword(customerId: Long, request: ChangePasswordRequest) {
+        val currentPassword = request.currentPassword!!
+        val newPassword = request.newPassword!!
+
+        val customer = customerRepository.findById(customerId) ?: throw InvalidCredentialsException("Customer account not found")
+        val auth = customerAuthRepository.findByCustomerId(customerId)
+        if (auth == null || !passwordEncoder.matches(currentPassword, auth.passwordHash)) {
+            throw InvalidCredentialsException("Current password is incorrect")
+        }
+        // Same order as login: status is only revealed after a correct password.
+        if (customer.status != CustomerStatus.ACTIVE || auth.status != CustomerAuthStatus.ACTIVE) {
+            throw AccountNotActiveException()
+        }
+        if (passwordEncoder.matches(newPassword, auth.passwordHash)) {
+            throw BadRequestException("New password must be different from the current password")
+        }
+
+        customerAuthRepository.updatePassword(customerId, passwordEncoder.encode(newPassword)!!)
+    }
+
     fun adminLogin(request: LoginRequest): TokenResponse {
         val email = request.email!!.lowercase()
         val password = request.password!!

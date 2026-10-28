@@ -60,4 +60,18 @@ class CustomerAuthRepository(private val jdbcClient: JdbcClient) {
         )
             .param("customerId", customerId)
             .update()
+
+    fun updatePassword(customerId: Long, passwordHash: String): Int =
+        jdbcClient.sql(
+            """
+            UPDATE public.ec_customer_auth
+            SET customerauthpasswordhash = :passwordHash,
+                customerauthpasswordchangedat = $SQL_NOW,
+                customerauthupdatedat = $SQL_NOW
+            WHERE customerauthcustomerid = :customerId
+            """
+        )
+            .param("passwordHash", passwordHash)
+            .param("customerId", customerId)
+            .update()
 }
