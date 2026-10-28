@@ -28,7 +28,7 @@ import java.util.UUID
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@Import(TestDatabaseReset::class, FakePaymentGateway::class)
+@Import(TestDatabaseReset::class, FakePaymentGateway::class, FakeEmailChannel::class)
 abstract class IntegrationTestBase {
 
     @Autowired
@@ -51,6 +51,10 @@ abstract class IntegrationTestBase {
     // Paystack's stand-in (imported above, so every test shares one context and none calls Paystack).
     @Autowired
     protected lateinit var paymentGateway: FakePaymentGateway
+
+    // The email channel's stand-in (imported above, so no test sends real email).
+    @Autowired
+    protected lateinit var emailChannel: FakeEmailChannel
 
     @Value("\${spring.flyway.placeholders.seed_admin_email}")
     protected lateinit var seedAdminEmail: String
