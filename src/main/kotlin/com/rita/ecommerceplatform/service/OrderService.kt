@@ -8,6 +8,7 @@ import com.rita.ecommerceplatform.exception.BadRequestException
 import com.rita.ecommerceplatform.exception.ConflictException
 import com.rita.ecommerceplatform.exception.NotFoundException
 import com.rita.ecommerceplatform.model.CustomerAddress
+import com.rita.ecommerceplatform.model.NotificationType
 import com.rita.ecommerceplatform.model.Order
 import com.rita.ecommerceplatform.model.OrderStatus
 import com.rita.ecommerceplatform.repository.CartRepository
@@ -38,6 +39,7 @@ class OrderService(
     private val customerRepository: CustomerRepository,
     private val deliveryMethodRepository: DeliveryMethodRepository,
     private val referenceGenerator: OrderReferenceGenerator,
+    private val notificationService: NotificationService,
 ) {
 
     /**
@@ -108,7 +110,17 @@ class OrderService(
         cartRepository.deleteAllItems(cartId!!)
         cartRepository.touch(cartId)
 
-        return CheckoutResult(toResponse(orderRepository.findById(orderId, customerId)!!), created = true)
+        // Only here, on the path that creates the order: a retry with the same key returned above, without an email.
+        val order = orderRepository.findById(orderId, customerId)!!
+        val customer = customerRepository.findById(customerId)!!
+        notificationService.queueToCustomer(
+            NotificationType.ORDER_CONFIRMATION,
+            customer,
+            NotificationMessages.orderPlaced(customer.firstName, order, orderItemRepository.findByOrderId(orderId)),
+            orderId = orderId,
+        )
+
+        return CheckoutResult(toResponse(order), created = true)
     }
 
     /** The customer's orders, newest first, as summaries (H1). Paging is capped like the product list (D6). */

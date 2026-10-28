@@ -14,6 +14,7 @@ import com.rita.ecommerceplatform.model.AdminAuthStatus
 import com.rita.ecommerceplatform.model.AdminStatus
 import com.rita.ecommerceplatform.model.CustomerAuthStatus
 import com.rita.ecommerceplatform.model.CustomerStatus
+import com.rita.ecommerceplatform.model.NotificationType
 import com.rita.ecommerceplatform.model.PasswordStatus
 import com.rita.ecommerceplatform.repository.AdminAuthRepository
 import com.rita.ecommerceplatform.repository.AdminRepository
@@ -33,6 +34,7 @@ class AuthService(
     private val adminAuthRepository: AdminAuthRepository,
     private val passwordEncoder: PasswordEncoder,
     private val jwtService: JwtService,
+    private val notificationService: NotificationService,
 ) {
 
     // Checked against when the email is unknown, so that path takes as long as a real
@@ -70,6 +72,7 @@ class AuthService(
 
         val customer = customerRepository.findById(customerId)
             ?: error("Customer $customerId not found right after insert")
+        notificationService.queueToCustomer(NotificationType.REGISTRATION, customer, NotificationMessages.registration(customer.firstName))
         return CustomerProfileResponse.from(customer)
     }
 
@@ -101,7 +104,9 @@ class AuthService(
     /**
      * No new token is returned: customers have no MUST_CHANGE flag to clear, and tokens
      * cannot be revoked (no refresh tokens), so the current one stays valid until it expires.
+     * One transaction, so the new password and its "password changed" email are saved together.
      */
+    @Transactional
     fun changeCustomerPassword(customerId: Long, request: ChangePasswordRequest) {
         val currentPassword = request.currentPassword!!
         val newPassword = request.newPassword!!
@@ -120,6 +125,7 @@ class AuthService(
         }
 
         customerAuthRepository.updatePassword(customerId, passwordEncoder.encode(newPassword)!!)
+        notificationService.queueToCustomer(NotificationType.PASSWORD_CHANGED, customer, NotificationMessages.passwordChanged(customer.firstName))
     }
 
     fun adminLogin(request: LoginRequest): TokenResponse {

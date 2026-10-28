@@ -33,7 +33,10 @@ class NotificationRepository(private val jdbcClient: JdbcClient) {
         )
     }
 
-    /** Queues a message (status PENDING, no attempts yet) and returns its notificationid. */
+    /**
+     * Queues a message (status PENDING, no attempts yet) and returns its notificationid, or null when the
+     * event already has its email (V10's unique indexes): the duplicate is skipped, never an error.
+     */
     fun insertPending(
         type: NotificationType,
         channel: NotificationChannelType,
@@ -43,7 +46,7 @@ class NotificationRepository(private val jdbcClient: JdbcClient) {
         customerId: Long?,
         adminId: Int?,
         orderId: Long?,
-    ): Long =
+    ): Long? =
         jdbcClient.sql(
             """
             INSERT INTO public.ec_notification (
@@ -51,6 +54,7 @@ class NotificationRepository(private val jdbcClient: JdbcClient) {
                 notificationtype, notificationrecipient, notificationsubject, notificationbody
             )
             VALUES (:customerId, :adminId, :orderId, :channel, :type, :recipient, :subject, :body)
+            ON CONFLICT DO NOTHING
             RETURNING notificationid
             """
         )
@@ -63,7 +67,8 @@ class NotificationRepository(private val jdbcClient: JdbcClient) {
             .param("subject", subject)
             .param("body", body)
             .query(Long::class.javaObjectType)
-            .single()
+            .optional()
+            .orElse(null)
 
     /**
      * Records a message that was already sent (or failed) outside the outbox, e.g. a password reset email,

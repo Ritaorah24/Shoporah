@@ -4,7 +4,6 @@ import com.rita.ecommerceplatform.model.NotificationChannelType
 import com.rita.ecommerceplatform.model.NotificationStatus
 import com.rita.ecommerceplatform.model.NotificationType
 import com.rita.ecommerceplatform.repository.NotificationRepository
-import com.rita.ecommerceplatform.service.NotificationSender
 import com.rita.ecommerceplatform.service.NotificationService
 import com.rita.ecommerceplatform.support.IntegrationTestBase
 import org.junit.jupiter.api.Test
@@ -22,17 +21,17 @@ class NotificationSenderTest : IntegrationTestBase() {
     private lateinit var notificationService: NotificationService
 
     @Autowired
-    private lateinit var notificationSender: NotificationSender
-
-    @Autowired
     private lateinit var notificationRepository: NotificationRepository
 
     @Autowired
     private lateinit var transactionTemplate: TransactionTemplate
 
     private fun queueFor(email: String, customerId: Long): Long = transactionTemplate.execute {
-        notificationService.queue(NotificationType.REGISTRATION, email, "Welcome", "Hello there", customerId = customerId)
+        notificationService.queue(NotificationType.PASSWORD_CHANGED, email, SUBJECT, "Hello there", customerId = customerId)
     }!!
+
+    // Only this test's message: registering the customer also queues a welcome email to the same address.
+    private fun testEmails(email: String) = emailChannel.sentTo(email).filter { it.subject == SUBJECT }
 
     private fun row(notificationId: Long) = notificationRepository.findById(notificationId)!!
 
@@ -51,7 +50,7 @@ class NotificationSenderTest : IntegrationTestBase() {
         val customerId = registerCustomer(email)
 
         assertFailsWith<IllegalTransactionStateException> {
-            notificationService.queue(NotificationType.REGISTRATION, email, "Welcome", "Hello", customerId = customerId)
+            notificationService.queue(NotificationType.PASSWORD_CHANGED, email, SUBJECT, "Hello", customerId = customerId)
         }
     }
 
@@ -64,14 +63,14 @@ class NotificationSenderTest : IntegrationTestBase() {
         val saved = row(notificationId)
         assertEquals(NotificationStatus.PENDING, saved.status)
         assertEquals(NotificationChannelType.EMAIL, saved.channel)
-        assertEquals(NotificationType.REGISTRATION, saved.type)
+        assertEquals(NotificationType.PASSWORD_CHANGED, saved.type)
         assertEquals(email, saved.recipient)
-        assertEquals("Welcome", saved.subject)
+        assertEquals(SUBJECT, saved.subject)
         assertEquals(customerId, saved.customerId)
         assertEquals(0, saved.attemptCount)
 
         val rolledBackId = transactionTemplate.execute { status ->
-            notificationService.queue(NotificationType.REGISTRATION, email, "Again", "Hello", customerId = customerId)
+            notificationService.queue(NotificationType.PASSWORD_CHANGED, email, "Again", "Hello", customerId = customerId)
                 .also { status.setRollbackOnly() }
         }!!
         assertNull(notificationRepository.findById(rolledBackId))
@@ -81,7 +80,7 @@ class NotificationSenderTest : IntegrationTestBase() {
     fun `queue needs exactly one of customerId or adminId`() {
         assertFailsWith<IllegalArgumentException> {
             transactionTemplate.execute {
-                notificationService.queue(NotificationType.REGISTRATION, uniqueEmail(), "Welcome", "Hello")
+                notificationService.queue(NotificationType.PASSWORD_CHANGED, uniqueEmail(), SUBJECT, "Hello")
             }
         }
     }
@@ -91,18 +90,18 @@ class NotificationSenderTest : IntegrationTestBase() {
         val email = uniqueEmail()
         val notificationId = queueFor(email, registerCustomer(email))
 
-        notificationSender.sendDue()
+        drainOutbox()
 
         val sent = row(notificationId)
         assertEquals(NotificationStatus.SENT, sent.status)
         assertEquals(1, sent.attemptCount)
         assertNotNull(sent.sentAt)
         assertNull(sent.failureReason)
-        assertEquals(listOf("Welcome"), emailChannel.sentTo(email).map { it.subject })
-        assertEquals("Hello there", emailChannel.sentTo(email).single().body)
+        assertEquals(listOf(SUBJECT), testEmails(email).map { it.subject })
+        assertEquals("Hello there", testEmails(email).single().body)
 
-        notificationSender.sendDue()
-        assertEquals(1, emailChannel.sentTo(email).size)
+        drainOutbox()
+        assertEquals(1, testEmails(email).size)
     }
 
     @Test
@@ -113,7 +112,7 @@ class NotificationSenderTest : IntegrationTestBase() {
         try {
             emailChannel.failWith = "SMTP server unreachable"
 
-            notificationSender.sendDue()
+            drainOutbox()
             row(notificationId).let {
                 assertEquals(NotificationStatus.PENDING, it.status)
                 assertEquals(1, it.attemptCount)
@@ -121,12 +120,12 @@ class NotificationSenderTest : IntegrationTestBase() {
             }
 
             // Not due yet: the last attempt was just now.
-            notificationSender.sendDue()
+            drainOutbox()
             assertEquals(1, row(notificationId).attemptCount)
 
             repeat(4) {
                 backdate(notificationId)
-                notificationSender.sendDue()
+                drainOutbox()
             }
             row(notificationId).let {
                 assertEquals(NotificationStatus.FAILED, it.status)
@@ -136,12 +135,12 @@ class NotificationSenderTest : IntegrationTestBase() {
 
             // A FAILED row is never picked up again.
             backdate(notificationId)
-            notificationSender.sendDue()
+            drainOutbox()
             assertEquals(5, row(notificationId).attemptCount)
         } finally {
             emailChannel.failWith = null
         }
-        assertEquals(0, emailChannel.sentTo(email).size)
+        assertEquals(0, testEmails(email).size)
     }
 
     @Test
@@ -151,18 +150,22 @@ class NotificationSenderTest : IntegrationTestBase() {
 
         try {
             emailChannel.failWith = "Temporary failure"
-            notificationSender.sendDue()
+            drainOutbox()
         } finally {
             emailChannel.failWith = null
         }
         backdate(notificationId)
-        notificationSender.sendDue()
+        drainOutbox()
 
         row(notificationId).let {
             assertEquals(NotificationStatus.SENT, it.status)
             assertEquals(2, it.attemptCount)
             assertNull(it.failureReason)
         }
-        assertEquals(1, emailChannel.sentTo(email).size)
+        assertEquals(1, testEmails(email).size)
+    }
+
+    companion object {
+        private const val SUBJECT = "Test message"
     }
 }

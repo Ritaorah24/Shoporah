@@ -6,7 +6,10 @@ import com.rita.ecommerceplatform.dto.response.AdminOrderSummaryResponse
 import com.rita.ecommerceplatform.dto.response.PageResponse
 import com.rita.ecommerceplatform.exception.BadRequestException
 import com.rita.ecommerceplatform.exception.NotFoundException
+import com.rita.ecommerceplatform.model.NotificationType
+import com.rita.ecommerceplatform.model.Order
 import com.rita.ecommerceplatform.model.OrderStatus
+import com.rita.ecommerceplatform.repository.CustomerRepository
 import com.rita.ecommerceplatform.repository.OrderItemRepository
 import com.rita.ecommerceplatform.repository.OrderRepository
 import com.rita.ecommerceplatform.repository.OrderStatusHistoryRepository
@@ -22,6 +25,8 @@ class AdminOrderService(
     private val orderItemRepository: OrderItemRepository,
     private val statusHistoryRepository: OrderStatusHistoryRepository,
     private val paymentRepository: PaymentRepository,
+    private val customerRepository: CustomerRepository,
+    private val notificationService: NotificationService,
 ) {
 
     /** Every customer's orders, newest first; only one status when given. Paging is capped like the other lists (D6). */
@@ -55,15 +60,35 @@ class AdminOrderService(
 
         // The lock makes this always 1; the WHERE on the old status is a second guard.
         check(orderRepository.updateStatus(orderId, order.status, to) == 1) { "Order $orderId changed while locked" }
+        val note = request.note?.trim()?.ifEmpty { null }
         statusHistoryRepository.insert(
             orderId = orderId,
             fromStatus = order.status,
             toStatus = to,
             adminId = adminId,
             customerId = null,
-            note = request.note?.trim()?.ifEmpty { null },
+            note = note,
         )
+        notifyCustomer(order, to, note)
         return get(orderId)
+    }
+
+    // Shipped and delivered tell the customer; PROCESSING has no email (no notification type for it).
+    private fun notifyCustomer(order: Order, to: OrderStatus, note: String?) {
+        if (to != OrderStatus.SHIPPED && to != OrderStatus.DELIVERED) return
+        val customer = customerRepository.findById(order.customerId)
+            ?: throw IllegalStateException("Customer ${order.customerId} of order ${order.reference} does not exist")
+        if (to == OrderStatus.SHIPPED) {
+            notificationService.queueToCustomer(
+                NotificationType.ORDER_SHIPPED, customer,
+                NotificationMessages.orderShipped(customer.firstName, order.reference, note), orderId = order.orderId,
+            )
+        } else {
+            notificationService.queueToCustomer(
+                NotificationType.ORDER_DELIVERED, customer,
+                NotificationMessages.orderDelivered(customer.firstName, order.reference), orderId = order.orderId,
+            )
+        }
     }
 
     private fun toResponse(row: OrderWithCustomer): AdminOrderResponse =

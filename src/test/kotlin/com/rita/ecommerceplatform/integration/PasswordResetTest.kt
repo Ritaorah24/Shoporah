@@ -122,7 +122,7 @@ class PasswordResetTest : IntegrationTestBase() {
             rows = jdbcClient.sql(
                 """
                 SELECT notificationtype::text, notificationstatus::text, notificationbody
-                FROM public.ec_notification WHERE notificationcustomerid = :id
+                FROM public.ec_notification WHERE notificationcustomerid = :id AND notificationtype = 'PASSWORD_RESET'
                 """
             )
                 .param("id", customerId)

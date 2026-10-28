@@ -20,6 +20,7 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.core.task.TaskExecutor
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.Base64
@@ -36,6 +37,7 @@ class PasswordResetService(
     private val customerRepository: CustomerRepository,
     private val customerAuthRepository: CustomerAuthRepository,
     private val notificationRepository: NotificationRepository,
+    private val notificationService: NotificationService,
     private val channel: NotificationChannel,
     private val passwordEncoder: PasswordEncoder,
     @Qualifier(EmailExecutorConfig.EMAIL_EXECUTOR) private val emailExecutor: TaskExecutor,
@@ -64,7 +66,11 @@ class PasswordResetService(
         emailExecutor.execute { sendResetEmail(customer, token) }
     }
 
-    /** Works once per token: the conditional UPDATE clears it, so a second use (even at the same moment) fails. */
+    /**
+     * Works once per token: the conditional UPDATE clears it, so a second use (even at the same moment) fails.
+     * One transaction, so the new password and its "password changed" email are saved together.
+     */
+    @Transactional
     fun resetPassword(request: ResetPasswordRequest) {
         val tokenHash = hash(request.token!!)
         val auth = customerAuthRepository.findByValidResetTokenHash(tokenHash) ?: throw invalidLink()
@@ -76,6 +82,7 @@ class PasswordResetService(
         if (customerAuthRepository.resetPassword(tokenHash, passwordEncoder.encode(request.newPassword!!)!!) != 1) {
             throw invalidLink()
         }
+        notificationService.queueToCustomer(NotificationType.PASSWORD_CHANGED, customer, NotificationMessages.passwordChanged(customer.firstName))
     }
 
     private fun sendResetEmail(customer: Customer, token: String) {

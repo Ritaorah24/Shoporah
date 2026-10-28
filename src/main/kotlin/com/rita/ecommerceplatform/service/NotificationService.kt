@@ -1,5 +1,6 @@
 package com.rita.ecommerceplatform.service
 
+import com.rita.ecommerceplatform.model.Customer
 import com.rita.ecommerceplatform.model.NotificationChannelType
 import com.rita.ecommerceplatform.model.NotificationType
 import com.rita.ecommerceplatform.repository.NotificationRepository
@@ -16,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional
 @Service
 class NotificationService(private val notificationRepository: NotificationRepository) {
 
+    /** Returns the new notificationid, or null when this event already has its email (skipped, see V10). */
     @Transactional(propagation = Propagation.MANDATORY)
     fun queue(
         type: NotificationType,
@@ -26,8 +28,13 @@ class NotificationService(private val notificationRepository: NotificationReposi
         adminId: Int? = null,
         orderId: Long? = null,
         channel: NotificationChannelType = NotificationChannelType.EMAIL,
-    ): Long {
+    ): Long? {
         require((customerId == null) != (adminId == null)) { "A notification needs exactly one of customerId or adminId" }
         return notificationRepository.insertPending(type, channel, recipient, subject, body, customerId, adminId, orderId)
     }
+
+    /** Queues one of NotificationMessages' emails to a customer. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    fun queueToCustomer(type: NotificationType, customer: Customer, message: EmailMessage, orderId: Long? = null): Long? =
+        queue(type, customer.email, message.subject, message.body, customerId = customer.customerId, orderId = orderId)
 }

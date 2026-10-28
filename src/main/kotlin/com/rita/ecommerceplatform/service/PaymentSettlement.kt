@@ -1,11 +1,13 @@
 package com.rita.ecommerceplatform.service
 
 import com.rita.ecommerceplatform.model.InventoryMovementType
+import com.rita.ecommerceplatform.model.NotificationType
 import com.rita.ecommerceplatform.model.Order
 import com.rita.ecommerceplatform.model.OrderPaymentStatus
 import com.rita.ecommerceplatform.model.OrderStatus
 import com.rita.ecommerceplatform.model.Payment
 import com.rita.ecommerceplatform.model.PaymentStatus
+import com.rita.ecommerceplatform.repository.CustomerRepository
 import com.rita.ecommerceplatform.repository.InventoryMovementRepository
 import com.rita.ecommerceplatform.repository.OrderItemRepository
 import com.rita.ecommerceplatform.repository.OrderRepository
@@ -38,6 +40,8 @@ class PaymentSettlement(
     private val productRepository: ProductRepository,
     private val inventoryMovementRepository: InventoryMovementRepository,
     private val statusHistoryRepository: OrderStatusHistoryRepository,
+    private val customerRepository: CustomerRepository,
+    private val notificationService: NotificationService,
 ) {
 
     private val log = LoggerFactory.getLogger(PaymentSettlement::class.java)
@@ -133,6 +137,16 @@ class PaymentSettlement(
             )
         }
         changeStatus(order, OrderStatus.CONFIRMED, paidAt, "Payment verified")
+
+        // Reached once per order: changeStatus only succeeds while the order is still PENDING and UNPAID.
+        val customer = customerRepository.findById(order.customerId)
+            ?: throw IllegalStateException("Customer ${order.customerId} of order ${order.reference} does not exist")
+        notificationService.queueToCustomer(
+            NotificationType.PAYMENT_CONFIRMATION,
+            customer,
+            NotificationMessages.paymentConfirmed(customer.firstName, order),
+            orderId = order.orderId,
+        )
     }
 
     private fun changeStatus(order: Order, to: OrderStatus, paidAt: LocalDateTime, note: String) {

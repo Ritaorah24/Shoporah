@@ -1,6 +1,7 @@
 package com.rita.ecommerceplatform.support
 
 import com.rita.ecommerceplatform.repository.CartRepository
+import com.rita.ecommerceplatform.service.NotificationSender
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.test.context.SpringBootTest
@@ -55,6 +56,10 @@ abstract class IntegrationTestBase {
     // The email channel's stand-in (imported above, so no test sends real email).
     @Autowired
     protected lateinit var emailChannel: FakeEmailChannel
+
+    // The background schedule is off in tests (application-test.properties); drainOutbox runs it by hand.
+    @Autowired
+    protected lateinit var notificationSender: NotificationSender
 
     @Value("\${spring.flyway.placeholders.seed_admin_email}")
     protected lateinit var seedAdminEmail: String
@@ -135,6 +140,15 @@ abstract class IntegrationTestBase {
             content = json("currentPassword" to seedAdminPassword, "newPassword" to CHANGED_ADMIN_PASSWORD)
         }.andExpect { status { isOk() } }.andReturn()
         return readJson(result)["accessToken"].asString()
+    }
+
+    /**
+     * Sends every due outbox row, including ones other tests left behind (every registration queues a
+     * welcome email), so the rows a test just queued are always reached. Ends because a row that fails
+     * is not due again until the retry delay has passed.
+     */
+    protected fun drainOutbox() {
+        while (notificationSender.sendDue() > 0) Unit
     }
 
     /** The seed admin's id, for inserting rows that need a creating admin. */
