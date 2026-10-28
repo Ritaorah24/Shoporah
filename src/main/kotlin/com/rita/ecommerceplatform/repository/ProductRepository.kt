@@ -17,7 +17,22 @@ data class ProductSearchCriteria(
     val activeCategoryOnly: Boolean,
     val nameContains: String? = null,
     val categoryId: Int? = null,
+    // Both on the selling price (the discounted price when there is one), inclusive.
+    val minPrice: BigDecimal? = null,
+    val maxPrice: BigDecimal? = null,
+    val inStockOnly: Boolean = false,
+    val sort: ProductSort = ProductSort.NEWEST,
 )
+
+/**
+ * How a product listing is ordered. Each value maps to fixed SQL, so the client's sort text never reaches the query.
+ * productid is the last key, so products with the same price or time keep one order across pages.
+ */
+enum class ProductSort(val param: String, val orderBy: String) {
+    NEWEST("newest", "p.productcreatedat DESC, p.productid DESC"),
+    PRICE_ASC("price_asc", "p.productsellingprice ASC, p.productid ASC"),
+    PRICE_DESC("price_desc", "p.productsellingprice DESC, p.productid DESC"),
+}
 
 @Repository
 class ProductRepository(private val jdbcClient: JdbcClient) {
@@ -204,11 +219,11 @@ class ProductRepository(private val jdbcClient: JdbcClient) {
             .param("productId", productId)
             .update()
 
-    /** One page of products matching the criteria, newest first. */
+    /** One page of products matching the criteria, in the criteria's sort order. */
     fun search(criteria: ProductSearchCriteria, limit: Int, offset: Long): List<Product> {
         val (where, params) = whereClause(criteria)
         return jdbcClient.sql(
-            "$selectWithCategory $where ORDER BY p.productcreatedat DESC, p.productid DESC LIMIT :limit OFFSET :offset"
+            "$selectWithCategory $where ORDER BY ${criteria.sort.orderBy} LIMIT :limit OFFSET :offset"
         )
             .params(params + mapOf("limit" to limit, "offset" to offset))
             .query(rowMapper)
@@ -250,6 +265,17 @@ class ProductRepository(private val jdbcClient: JdbcClient) {
             // Partial, case-insensitive name match (D5); uses the ix__ec_product__name_trgm index.
             conditions += "(p.productname::TEXT) ILIKE :namePattern ESCAPE '\\'"
             params["namePattern"] = "%${escapeLike(it)}%"
+        }
+        criteria.minPrice?.let {
+            conditions += "p.productsellingprice >= :minPrice"
+            params["minPrice"] = it
+        }
+        criteria.maxPrice?.let {
+            conditions += "p.productsellingprice <= :maxPrice"
+            params["maxPrice"] = it
+        }
+        if (criteria.inStockOnly) {
+            conditions += "p.productstockquantity > 0"
         }
         return "WHERE " + conditions.joinToString(" AND ") to params
     }

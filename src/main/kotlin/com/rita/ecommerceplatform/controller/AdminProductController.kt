@@ -10,6 +10,7 @@ import com.rita.ecommerceplatform.exception.AccountNotActiveException
 import com.rita.ecommerceplatform.security.CurrentUser
 import com.rita.ecommerceplatform.security.UserType
 import com.rita.ecommerceplatform.service.Paging
+import com.rita.ecommerceplatform.service.ProductFilters
 import com.rita.ecommerceplatform.service.ProductService
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
@@ -27,6 +28,7 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
+import java.math.BigDecimal
 
 /** Product management. SecurityConfig restricts every /api/admin URL to admins who have changed their password. */
 @Tag(name = "Admin products", description = "Create, edit, activate/deactivate and delete products")
@@ -35,7 +37,10 @@ import org.springframework.web.bind.annotation.RestController
 @RequestMapping("/api/admin/products")
 class AdminProductController(private val productService: ProductService) {
 
-    /** Page size is capped at 50; status filters to ACTIVE or INACTIVE (default: both). */
+    /**
+     * Page size is capped at 50; status filters to ACTIVE or INACTIVE (default: both).
+     * minPrice, maxPrice, inStock and sort work as on the public list.
+     */
     @GetMapping
     fun list(
         @RequestParam(defaultValue = "0") page: Int,
@@ -43,7 +48,12 @@ class AdminProductController(private val productService: ProductService) {
         @RequestParam(required = false) search: String?,
         @RequestParam(required = false) categoryId: Int?,
         @RequestParam(required = false) status: String?,
-    ): PageResponse<AdminProductResponse> = productService.listForAdmin(page, size, search, categoryId, status)
+        @RequestParam(required = false) minPrice: BigDecimal?,
+        @RequestParam(required = false) maxPrice: BigDecimal?,
+        @RequestParam(required = false) inStock: Boolean?,
+        @RequestParam(required = false) sort: String?,
+    ): PageResponse<AdminProductResponse> =
+        productService.listForAdmin(page, size, search, categoryId, status, ProductFilters(minPrice, maxPrice, inStock, sort))
 
     @GetMapping("/{productId}")
     fun get(@PathVariable productId: Long): AdminProductResponse = productService.getForAdmin(productId)

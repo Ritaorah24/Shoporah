@@ -20,7 +20,17 @@ import com.rita.ecommerceplatform.repository.ProductSearchCriteria
 import org.springframework.dao.DuplicateKeyException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import com.rita.ecommerceplatform.repository.ProductSort
 import java.math.BigDecimal
+
+/** The price, stock and sort query parameters shared by the public and admin product lists, as sent. */
+data class ProductFilters(
+    val minPrice: BigDecimal? = null,
+    val maxPrice: BigDecimal? = null,
+    // Only true filters; false or missing shows every product.
+    val inStock: Boolean? = null,
+    val sort: String? = null,
+)
 
 @Service
 class ProductService(
@@ -30,16 +40,17 @@ class ProductService(
 ) {
 
     /**
-     * Public list: only ACTIVE products in ACTIVE categories, newest first. A categoryId that is
-     * inactive, deleted or unknown simply gives an empty page.
+     * Public list: only ACTIVE products in ACTIVE categories, newest first unless another sort is chosen.
+     * A categoryId that is inactive, deleted or unknown simply gives an empty page.
      */
-    fun listPublic(page: Int, size: Int, search: String?, categoryId: Int?): PageResponse<ProductResponse> {
-        val criteria = ProductSearchCriteria(
-            statuses = listOf(ProductStatus.ACTIVE),
-            activeCategoryOnly = true,
-            nameContains = search?.trim()?.ifEmpty { null },
-            categoryId = categoryId,
-        )
+    fun listPublic(
+        page: Int,
+        size: Int,
+        search: String?,
+        categoryId: Int?,
+        filters: ProductFilters = ProductFilters(),
+    ): PageResponse<ProductResponse> {
+        val criteria = searchCriteria(listOf(ProductStatus.ACTIVE), activeCategoryOnly = true, search, categoryId, filters)
         val safePage = Paging.page(page)
         val safeSize = Paging.size(size)
         val products = productRepository.search(criteria, safeSize, Paging.offset(safePage, safeSize))
@@ -53,19 +64,21 @@ class ProductService(
     }
 
     /** Admin list: ACTIVE and INACTIVE (or just one, via status), in any category status. Never DELETED. */
-    fun listForAdmin(page: Int, size: Int, search: String?, categoryId: Int?, status: String?): PageResponse<AdminProductResponse> {
+    fun listForAdmin(
+        page: Int,
+        size: Int,
+        search: String?,
+        categoryId: Int?,
+        status: String?,
+        filters: ProductFilters = ProductFilters(),
+    ): PageResponse<AdminProductResponse> {
         val statuses = when (status?.trim()?.uppercase()) {
             null, "" -> listOf(ProductStatus.ACTIVE, ProductStatus.INACTIVE)
             "ACTIVE" -> listOf(ProductStatus.ACTIVE)
             "INACTIVE" -> listOf(ProductStatus.INACTIVE)
             else -> throw BadRequestException("status must be ACTIVE or INACTIVE")
         }
-        val criteria = ProductSearchCriteria(
-            statuses = statuses,
-            activeCategoryOnly = false,
-            nameContains = search?.trim()?.ifEmpty { null },
-            categoryId = categoryId,
-        )
+        val criteria = searchCriteria(statuses, activeCategoryOnly = false, search, categoryId, filters)
         val safePage = Paging.page(page)
         val safeSize = Paging.size(size)
         val products = productRepository.search(criteria, safeSize, Paging.offset(safePage, safeSize))
@@ -170,6 +183,39 @@ class ProductService(
     fun delete(productId: Long) {
         findNotDeleted(productId)
         productRepository.updateStatus(productId, ProductStatus.DELETED)
+    }
+
+    // The same checks for both lists: prices must be 0 or more and in order; sort must be one of ProductSort.
+    private fun searchCriteria(
+        statuses: List<ProductStatus>,
+        activeCategoryOnly: Boolean,
+        search: String?,
+        categoryId: Int?,
+        filters: ProductFilters,
+    ): ProductSearchCriteria {
+        val (minPrice, maxPrice) = filters
+        if ((minPrice != null && minPrice.signum() < 0) || (maxPrice != null && maxPrice.signum() < 0)) {
+            throw BadRequestException("minPrice and maxPrice must not be negative")
+        }
+        if (minPrice != null && maxPrice != null && minPrice > maxPrice) {
+            throw BadRequestException("minPrice must not be greater than maxPrice")
+        }
+        return ProductSearchCriteria(
+            statuses = statuses,
+            activeCategoryOnly = activeCategoryOnly,
+            nameContains = search?.trim()?.ifEmpty { null },
+            categoryId = categoryId,
+            minPrice = minPrice,
+            maxPrice = maxPrice,
+            inStockOnly = filters.inStock == true,
+            sort = parseSort(filters.sort),
+        )
+    }
+
+    private fun parseSort(sort: String?): ProductSort {
+        val value = sort?.trim()?.lowercase()?.ifEmpty { null } ?: return ProductSort.NEWEST
+        return ProductSort.entries.firstOrNull { it.param == value }
+            ?: throw BadRequestException("sort must be one of ${ProductSort.entries.joinToString { it.param }}")
     }
 
     /** Deleted products behave as if they do not exist (D3). */
