@@ -1,6 +1,7 @@
 package com.rita.ecommerceplatform.controller
 
 import com.rita.ecommerceplatform.config.OpenApiConfig
+import com.rita.ecommerceplatform.dto.request.CancelOrderRequest
 import com.rita.ecommerceplatform.dto.request.CheckoutRequest
 import com.rita.ecommerceplatform.dto.response.OrderResponse
 import com.rita.ecommerceplatform.dto.response.OrderSummaryResponse
@@ -63,6 +64,17 @@ class OrderController(private val orderService: OrderService) {
     @GetMapping("/{orderId}")
     fun get(@AuthenticationPrincipal jwt: Jwt, @PathVariable orderId: Long): OrderResponse =
         orderService.get(customerId(jwt), orderId)
+
+    /**
+     * Cancels one of the customer's own orders while it is PENDING and UNPAID (409 otherwise, e.g. once paid).
+     * The body is optional: {"reason": "..."}.
+     */
+    @PostMapping("/{orderId}/cancel")
+    fun cancel(
+        @AuthenticationPrincipal jwt: Jwt,
+        @PathVariable orderId: Long,
+        @Valid @RequestBody(required = false) request: CancelOrderRequest?,
+    ): OrderResponse = orderService.cancel(customerId(jwt), orderId, request)
 
     // Read as a String and checked here, so a missing or malformed key gets a clear message.
     private fun parseKey(value: String?): UUID {

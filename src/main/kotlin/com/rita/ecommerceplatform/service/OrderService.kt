@@ -1,5 +1,6 @@
 package com.rita.ecommerceplatform.service
 
+import com.rita.ecommerceplatform.dto.request.CancelOrderRequest
 import com.rita.ecommerceplatform.dto.request.CheckoutRequest
 import com.rita.ecommerceplatform.dto.response.OrderResponse
 import com.rita.ecommerceplatform.dto.response.OrderSummaryResponse
@@ -10,7 +11,9 @@ import com.rita.ecommerceplatform.exception.NotFoundException
 import com.rita.ecommerceplatform.model.CustomerAddress
 import com.rita.ecommerceplatform.model.NotificationType
 import com.rita.ecommerceplatform.model.Order
+import com.rita.ecommerceplatform.model.OrderPaymentStatus
 import com.rita.ecommerceplatform.model.OrderStatus
+import com.rita.ecommerceplatform.model.PaymentStatus
 import com.rita.ecommerceplatform.repository.CartRepository
 import com.rita.ecommerceplatform.repository.CustomerAddressRepository
 import com.rita.ecommerceplatform.repository.CustomerRepository
@@ -19,6 +22,8 @@ import com.rita.ecommerceplatform.repository.NewOrder
 import com.rita.ecommerceplatform.repository.OrderItemRepository
 import com.rita.ecommerceplatform.repository.OrderRepository
 import com.rita.ecommerceplatform.repository.OrderStatusHistoryRepository
+import com.rita.ecommerceplatform.repository.PaymentRepository
+import com.rita.ecommerceplatform.repository.api.PaymentGateway
 import org.springframework.dao.DuplicateKeyException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -40,6 +45,10 @@ class OrderService(
     private val deliveryMethodRepository: DeliveryMethodRepository,
     private val referenceGenerator: OrderReferenceGenerator,
     private val notificationService: NotificationService,
+    private val paymentRepository: PaymentRepository,
+    private val paymentGateway: PaymentGateway,
+    private val paymentSettlement: PaymentSettlement,
+    private val orderCancellation: OrderCancellation,
 ) {
 
     /**
@@ -143,6 +152,28 @@ class OrderService(
     /** One of the customer's own orders; another customer's order is "not found" too. */
     fun get(customerId: Long, orderId: Long): OrderResponse =
         toResponse(orderRepository.findById(orderId, customerId) ?: throw NotFoundException("Order not found"))
+
+    /**
+     * The customer cancels one of their own unpaid PENDING orders. If a payment page is open, the provider is
+     * asked first (outside any transaction, like verify): a payment made just before the cancel then confirms the
+     * order (409 here) instead of leaving a paid, cancelled order. If the provider cannot be reached, nothing changes (502).
+     */
+    fun cancel(customerId: Long, orderId: Long, request: CancelOrderRequest?): OrderResponse {
+        val order = orderRepository.findById(orderId, customerId) ?: throw NotFoundException("Order not found")
+        if (order.status != OrderStatus.PENDING || order.paymentStatus != OrderPaymentStatus.UNPAID) {
+            throw OrderCancellation.notCancellable()
+        }
+
+        paymentRepository.findOpenAttempt(orderId)?.takeIf { it.authorizationUrl != null }?.let { open ->
+            val settled = paymentSettlement.settle(open.paymentId, paymentGateway.verify(open.reference))
+            if (settled.status == PaymentStatus.SUCCESS) {
+                throw ConflictException("This order has already been paid and can no longer be cancelled")
+            }
+        }
+
+        orderCancellation.cancelByCustomer(customerId, orderId, request?.reason?.trim()?.ifEmpty { null })
+        return get(customerId, orderId)
+    }
 
     /** The chosen address (must be the customer's own), or the default when none is chosen. */
     private fun deliveryAddress(customerId: Long, addressId: Long?): CustomerAddress =

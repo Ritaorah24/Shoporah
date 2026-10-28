@@ -159,7 +159,7 @@ class PaymentService(
         const val CURRENCY = "NGN"
         // Longer than PaystackConfig's 5 s connect + 10 s read timeouts, so a live request is never cut off.
         const val STALE_START_SECONDS = 30
-        private const val NOT_STARTED = "Not started: the payment provider could not be reached"
+        const val NOT_STARTED ="Not started: the payment provider could not be reached"
 
         // A random UUID, so a reference can never be guessed or clash in practice (uq__ec_payment__reference).
         fun newReference(): String = "PAY-${UUID.randomUUID().toString().uppercase()}"

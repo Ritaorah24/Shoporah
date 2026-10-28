@@ -70,6 +70,16 @@ object NotificationMessages {
         """.trimIndent(),
     )
 
+    // Only unpaid orders can be cancelled by the customer, so nothing was charged.
+    fun orderCancelledByCustomer(firstName: String, reference: String) = EmailMessage(
+        subject = "Your order $reference was cancelled",
+        body = """
+            Hi $firstName,
+
+            Your order $reference was cancelled as you asked. You were not charged.
+        """.trimIndent(),
+    )
+
     fun passwordChanged(firstName: String) = EmailMessage(
         subject = "Your Shoporah password was changed",
         body = """
