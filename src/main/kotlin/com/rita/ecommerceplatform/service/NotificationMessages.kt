@@ -80,6 +80,19 @@ object NotificationMessages {
         """.trimIndent(),
     )
 
+    /** Cancelled by an admin or by the system. `paid` decides whether the customer is told about a refund. */
+    fun orderCancelled(firstName: String, order: Order, reason: String, paid: Boolean) = EmailMessage(
+        subject = "Your order ${order.reference} was cancelled",
+        body = buildString {
+            appendLine("Hi $firstName,")
+            appendLine()
+            appendLine("We are sorry, your order ${order.reference} was cancelled.")
+            appendLine("Reason: $reason")
+            appendLine()
+            append(if (paid) "Your payment of ${naira(order.total)} will be refunded." else "You were not charged.")
+        },
+    )
+
     fun passwordChanged(firstName: String) = EmailMessage(
         subject = "Your Shoporah password was changed",
         body = """

@@ -13,7 +13,6 @@ import com.rita.ecommerceplatform.model.NotificationType
 import com.rita.ecommerceplatform.model.Order
 import com.rita.ecommerceplatform.model.OrderPaymentStatus
 import com.rita.ecommerceplatform.model.OrderStatus
-import com.rita.ecommerceplatform.model.PaymentStatus
 import com.rita.ecommerceplatform.repository.CartRepository
 import com.rita.ecommerceplatform.repository.CustomerAddressRepository
 import com.rita.ecommerceplatform.repository.CustomerRepository
@@ -22,8 +21,6 @@ import com.rita.ecommerceplatform.repository.NewOrder
 import com.rita.ecommerceplatform.repository.OrderItemRepository
 import com.rita.ecommerceplatform.repository.OrderRepository
 import com.rita.ecommerceplatform.repository.OrderStatusHistoryRepository
-import com.rita.ecommerceplatform.repository.PaymentRepository
-import com.rita.ecommerceplatform.repository.api.PaymentGateway
 import org.springframework.dao.DuplicateKeyException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -45,9 +42,6 @@ class OrderService(
     private val deliveryMethodRepository: DeliveryMethodRepository,
     private val referenceGenerator: OrderReferenceGenerator,
     private val notificationService: NotificationService,
-    private val paymentRepository: PaymentRepository,
-    private val paymentGateway: PaymentGateway,
-    private val paymentSettlement: PaymentSettlement,
     private val orderCancellation: OrderCancellation,
 ) {
 
@@ -164,11 +158,8 @@ class OrderService(
             throw OrderCancellation.notCancellable()
         }
 
-        paymentRepository.findOpenAttempt(orderId)?.takeIf { it.authorizationUrl != null }?.let { open ->
-            val settled = paymentSettlement.settle(open.paymentId, paymentGateway.verify(open.reference))
-            if (settled.status == PaymentStatus.SUCCESS) {
-                throw ConflictException("This order has already been paid and can no longer be cancelled")
-            }
+        if (orderCancellation.settleOpenPayment(orderId)) {
+            throw ConflictException("This order has already been paid and can no longer be cancelled")
         }
 
         orderCancellation.cancelByCustomer(customerId, orderId, request?.reason?.trim()?.ifEmpty { null })

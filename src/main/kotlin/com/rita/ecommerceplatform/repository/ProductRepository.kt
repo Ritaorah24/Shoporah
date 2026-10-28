@@ -164,6 +164,22 @@ class ProductRepository(private val jdbcClient: JdbcClient) {
             .optional()
             .orElse(null)
 
+    /** Puts `quantity` back into stock (e.g. a cancelled order) and returns the stock after; null if the product does not exist. */
+    fun increaseStock(productId: Long, quantity: Int): Int? =
+        jdbcClient.sql(
+            """
+            UPDATE public.ec_product
+            SET productstockquantity = productstockquantity + :quantity, productupdatedat = $SQL_NOW
+            WHERE productid = :productId
+            RETURNING productstockquantity
+            """
+        )
+            .param("productId", productId)
+            .param("quantity", quantity)
+            .query(Int::class.javaObjectType)
+            .optional()
+            .orElse(null)
+
     /**
      * Updates the editable fields of a product that is not deleted. The service merges a partial
      * PATCH with the current row first, so every field is passed. Returns rows updated (0 or 1).

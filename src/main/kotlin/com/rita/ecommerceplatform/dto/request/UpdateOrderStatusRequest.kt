@@ -6,8 +6,8 @@ import jakarta.validation.constraints.Size
 import tools.jackson.databind.annotation.JsonDeserialize
 
 /**
- * Body of PATCH /api/admin/orders/{orderId}/status. In V1 an admin only moves a paid order along fulfilment:
- * cancelling and refunding wait for V2, which restores stock (OrderStatusRules already lists those moves).
+ * Body of PATCH /api/admin/orders/{orderId}/status, which only moves a paid order along fulfilment:
+ * cancelling has its own endpoint (POST .../cancel, which restores stock), and refunds come separately.
  * A String rather than an enum, so a wrong value gets a clear field error instead of "malformed JSON".
  */
 data class UpdateOrderStatusRequest(

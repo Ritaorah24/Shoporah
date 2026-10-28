@@ -2,29 +2,49 @@ package com.rita.ecommerceplatform.service
 
 import com.rita.ecommerceplatform.exception.ConflictException
 import com.rita.ecommerceplatform.exception.NotFoundException
+import com.rita.ecommerceplatform.model.InventoryMovementType
 import com.rita.ecommerceplatform.model.NotificationType
+import com.rita.ecommerceplatform.model.Order
 import com.rita.ecommerceplatform.model.OrderPaymentStatus
 import com.rita.ecommerceplatform.model.OrderStatus
+import com.rita.ecommerceplatform.model.PaymentStatus
 import com.rita.ecommerceplatform.repository.CustomerRepository
+import com.rita.ecommerceplatform.repository.InventoryMovementRepository
 import com.rita.ecommerceplatform.repository.OrderRepository
 import com.rita.ecommerceplatform.repository.OrderStatusHistoryRepository
 import com.rita.ecommerceplatform.repository.PaymentRepository
+import com.rita.ecommerceplatform.repository.ProductRepository
+import com.rita.ecommerceplatform.repository.api.PaymentGateway
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
 /**
- * Cancels an order, in one transaction. Its own bean so that @Transactional works when OrderService calls it
- * after asking the provider about the open payment (that call must run outside any transaction).
- * Locks are taken order → payment, the same order as PaymentSettlement, so the two never deadlock.
+ * Cancels orders, each in one transaction. Its own bean so that @Transactional works when the services call it
+ * after settleOpenPayment (the provider call must run outside any transaction).
+ * Locks are taken order → payment → products (by productId), the same order as PaymentSettlement, so they never deadlock.
  */
 @Service
 class OrderCancellation(
     private val orderRepository: OrderRepository,
     private val paymentRepository: PaymentRepository,
+    private val paymentGateway: PaymentGateway,
+    private val paymentSettlement: PaymentSettlement,
+    private val productRepository: ProductRepository,
+    private val inventoryMovementRepository: InventoryMovementRepository,
     private val statusHistoryRepository: OrderStatusHistoryRepository,
     private val customerRepository: CustomerRepository,
     private val notificationService: NotificationService,
 ) {
+
+    /**
+     * Call outside any transaction, before cancelling an unpaid order. If the order has an open payment page, asks
+     * the provider about it and settles it (like verify). Returns true if it was paid: the order is then CONFIRMED.
+     * Throws 502 if the provider cannot be reached, so nothing is cancelled blindly.
+     */
+    fun settleOpenPayment(orderId: Long): Boolean {
+        val open = paymentRepository.findOpenAttempt(orderId)?.takeIf { it.authorizationUrl != null } ?: return false
+        return paymentSettlement.settle(open.paymentId, paymentGateway.verify(open.reference)).status == PaymentStatus.SUCCESS
+    }
 
     /**
      * The customer cancels their own PENDING, UNPAID order. No stock was taken yet (it is taken on payment),
@@ -38,19 +58,8 @@ class OrderCancellation(
         if (order.status != OrderStatus.PENDING || order.paymentStatus != OrderPaymentStatus.UNPAID) throw notCancellable()
         OrderStatusRules.ensureCanChange(order.status, OrderStatus.CANCELLED, OrderStatusActor.CUSTOMER)
 
-        // An attempt still without a page is either crashed (marked here) or being started right now: its page
-        // would reach the customer after the cancel, so wait for it instead.
-        paymentRepository.failStaleStarts(orderId, PaymentService.STALE_START_SECONDS, PaymentService.NOT_STARTED)
-        paymentRepository.findOpenAttempt(orderId)?.let { open ->
-            if (open.authorizationUrl == null) {
-                throw ConflictException("A payment for this order is being started, try again in a moment")
-            }
-            paymentRepository.markFailed(open.paymentId, PAYMENT_CLOSED)
-        }
-
-        check(orderRepository.updateStatus(orderId, OrderStatus.PENDING, OrderStatus.CANCELLED) == 1) {
-            "Order $orderId changed while locked"
-        }
+        closeOpenAttempt(orderId, PAYMENT_CLOSED)
+        moveToCancelled(order)
         statusHistoryRepository.insert(
             orderId = orderId,
             fromStatus = OrderStatus.PENDING,
@@ -70,9 +79,85 @@ class OrderCancellation(
         )
     }
 
+    /**
+     * An admin cancels an order that has not shipped: PENDING (unpaid) or CONFIRMED / PROCESSING (paid).
+     * What the payment took from stock goes back, exactly once: the order is locked, CANCELLED is final, and
+     * uq__ec_inventorymovement__order_cancel rejects a second restore. A paid order stays PAID: a refund is needed.
+     */
+    @Transactional
+    fun cancelByAdmin(adminId: Int, orderId: Long, reason: String) {
+        val order = orderRepository.lockById(orderId) ?: throw NotFoundException("Order not found")
+        if (order.status == OrderStatus.SHIPPED || order.status == OrderStatus.DELIVERED) {
+            throw ConflictException("Shipped or delivered orders cannot be cancelled; use a refund instead")
+        }
+        OrderStatusRules.ensureCanChange(order.status, OrderStatus.CANCELLED, OrderStatusActor.ADMIN)
+
+        if (order.status == OrderStatus.PENDING) closeOpenAttempt(orderId, PAYMENT_CLOSED_BY_ADMIN)
+        moveToCancelled(order)
+        restoreStock(order, adminId)
+
+        val paid = order.paymentStatus == OrderPaymentStatus.PAID
+        statusHistoryRepository.insert(
+            orderId = orderId,
+            fromStatus = order.status,
+            toStatus = OrderStatus.CANCELLED,
+            adminId = adminId,
+            customerId = null,
+            note = "$CANCELLED_BY_ADMIN: $reason" + if (paid) ". $REFUND_NEEDED" else "",
+        )
+
+        val customer = customerRepository.findById(order.customerId)
+            ?: throw IllegalStateException("Customer ${order.customerId} of order ${order.reference} does not exist")
+        notificationService.queueToCustomer(
+            NotificationType.ORDER_CANCELLED,
+            customer,
+            NotificationMessages.orderCancelled(customer.firstName, order, reason, paid),
+            orderId = orderId,
+        )
+    }
+
+    // An attempt still without a page is either crashed (marked here) or being started right now: its page
+    // would reach the customer after the cancel, so wait for it instead.
+    private fun closeOpenAttempt(orderId: Long, note: String) {
+        paymentRepository.failStaleStarts(orderId, PaymentService.STALE_START_SECONDS, PaymentService.NOT_STARTED)
+        paymentRepository.findOpenAttempt(orderId)?.let { open ->
+            if (open.authorizationUrl == null) {
+                throw ConflictException("A payment for this order is being started, try again in a moment")
+            }
+            paymentRepository.markFailed(open.paymentId, note)
+        }
+    }
+
+    private fun moveToCancelled(order: Order) {
+        check(orderRepository.updateStatus(order.orderId, order.status, OrderStatus.CANCELLED) == 1) {
+            "Order ${order.orderId} changed while locked"
+        }
+    }
+
+    // Puts back exactly what the payment took (its SALE movements, by productId), so an order that never took
+    // stock (unpaid, or cancelled because stock ran out) puts nothing back.
+    private fun restoreStock(order: Order, adminId: Int) {
+        inventoryMovementRepository.findSalesByOrder(order.orderId).forEach { sale ->
+            val stockAfter = productRepository.increaseStock(sale.productId, sale.quantity)
+                ?: throw IllegalStateException("Product ${sale.productId} of order ${order.reference} does not exist")
+            inventoryMovementRepository.insert(
+                productId = sale.productId,
+                type = InventoryMovementType.ORDER_CANCELLED,
+                quantityChange = sale.quantity,
+                stockAfter = stockAfter,
+                adminId = adminId,
+                note = "Order ${order.reference} cancelled",
+                orderId = order.orderId,
+            )
+        }
+    }
+
     companion object {
         const val CANCELLED_BY_CUSTOMER = "Cancelled by customer"
+        const val CANCELLED_BY_ADMIN = "Cancelled by admin"
+        const val REFUND_NEEDED = "Refund needed"
         const val PAYMENT_CLOSED = "Closed: order cancelled by the customer"
+        const val PAYMENT_CLOSED_BY_ADMIN = "Closed: order cancelled by an admin"
 
         fun notCancellable() = ConflictException("Only unpaid pending orders can be cancelled")
     }

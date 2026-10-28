@@ -39,4 +39,21 @@ class InventoryMovementRepository(private val jdbcClient: JdbcClient) {
             .param("orderId", orderId)
             .update()
     }
+
+    /** What the order's payment took from stock (its SALE movements), by productId; empty if nothing was taken. */
+    fun findSalesByOrder(orderId: Long): List<OrderSale> =
+        jdbcClient.sql(
+            """
+            SELECT inventorymovementproductid, -inventorymovementquantitychange AS quantity
+            FROM public.ec_inventory_movement
+            WHERE inventorymovementorderid = :orderId AND inventorymovementtype = 'SALE'
+            ORDER BY inventorymovementproductid
+            """
+        )
+            .param("orderId", orderId)
+            .query { rs, _ -> OrderSale(rs.getLong("inventorymovementproductid"), rs.getInt("quantity")) }
+            .list()
 }
+
+/** One product's quantity taken from stock by an order. */
+data class OrderSale(val productId: Long, val quantity: Int)

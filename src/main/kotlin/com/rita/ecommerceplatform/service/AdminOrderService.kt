@@ -1,10 +1,12 @@
 package com.rita.ecommerceplatform.service
 
+import com.rita.ecommerceplatform.dto.request.AdminCancelOrderRequest
 import com.rita.ecommerceplatform.dto.request.UpdateOrderStatusRequest
 import com.rita.ecommerceplatform.dto.response.AdminOrderResponse
 import com.rita.ecommerceplatform.dto.response.AdminOrderSummaryResponse
 import com.rita.ecommerceplatform.dto.response.PageResponse
 import com.rita.ecommerceplatform.exception.BadRequestException
+import com.rita.ecommerceplatform.exception.ConflictException
 import com.rita.ecommerceplatform.exception.NotFoundException
 import com.rita.ecommerceplatform.model.NotificationType
 import com.rita.ecommerceplatform.model.Order
@@ -29,6 +31,7 @@ class AdminOrderService(
     private val customerRepository: CustomerRepository,
     private val notificationService: NotificationService,
     private val deliveryMethodRepository: DeliveryMethodRepository,
+    private val orderCancellation: OrderCancellation,
 ) {
 
     /** Every customer's orders, newest first; only one status when given. Paging is capped like the other lists (D6). */
@@ -75,6 +78,20 @@ class AdminOrderService(
         return get(orderId)
     }
 
+    /**
+     * Cancels an order that has not shipped (OrderCancellation.cancelByAdmin). For an unpaid order with an open
+     * payment page, the provider is asked first: if it was just paid, the admin gets 409 and sees the order as it
+     * is now (CONFIRMED, stock taken) before deciding again, instead of an unexpected refund case.
+     */
+    fun cancel(adminId: Int, orderId: Long, request: AdminCancelOrderRequest): AdminOrderResponse {
+        val order = orderRepository.findByIdWithCustomer(orderId)?.order ?: throw orderNotFound()
+        if (order.status == OrderStatus.PENDING && orderCancellation.settleOpenPayment(orderId)) {
+            throw ConflictException("This order was just paid; check it and cancel again if needed")
+        }
+        orderCancellation.cancelByAdmin(adminId, orderId, request.reason!!.trim())
+        return get(orderId)
+    }
+
     // Shipped and delivered tell the customer; PROCESSING has no email (no notification type for it).
     private fun notifyCustomer(order: Order, to: OrderStatus, note: String?) {
         if (to != OrderStatus.SHIPPED && to != OrderStatus.DELIVERED) return
@@ -101,6 +118,7 @@ class AdminOrderService(
             paymentRepository.findByOrder(row.order.orderId),
             OrderStatusRules.nextStatuses(row.order.status, OrderStatusActor.ADMIN).filter { it in FULFILMENT_STATUSES },
             deliveryMethodRepository.findById(row.order.deliveryMethodId)!!,
+            canCancel = OrderStatus.CANCELLED in OrderStatusRules.nextStatuses(row.order.status, OrderStatusActor.ADMIN),
         )
 
     private fun parseStatus(status: String?): OrderStatus? {
@@ -112,7 +130,7 @@ class AdminOrderService(
     private fun orderNotFound() = NotFoundException("Order not found")
 
     companion object {
-        // What an admin may set in V1 (UpdateOrderStatusRequest). Cancel and refund come with V2's stock restore.
+        // What an admin may set with PATCH .../status (UpdateOrderStatusRequest). Cancel has its own endpoint.
         val FULFILMENT_STATUSES = setOf(OrderStatus.PROCESSING, OrderStatus.SHIPPED, OrderStatus.DELIVERED)
     }
 }

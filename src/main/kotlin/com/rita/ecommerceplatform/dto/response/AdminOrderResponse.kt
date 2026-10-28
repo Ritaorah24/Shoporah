@@ -24,6 +24,8 @@ data class AdminOrderResponse(
     val paidAt: LocalDateTime?,
     // What PATCH .../status accepts now; empty when the admin has nothing to do (unpaid, delivered, cancelled).
     val nextStatuses: List<String>,
+    // Whether POST .../cancel is allowed now: before shipping (PENDING, CONFIRMED, PROCESSING).
+    val canCancel: Boolean,
     val items: List<OrderItemResponse>,
     val subtotal: BigDecimal,
     val deliveryMethod: OrderDeliveryMethodResponse,
@@ -45,6 +47,7 @@ data class AdminOrderResponse(
             payments: List<Payment>,
             nextStatuses: List<OrderStatus>,
             deliveryMethod: DeliveryMethod,
+            canCancel: Boolean,
         ) = AdminOrderResponse(
             orderId = row.order.orderId,
             reference = row.order.reference,
@@ -55,6 +58,7 @@ data class AdminOrderResponse(
             paymentStatus = row.order.paymentStatus.name,
             paidAt = row.order.paidAt,
             nextStatuses = nextStatuses.map { it.name },
+            canCancel = canCancel,
             items = items.map(OrderItemResponse::from),
             subtotal = row.order.subtotal,
             deliveryMethod = OrderDeliveryMethodResponse.from(deliveryMethod),

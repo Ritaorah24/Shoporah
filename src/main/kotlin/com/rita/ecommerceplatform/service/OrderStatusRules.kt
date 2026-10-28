@@ -27,6 +27,8 @@ object OrderStatusRules {
         (PENDING to CANCELLED) to setOf(OrderStatusActor.CUSTOMER, OrderStatusActor.ADMIN, OrderStatusActor.SYSTEM),
         (CONFIRMED to PROCESSING) to setOf(OrderStatusActor.ADMIN),
         (CONFIRMED to CANCELLED) to setOf(OrderStatusActor.ADMIN),
+        // Still in the warehouse, so the stock can go back; from SHIPPED on, a refund is the way out.
+        (PROCESSING to CANCELLED) to setOf(OrderStatusActor.ADMIN),
         (PROCESSING to SHIPPED) to setOf(OrderStatusActor.ADMIN),
         (SHIPPED to DELIVERED) to setOf(OrderStatusActor.ADMIN),
         (DELIVERED to REFUNDED) to setOf(OrderStatusActor.ADMIN),

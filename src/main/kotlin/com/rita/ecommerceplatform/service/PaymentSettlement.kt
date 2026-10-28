@@ -119,6 +119,13 @@ class PaymentSettlement(
             val note = "Out of stock after payment, refund needed: ${shortItems.joinToString(", ") { it.productName }}"
             log.error("Order {} paid by {}: {}", order.reference, payment.reference, note)
             changeStatus(order, OrderStatus.CANCELLED, paidAt, note)
+            notifyCustomer(order, NotificationType.ORDER_CANCELLED) { firstName ->
+                NotificationMessages.orderCancelled(
+                    firstName, order,
+                    reason = "Sold out before your payment was confirmed: ${shortItems.joinToString(", ") { it.productName }}",
+                    paid = true,
+                )
+            }
             return
         }
 
@@ -139,14 +146,16 @@ class PaymentSettlement(
         changeStatus(order, OrderStatus.CONFIRMED, paidAt, "Payment verified")
 
         // Reached once per order: changeStatus only succeeds while the order is still PENDING and UNPAID.
+        notifyCustomer(order, NotificationType.PAYMENT_CONFIRMATION) { firstName ->
+            NotificationMessages.paymentConfirmed(firstName, order)
+        }
+    }
+
+    // `message` gets the customer's first name.
+    private fun notifyCustomer(order: Order, type: NotificationType, message: (String) -> EmailMessage) {
         val customer = customerRepository.findById(order.customerId)
             ?: throw IllegalStateException("Customer ${order.customerId} of order ${order.reference} does not exist")
-        notificationService.queueToCustomer(
-            NotificationType.PAYMENT_CONFIRMATION,
-            customer,
-            NotificationMessages.paymentConfirmed(customer.firstName, order),
-            orderId = order.orderId,
-        )
+        notificationService.queueToCustomer(type, customer, message(customer.firstName), orderId = order.orderId)
     }
 
     private fun changeStatus(order: Order, to: OrderStatus, paidAt: LocalDateTime, note: String) {

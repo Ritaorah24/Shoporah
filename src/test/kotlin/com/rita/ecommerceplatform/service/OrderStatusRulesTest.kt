@@ -27,6 +27,7 @@ class OrderStatusRulesTest {
         (PENDING to CANCELLED) to setOf(CUSTOMER, ADMIN, SYSTEM),
         (CONFIRMED to PROCESSING) to setOf(ADMIN),
         (CONFIRMED to CANCELLED) to setOf(ADMIN),
+        (PROCESSING to CANCELLED) to setOf(ADMIN),
         (PROCESSING to SHIPPED) to setOf(ADMIN),
         (SHIPPED to DELIVERED) to setOf(ADMIN),
         (DELIVERED to REFUNDED) to setOf(ADMIN),
@@ -63,8 +64,8 @@ class OrderStatusRulesTest {
                 }
             }
         }
-        // 7 x 7 pairs, of which 7 are allowed.
-        assertEquals(42, checked)
+        // 7 x 7 pairs, of which 8 are allowed.
+        assertEquals(41, checked)
     }
 
     @Test
@@ -83,7 +84,7 @@ class OrderStatusRulesTest {
         assertEquals(listOf(CONFIRMED, CANCELLED), OrderStatusRules.nextStatuses(PENDING, SYSTEM))
         assertEquals(listOf(PROCESSING, CANCELLED), OrderStatusRules.nextStatuses(CONFIRMED, ADMIN))
         assertEquals(emptyList(), OrderStatusRules.nextStatuses(CONFIRMED, CUSTOMER))
-        assertEquals(listOf(SHIPPED), OrderStatusRules.nextStatuses(PROCESSING, ADMIN))
+        assertEquals(listOf(SHIPPED, CANCELLED), OrderStatusRules.nextStatuses(PROCESSING, ADMIN))
         assertEquals(listOf(DELIVERED), OrderStatusRules.nextStatuses(SHIPPED, ADMIN))
         assertEquals(listOf(REFUNDED), OrderStatusRules.nextStatuses(DELIVERED, ADMIN))
     }
