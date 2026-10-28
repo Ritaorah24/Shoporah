@@ -1,10 +1,14 @@
 package com.rita.ecommerceplatform.controller
 
+import com.rita.ecommerceplatform.dto.request.ForgotPasswordRequest
 import com.rita.ecommerceplatform.dto.request.LoginRequest
 import com.rita.ecommerceplatform.dto.request.RegisterRequest
+import com.rita.ecommerceplatform.dto.request.ResetPasswordRequest
 import com.rita.ecommerceplatform.dto.response.CustomerProfileResponse
+import com.rita.ecommerceplatform.dto.response.MessageResponse
 import com.rita.ecommerceplatform.dto.response.TokenResponse
 import com.rita.ecommerceplatform.service.AuthService
+import com.rita.ecommerceplatform.service.PasswordResetService
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
@@ -14,10 +18,13 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 
-@Tag(name = "Customer auth", description = "Register and log in as a customer")
+@Tag(name = "Customer auth", description = "Register, log in and reset a forgotten password as a customer")
 @RestController
 @RequestMapping("/api/auth")
-class AuthController(private val authService: AuthService) {
+class AuthController(
+    private val authService: AuthService,
+    private val passwordResetService: PasswordResetService,
+) {
 
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
@@ -27,4 +34,17 @@ class AuthController(private val authService: AuthService) {
     @PostMapping("/login")
     fun login(@Valid @RequestBody request: LoginRequest): TokenResponse =
         authService.login(request)
+
+    /** Same reply whether or not the email has an account, so it cannot be used to find accounts. */
+    @PostMapping("/forgot-password")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    fun forgotPassword(@Valid @RequestBody request: ForgotPasswordRequest): MessageResponse {
+        passwordResetService.requestReset(request)
+        return MessageResponse(PasswordResetService.FORGOT_REPLY)
+    }
+
+    @PostMapping("/reset-password")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    fun resetPassword(@Valid @RequestBody request: ResetPasswordRequest) =
+        passwordResetService.resetPassword(request)
 }

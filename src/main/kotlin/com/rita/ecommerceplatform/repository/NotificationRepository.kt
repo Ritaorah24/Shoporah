@@ -65,6 +65,49 @@ class NotificationRepository(private val jdbcClient: JdbcClient) {
             .query(Long::class.javaObjectType)
             .single()
 
+    /**
+     * Records a message that was already sent (or failed) outside the outbox, e.g. a password reset email,
+     * whose token must never be stored. Written as SENT or FAILED, so NotificationSender never picks it up.
+     */
+    fun insertLog(
+        type: NotificationType,
+        channel: NotificationChannelType,
+        recipient: String,
+        subject: String?,
+        body: String?,
+        status: NotificationStatus,
+        failureReason: String?,
+        customerId: Long?,
+        adminId: Int?,
+    ): Long {
+        require(status != NotificationStatus.PENDING) { "A log row is never PENDING" }
+        return jdbcClient.sql(
+            """
+            INSERT INTO public.ec_notification (
+                notificationcustomerid, notificationadminid, notificationchannel, notificationtype,
+                notificationrecipient, notificationsubject, notificationbody, notificationstatus,
+                notificationattemptcount, notificationsentat, notificationfailurereason
+            )
+            VALUES (
+                :customerId, :adminId, :channel, :type, :recipient, :subject, :body, :status,
+                1, CASE WHEN :status = 'SENT' THEN $SQL_NOW END, :reason
+            )
+            RETURNING notificationid
+            """
+        )
+            .param("customerId", customerId)
+            .param("adminId", adminId)
+            .param("channel", channel.name)
+            .param("type", type.name)
+            .param("recipient", recipient)
+            .param("subject", subject)
+            .param("body", body)
+            .param("status", status.name)
+            .param("reason", failureReason?.take(MAX_REASON_LENGTH))
+            .query(Long::class.javaObjectType)
+            .single()
+    }
+
     fun findById(notificationId: Long): Notification? =
         jdbcClient.sql("SELECT * FROM public.ec_notification WHERE notificationid = :id")
             .param("id", notificationId)

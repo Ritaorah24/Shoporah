@@ -74,4 +74,65 @@ class CustomerAuthRepository(private val jdbcClient: JdbcClient) {
             .param("passwordHash", passwordHash)
             .param("customerId", customerId)
             .update()
+
+    /**
+     * Stores a new reset token hash valid for validMinutes, replacing any earlier one, unless a token was
+     * issued less than cooldownSeconds ago (its expiry is still later than now + validMinutes - cooldown).
+     * Returns 1 when stored, 0 during the cooldown; one statement, so two requests at once cannot both store.
+     */
+    fun saveResetToken(customerId: Long, tokenHash: String, validMinutes: Int, cooldownSeconds: Int): Int =
+        jdbcClient.sql(
+            """
+            UPDATE public.ec_customer_auth
+            SET customerauthresettokenhash = :tokenHash,
+                customerauthresettokenexpiresat = $SQL_NOW + (:validMinutes * INTERVAL '1 minute'),
+                customerauthupdatedat = $SQL_NOW
+            WHERE customerauthcustomerid = :customerId
+              AND (customerauthresettokenexpiresat IS NULL
+                   OR customerauthresettokenexpiresat
+                      <= $SQL_NOW + (:validMinutes * INTERVAL '1 minute') - (:cooldownSeconds * INTERVAL '1 second'))
+            """
+        )
+            .param("tokenHash", tokenHash)
+            .param("validMinutes", validMinutes)
+            .param("cooldownSeconds", cooldownSeconds)
+            .param("customerId", customerId)
+            .update()
+
+    /** The credentials whose reset token has this hash and has not expired yet. */
+    fun findByValidResetTokenHash(tokenHash: String): CustomerAuth? =
+        jdbcClient.sql(
+            """
+            SELECT * FROM public.ec_customer_auth
+            WHERE customerauthresettokenhash = :tokenHash
+              AND customerauthresettokenexpiresat > $SQL_NOW
+            """
+        )
+            .param("tokenHash", tokenHash)
+            .query(rowMapper)
+            .optional()
+            .orElse(null)
+
+    /**
+     * Sets the new password and clears the token, only if the token is still the current, unexpired one.
+     * Returns 1 when reset, 0 when the token was already used, replaced or expired (so it works only once).
+     */
+    fun resetPassword(tokenHash: String, passwordHash: String): Int =
+        jdbcClient.sql(
+            """
+            UPDATE public.ec_customer_auth
+            SET customerauthpasswordhash = :passwordHash,
+                customerauthpasswordchangedat = $SQL_NOW,
+                customerauthresettokenhash = NULL,
+                customerauthresettokenexpiresat = NULL,
+                customerauthfailedloginattempts = 0,
+                customerauthlockeduntil = NULL,
+                customerauthupdatedat = $SQL_NOW
+            WHERE customerauthresettokenhash = :tokenHash
+              AND customerauthresettokenexpiresat > $SQL_NOW
+            """
+        )
+            .param("passwordHash", passwordHash)
+            .param("tokenHash", tokenHash)
+            .update()
 }
