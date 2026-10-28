@@ -14,6 +14,7 @@ import com.rita.ecommerceplatform.service.Paging
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
+import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.annotation.AuthenticationPrincipal
@@ -44,7 +45,7 @@ class OrderController(private val orderService: OrderService) {
         @AuthenticationPrincipal jwt: Jwt,
         @Parameter(description = "A new UUID per checkout attempt; send the same one again when retrying")
         @RequestHeader(IDEMPOTENCY_KEY, required = false) idempotencyKey: String?,
-        @RequestBody(required = false) request: CheckoutRequest?,
+        @Valid @RequestBody(required = false) request: CheckoutRequest?,
     ): ResponseEntity<OrderResponse> {
         val result = orderService.checkout(customerId(jwt), parseKey(idempotencyKey), request)
         return ResponseEntity.status(if (result.created) HttpStatus.CREATED else HttpStatus.OK).body(result.order)

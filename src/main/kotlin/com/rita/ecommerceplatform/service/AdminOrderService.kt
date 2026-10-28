@@ -10,6 +10,7 @@ import com.rita.ecommerceplatform.model.NotificationType
 import com.rita.ecommerceplatform.model.Order
 import com.rita.ecommerceplatform.model.OrderStatus
 import com.rita.ecommerceplatform.repository.CustomerRepository
+import com.rita.ecommerceplatform.repository.DeliveryMethodRepository
 import com.rita.ecommerceplatform.repository.OrderItemRepository
 import com.rita.ecommerceplatform.repository.OrderRepository
 import com.rita.ecommerceplatform.repository.OrderStatusHistoryRepository
@@ -27,6 +28,7 @@ class AdminOrderService(
     private val paymentRepository: PaymentRepository,
     private val customerRepository: CustomerRepository,
     private val notificationService: NotificationService,
+    private val deliveryMethodRepository: DeliveryMethodRepository,
 ) {
 
     /** Every customer's orders, newest first; only one status when given. Paging is capped like the other lists (D6). */
@@ -98,6 +100,7 @@ class AdminOrderService(
             statusHistoryRepository.findByOrderId(row.order.orderId),
             paymentRepository.findByOrder(row.order.orderId),
             OrderStatusRules.nextStatuses(row.order.status, OrderStatusActor.ADMIN).filter { it in FULFILMENT_STATUSES },
+            deliveryMethodRepository.findById(row.order.deliveryMethodId)!!,
         )
 
     private fun parseStatus(status: String?): OrderStatus? {

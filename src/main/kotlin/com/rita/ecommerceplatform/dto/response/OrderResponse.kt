@@ -1,6 +1,7 @@
 package com.rita.ecommerceplatform.dto.response
 
 import com.rita.ecommerceplatform.model.AddressDetails
+import com.rita.ecommerceplatform.model.DeliveryMethod
 import com.rita.ecommerceplatform.model.Order
 import com.rita.ecommerceplatform.model.OrderItem
 import com.rita.ecommerceplatform.model.OrderStatusChange
@@ -15,6 +16,8 @@ data class OrderResponse(
     val paymentStatus: String,
     val items: List<OrderItemResponse>,
     val subtotal: BigDecimal,
+    val deliveryMethod: OrderDeliveryMethodResponse,
+    // The fee as it was at checkout, even if the method's fee has changed since.
     val deliveryFee: BigDecimal,
     val discountAmount: BigDecimal,
     val total: BigDecimal,
@@ -24,13 +27,14 @@ data class OrderResponse(
     val createdAt: LocalDateTime,
 ) {
     companion object {
-        fun from(order: Order, items: List<OrderItem>, history: List<OrderStatusChange>) = OrderResponse(
+        fun from(order: Order, items: List<OrderItem>, history: List<OrderStatusChange>, deliveryMethod: DeliveryMethod) = OrderResponse(
             orderId = order.orderId,
             reference = order.reference,
             status = order.status.name,
             paymentStatus = order.paymentStatus.name,
             items = items.map(OrderItemResponse::from),
             subtotal = order.subtotal,
+            deliveryMethod = OrderDeliveryMethodResponse.from(deliveryMethod),
             deliveryFee = order.deliveryFee,
             discountAmount = order.discountAmount,
             total = order.total,

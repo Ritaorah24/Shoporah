@@ -68,8 +68,10 @@ class OrderService(
             throw ConflictException("Some items cannot be ordered: ${problems.joinToString(", ")}")
         }
 
-        val deliveryMethod = deliveryMethodRepository.findActiveByCode(DEFAULT_DELIVERY_METHOD)
-            ?: throw IllegalStateException("Delivery method $DEFAULT_DELIVERY_METHOD is missing (seeded by V8)")
+        // The fee is read here, inside the transaction, and copied onto the order: later fee changes never affect it.
+        val deliveryMethodCode = request?.deliveryMethodCode?.ifEmpty { null } ?: DEFAULT_DELIVERY_METHOD
+        val deliveryMethod = deliveryMethodRepository.findActiveByCode(deliveryMethodCode)
+            ?: throw BadRequestException("Delivery method ${deliveryMethodCode.uppercase()} is not available")
         val subtotal = items.fold(BigDecimal.ZERO.setScale(2)) { sum, item -> sum + cartService.lineTotal(item) }
         // Coupons arrive in V2.
         val discount = BigDecimal.ZERO.setScale(2)
@@ -165,10 +167,11 @@ class OrderService(
             order,
             orderItemRepository.findByOrderId(order.orderId),
             statusHistoryRepository.findByOrderId(order.orderId),
+            deliveryMethodRepository.findById(order.deliveryMethodId)!!,
         )
 
     companion object {
-        // Until delivery methods arrive in V2, every order uses the seeded STANDARD method.
+        // Used when checkout names no delivery method (seeded by V8; DeliveryMethodService never lets it be deactivated).
         const val DEFAULT_DELIVERY_METHOD = "STANDARD"
         private const val REFERENCE_ATTEMPTS = 5
     }

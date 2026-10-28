@@ -57,10 +57,19 @@ enum class OrderStatus { PENDING, CONFIRMED, PROCESSING, SHIPPED, DELIVERED, CAN
 /** Allowed values of ec_order.orderpaymentstatus (ck__ec_order__paymentstatus). */
 enum class OrderPaymentStatus { UNPAID, PAID, REFUNDED }
 
-/** One row of public.ec_delivery_method. Only the seeded STANDARD method is used until V2. */
+/** One row of public.ec_delivery_method. Orders keep their own copy of the fee (orderdeliveryfee). */
 data class DeliveryMethod(
     val deliveryMethodId: Int,
     val code: String,
     val name: String,
+    val description: String?,
     val fee: BigDecimal,
+    val estimatedMinDays: Int?,
+    val estimatedMaxDays: Int?,
+    val status: DeliveryMethodStatus,
+    val createdAt: LocalDateTime,
+    val updatedAt: LocalDateTime,
 )
+
+/** Allowed values of ec_delivery_method.deliverymethodstatus (ck__ec_deliverymethod__status). */
+enum class DeliveryMethodStatus { ACTIVE, INACTIVE }
