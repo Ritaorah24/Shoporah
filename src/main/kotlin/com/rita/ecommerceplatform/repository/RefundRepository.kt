@@ -96,6 +96,27 @@ class RefundRepository(private val jdbcClient: JdbcClient) {
             .query(rowMapper)
             .list()
 
+    /** Our refund with this provider refund id, if any (uq__ec_refund__providerrefundid). */
+    fun findByProviderRefundId(providerRefundId: String): Refund? =
+        jdbcClient.sql("SELECT * FROM public.ec_refund WHERE refundproviderrefundid = :providerRefundId")
+            .param("providerRefundId", providerRefundId)
+            .query(rowMapper)
+            .optional()
+            .orElse(null)
+
+    /** The payment's PENDING refund the provider has not confirmed yet, if any (at most one: uq__ec_refund__payment_active). */
+    fun findUnconfirmedForPayment(paymentId: Long): Refund? =
+        jdbcClient.sql(
+            """
+            SELECT * FROM public.ec_refund
+            WHERE refundpaymentid = :paymentId AND refundstatus = 'PENDING' AND refundproviderrefundid IS NULL
+            """
+        )
+            .param("paymentId", paymentId)
+            .query(rowMapper)
+            .optional()
+            .orElse(null)
+
     /** The provider refund ids already recorded on any of our refunds for this payment. */
     fun findProviderRefundIds(paymentId: Long): Set<String> =
         jdbcClient.sql(

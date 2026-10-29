@@ -18,6 +18,7 @@ import com.rita.ecommerceplatform.repository.RefundRepository
 import com.rita.ecommerceplatform.repository.api.GatewayRefundRequest
 import com.rita.ecommerceplatform.repository.api.GatewayRefundStart
 import com.rita.ecommerceplatform.repository.api.PaymentGateway
+import com.rita.ecommerceplatform.repository.api.paystack.PaystackWebhookEvent
 import org.slf4j.LoggerFactory
 import org.springframework.dao.DuplicateKeyException
 import org.springframework.stereotype.Service
@@ -26,7 +27,7 @@ import org.springframework.transaction.support.TransactionTemplate
 /**
  * Admin refunds through the payment provider (checkpoint 2.2, Step 5). Only whole orders are refunded: the
  * order total, back to the order's successful payment. Refunds finish later at the provider, so a refund
- * starts PENDING and RefundSettlement applies the outcome once (on start, refresh, or the webhook in 5b).
+ * starts PENDING and RefundSettlement applies the outcome once (on start, refresh, or the refund webhook).
  */
 @Service
 class RefundService(
@@ -88,6 +89,47 @@ class RefundService(
             }
         }
         return adminOrderService.get(refund.orderId)
+    }
+
+    /**
+     * A signed refund webhook (checkpoint 2.2, Step 5b), called by PaymentService.handleWebhook after the signature
+     * check. The body only says which refund to look at: what happened is asked of the provider again and settled
+     * exactly like refresh, so a webhook, a repeated webhook and a refresh never settle twice.
+     * Returning normally means 200; a 502 (provider unreachable) makes Paystack send it again later.
+     */
+    fun handleWebhook(event: PaystackWebhookEvent) {
+        if (!event.isRefundFinal) {
+            log.info("Ignored Paystack webhook {} for refund {}", event.event, event.refundId)
+            return
+        }
+
+        // Ours already knows this provider id: ask about it directly.
+        val known = event.refundId?.let(refundRepository::findByProviderRefundId)
+        if (known != null) {
+            if (known.status != RefundStatus.PENDING) return
+            val result = paymentGateway.fetchRefund(known.providerRefundId!!) ?: run {
+                log.warn("Paystack webhook {}: the provider does not know refund id {}", event.event, known.providerRefundId)
+                return
+            }
+            val settled = refundSettlement.settle(known.refundId, result)
+            log.info("Paystack webhook {} settled refund {} as {}", event.event, settled.refundId, settled.status)
+            return
+        }
+
+        // A refund whose start never heard back: found through its payment, as refresh does. Anything else is not
+        // ours (e.g. made in the Paystack dashboard); retrying would not help, so it is not an error.
+        val unconfirmed = event.transactionReference
+            ?.let(paymentRepository::findByReference)
+            ?.let { refundRepository.findUnconfirmedForPayment(it.paymentId) }
+            ?: run {
+                log.warn(
+                    "Paystack webhook {} for a refund we do not know: id {}, payment {}",
+                    event.event, event.refundId, event.transactionReference,
+                )
+                return
+            }
+        findUnconfirmed(unconfirmed)
+        log.info("Paystack webhook {} checked unconfirmed refund {}", event.event, unconfirmed.refundId)
     }
 
     // The start never heard back from the provider. A refund for this payment that none of our rows claims yet

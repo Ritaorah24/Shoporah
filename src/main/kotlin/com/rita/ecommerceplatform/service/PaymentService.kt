@@ -37,6 +37,7 @@ class PaymentService(
     private val paymentGateway: PaymentGateway,
     private val paymentSettlement: PaymentSettlement,
     private val webhookVerifier: PaystackWebhookVerifier,
+    private val refundService: RefundService,
     private val jsonMapper: JsonMapper,
     // Transactions are opened in code, not with @Transactional: the Paystack call in the middle of
     // initialize must run outside any transaction, and @Transactional on a method called from inside
@@ -101,6 +102,7 @@ class PaymentService(
      * Handles a webhook from Paystack, which reaches us even if the customer closed the browser after paying.
      * The body is only a signal: after the signature check we ask Paystack about the payment ourselves and
      * settle it exactly like verify does, so a webhook, a repeated webhook and a verify can never settle twice.
+     * Refund events go to RefundService, which follows the same rules for refunds.
      * Returning normally means 200 (Paystack stops sending it); an exception means Paystack retries later.
      */
     fun handleWebhook(body: ByteArray, signature: String?) {
@@ -111,6 +113,10 @@ class PaymentService(
         val event = PaystackWebhookEvent.parse(jsonMapper, body) ?: run {
             log.error("Paystack webhook has a valid signature but an unreadable body: {}", body.toString(Charsets.UTF_8).take(500))
             throw BadRequestException("Unreadable webhook body")
+        }
+        if (event.isRefundEvent) {
+            refundService.handleWebhook(event)
+            return
         }
         if (!event.isChargeSuccess || event.reference == null) {
             log.info("Ignored Paystack webhook {} for {}", event.event, event.reference)

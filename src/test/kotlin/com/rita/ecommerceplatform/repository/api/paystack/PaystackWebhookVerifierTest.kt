@@ -47,4 +47,25 @@ class PaystackWebhookVerifierTest {
         assertNull(PaystackWebhookEvent.parse(jsonMapper, "not json".toByteArray()))
         assertNull(PaystackWebhookEvent.parse(jsonMapper, """{"data":{"reference":"PAY-1"}}""".toByteArray()))
     }
+
+    @Test
+    fun `reads a refund event's refund id and payment reference`() {
+        val jsonMapper = JsonMapper.builder().build()
+        val processed = PaystackWebhookEvent.parse(
+            jsonMapper,
+            """{"event":"refund.processed","data":{"id":5017041,"transaction_reference":"PAY-1","status":"processed","amount":400000}}"""
+                .toByteArray(),
+        )!!
+        assertEquals(PaystackWebhookEvent("refund.processed", null, refundId = "5017041", transactionReference = "PAY-1"), processed)
+        assertTrue(processed.isRefundEvent)
+        assertTrue(processed.isRefundFinal)
+        assertFalse(processed.isChargeSuccess)
+
+        assertTrue(PaystackWebhookEvent.parse(jsonMapper, """{"event":"refund.failed","data":{"id":"7"}}""".toByteArray())!!.isRefundFinal)
+        val pending = PaystackWebhookEvent.parse(jsonMapper, """{"event":"refund.pending","data":{}}""".toByteArray())!!
+        assertEquals(PaystackWebhookEvent("refund.pending", null), pending)
+        assertTrue(pending.isRefundEvent)
+        assertFalse(pending.isRefundFinal)
+        assertFalse(PaystackWebhookEvent.parse(jsonMapper, body)!!.isRefundEvent)
+    }
 }

@@ -19,8 +19,9 @@ import org.springframework.web.bind.annotation.RestController
 class PaystackWebhookController(private val paymentService: PaymentService) {
 
     /**
+     * Payment (charge.success) and refund (refund.processed / refund.failed) events.
      * 200 when handled or ignored; 401 for a bad signature; 502 when Paystack could not be asked about the
-     * payment, so Paystack sends the webhook again later.
+     * payment or refund, so Paystack sends the webhook again later.
      */
     @PostMapping("/paystack")
     fun paystack(

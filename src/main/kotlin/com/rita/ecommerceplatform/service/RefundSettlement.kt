@@ -21,8 +21,8 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
 /**
- * Applies what the provider says about a refund, exactly once. Shared by the refund start, refresh and (5b) the
- * webhook. Its own bean so that @Transactional works (like PaymentSettlement).
+ * Applies what the provider says about a refund, exactly once. Shared by the refund start, refresh and the
+ * refund webhook. Its own bean so that @Transactional works (like PaymentSettlement).
  * Locks are taken order → refund → products (by productId), the same order as the other order changes.
  */
 @Service
