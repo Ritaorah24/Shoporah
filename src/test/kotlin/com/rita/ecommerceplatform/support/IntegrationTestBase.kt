@@ -1,6 +1,7 @@
 package com.rita.ecommerceplatform.support
 
 import com.rita.ecommerceplatform.repository.CartRepository
+import com.rita.ecommerceplatform.repository.ProductImageRepository
 import com.rita.ecommerceplatform.service.NotificationSender
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Value
@@ -29,7 +30,7 @@ import java.util.UUID
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@Import(TestDatabaseReset::class, FakePaymentGateway::class, FakeEmailChannel::class)
+@Import(TestDatabaseReset::class, FakePaymentGateway::class, FakeEmailChannel::class, FakeImageStorage::class)
 abstract class IntegrationTestBase {
 
     @Autowired
@@ -49,6 +50,10 @@ abstract class IntegrationTestBase {
     @MockitoSpyBean
     protected lateinit var cartRepositorySpy: CartRepository
 
+    // The same for product images (ProductImageTest makes saving fail after an upload). Reset after each use.
+    @MockitoSpyBean
+    protected lateinit var productImageRepositorySpy: ProductImageRepository
+
     // Paystack's stand-in (imported above, so every test shares one context and none calls Paystack).
     @Autowired
     protected lateinit var paymentGateway: FakePaymentGateway
@@ -56,6 +61,10 @@ abstract class IntegrationTestBase {
     // The email channel's stand-in (imported above, so no test sends real email).
     @Autowired
     protected lateinit var emailChannel: FakeEmailChannel
+
+    // Cloudinary's stand-in (imported above, so no test uploads anything).
+    @Autowired
+    protected lateinit var imageStorage: FakeImageStorage
 
     // The background schedule is off in tests (application-test.properties); drainOutbox runs it by hand.
     @Autowired

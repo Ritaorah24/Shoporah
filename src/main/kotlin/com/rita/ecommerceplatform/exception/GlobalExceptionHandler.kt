@@ -1,10 +1,12 @@
 package com.rita.ecommerceplatform.exception
 
+import com.rita.ecommerceplatform.service.ProductImageService
 import jakarta.servlet.http.HttpServletRequest
 import org.slf4j.LoggerFactory
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.HttpStatusCode
+import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
 import org.springframework.http.converter.HttpMessageNotReadableException
 import org.springframework.web.HttpMediaTypeNotSupportedException
@@ -14,6 +16,8 @@ import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.context.request.ServletWebRequest
 import org.springframework.web.context.request.WebRequest
+import org.springframework.web.multipart.MaxUploadSizeExceededException
+import org.springframework.web.multipart.support.MissingServletRequestPartException
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler
 import org.springframework.web.servlet.resource.NoResourceFoundException
 
@@ -73,7 +77,12 @@ class GlobalExceptionHandler : ResponseEntityExceptionHandler() {
             is HttpMessageNotReadableException -> "Malformed or unreadable JSON request body"
             is NoResourceFoundException -> "No endpoint found for this URL"
             is HttpRequestMethodNotSupportedException -> "HTTP method ${ex.method} is not supported for this URL"
-            is HttpMediaTypeNotSupportedException -> "Content-Type must be application/json"
+            // Uploads (product images) take multipart/form-data; every other endpoint takes JSON.
+            is HttpMediaTypeNotSupportedException ->
+                if (MediaType.MULTIPART_FORM_DATA in ex.supportedMediaTypes) "Content-Type must be multipart/form-data"
+                else "Content-Type must be application/json"
+            is MaxUploadSizeExceededException -> ProductImageService.TOO_LARGE
+            is MissingServletRequestPartException -> "The '${ex.requestPartName}' file is required"
             else -> status.reasonPhrase
         }
         return ResponseEntity.status(status).headers(headers).body(apiError(status, message, pathOf(request)))
