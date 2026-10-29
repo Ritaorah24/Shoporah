@@ -167,6 +167,23 @@ class OrderRepository(private val jdbcClient: JdbcClient) {
             .param("paidAt", paidAt)
             .update()
 
+    /**
+     * Marks a PAID order REFUNDED and moves it from `from` to `to` (a cancelled order stays CANCELLED).
+     * Returns rows updated: 0 means it was no longer `from` + PAID, so it is never refunded twice.
+     */
+    fun markRefunded(orderId: Long, from: OrderStatus, to: OrderStatus): Int =
+        jdbcClient.sql(
+            """
+            UPDATE public.ec_order
+            SET orderstatus = :to, orderpaymentstatus = 'REFUNDED', orderupdatedat = $SQL_NOW
+            WHERE orderid = :orderId AND orderstatus = :from AND orderpaymentstatus = 'PAID'
+            """
+        )
+            .param("orderId", orderId)
+            .param("from", from.name)
+            .param("to", to.name)
+            .update()
+
     /** The order this customer already created with this idempotency key, if any (a retried checkout). */
     fun findByIdempotencyKey(customerId: Long, idempotencyKey: UUID): Order? =
         jdbcClient.sql(

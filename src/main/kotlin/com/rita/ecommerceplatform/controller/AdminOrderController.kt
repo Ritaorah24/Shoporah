@@ -2,6 +2,7 @@ package com.rita.ecommerceplatform.controller
 
 import com.rita.ecommerceplatform.config.OpenApiConfig
 import com.rita.ecommerceplatform.dto.request.AdminCancelOrderRequest
+import com.rita.ecommerceplatform.dto.request.RefundOrderRequest
 import com.rita.ecommerceplatform.dto.request.UpdateOrderStatusRequest
 import com.rita.ecommerceplatform.dto.response.AdminOrderResponse
 import com.rita.ecommerceplatform.dto.response.AdminOrderSummaryResponse
@@ -11,9 +12,11 @@ import com.rita.ecommerceplatform.security.CurrentUser
 import com.rita.ecommerceplatform.security.UserType
 import com.rita.ecommerceplatform.service.AdminOrderService
 import com.rita.ecommerceplatform.service.Paging
+import com.rita.ecommerceplatform.service.RefundService
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
+import org.springframework.http.HttpStatus
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.web.bind.annotation.GetMapping
@@ -23,6 +26,7 @@ import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
+import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 
 /** Order fulfilment. SecurityConfig restricts every /api/admin URL to admins who have changed their password. */
@@ -30,7 +34,10 @@ import org.springframework.web.bind.annotation.RestController
 @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
 @RestController
 @RequestMapping("/api/admin/orders")
-class AdminOrderController(private val adminOrderService: AdminOrderService) {
+class AdminOrderController(
+    private val adminOrderService: AdminOrderService,
+    private val refundService: RefundService,
+) {
 
     /** Newest first. Page size is capped at 50; status filters to one status, e.g. CONFIRMED (waiting to be packed). */
     @GetMapping
@@ -64,6 +71,19 @@ class AdminOrderController(private val adminOrderService: AdminOrderService) {
         @PathVariable orderId: Long,
         @Valid @RequestBody request: AdminCancelOrderRequest,
     ): AdminOrderResponse = adminOrderService.cancel(adminId(jwt), orderId, request)
+
+    /**
+     * Refunds the whole order total to the customer through Paystack: a paid order that is CANCELLED, or DELIVERED
+     * (optionally putting the returned items back in stock). 202: the refund is started, Paystack finishes it later;
+     * see refunds[] on the order, and POST /api/admin/refunds/{refundId}/refresh to check on it.
+     */
+    @PostMapping("/{orderId}/refund")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    fun refund(
+        @AuthenticationPrincipal jwt: Jwt,
+        @PathVariable orderId: Long,
+        @Valid @RequestBody request: RefundOrderRequest,
+    ): AdminOrderResponse = refundService.start(adminId(jwt), orderId, request)
 
     // Roles already restrict this URL to admin tokens; this guards against a mis-issued token.
     private fun adminId(jwt: Jwt): Int {

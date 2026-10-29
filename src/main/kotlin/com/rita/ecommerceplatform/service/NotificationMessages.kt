@@ -93,6 +93,17 @@ object NotificationMessages {
         },
     )
 
+    // Sent when the provider says the money was sent back; banks can take a few more days to show it.
+    fun orderRefunded(firstName: String, reference: String, amount: BigDecimal) = EmailMessage(
+        subject = "Your refund for order $reference",
+        body = """
+            Hi $firstName,
+
+            Your refund of ${naira(amount)} for order $reference has been processed.
+            It can take a few working days to reach your account, depending on your bank.
+        """.trimIndent(),
+    )
+
     fun passwordChanged(firstName: String) = EmailMessage(
         subject = "Your Shoporah password was changed",
         body = """

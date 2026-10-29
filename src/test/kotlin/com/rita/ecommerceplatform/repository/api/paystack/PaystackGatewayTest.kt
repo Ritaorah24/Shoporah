@@ -4,6 +4,9 @@ import com.rita.ecommerceplatform.exception.BadGatewayException
 import com.rita.ecommerceplatform.repository.api.GatewayInitRequest
 import com.rita.ecommerceplatform.repository.api.GatewayInitResult
 import com.rita.ecommerceplatform.repository.api.GatewayPaymentStatus
+import com.rita.ecommerceplatform.repository.api.GatewayRefundRequest
+import com.rita.ecommerceplatform.repository.api.GatewayRefundStart
+import com.rita.ecommerceplatform.repository.api.GatewayRefundStatus
 import org.junit.jupiter.api.Test
 import org.springframework.http.HttpMethod
 import org.springframework.http.HttpStatus
@@ -164,5 +167,128 @@ class PaystackGatewayTest {
             .andRespond(withError(HttpStatus.BAD_REQUEST, """{"status":false,"message":"Duplicate Transaction Reference"}"""))
 
         assertFailsWith<BadGatewayException> { gateway.initialize(initRequest) }
+    }
+
+    private val refundRequest = GatewayRefundRequest(
+        transactionReference = "PAY-TEST-1",
+        amountKobo = 400_000,
+        currency = "NGN",
+        merchantNote = "Item damaged",
+    )
+
+    @Test
+    fun `refund sends the payment reference, amount in kobo, currency and note, and reads the pending refund`() {
+        server.expect(requestTo("https://api.paystack.co/refund"))
+            .andExpect(method(HttpMethod.POST))
+            .andExpect(
+                content().json("""{"transaction":"PAY-TEST-1","amount":400000,"currency":"NGN","merchant_note":"Item damaged"}""", true),
+            )
+            .andRespond(
+                json(
+                    """
+                    {"status":true,"message":"Refund has been queued for processing","data":{
+                      "transaction":{"id":3298598423,"reference":"PAY-TEST-1","amount":400000,"currency":"NGN"},
+                      "integration":412829,"deducted_amount":0,"channel":null,"merchant_note":"Item damaged","customer_note":"",
+                      "status":"pending","refunded_by":"admin@example.com","expected_at":"2026-11-05T10:00:00.000Z",
+                      "currency":"NGN","domain":"test","amount":400000,"fully_deducted":false,"id":5017041}}
+                    """.trimIndent(),
+                ),
+            )
+
+        val start = gateway.refund(refundRequest)
+
+        val refund = (start as GatewayRefundStart.Accepted).refund
+        assertEquals("5017041", refund.refundId)
+        assertEquals("PAY-TEST-1", refund.transactionReference)
+        assertEquals(GatewayRefundStatus.PENDING, refund.status)
+        assertEquals("pending", refund.providerStatus)
+        assertEquals(400_000, refund.amountKobo)
+        assertNull(refund.failureReason)
+        server.verify()
+    }
+
+    @Test
+    fun `a refund Paystack refuses is Rejected with its message, other failures are a 502`() {
+        server.expect(requestTo("https://api.paystack.co/refund"))
+            .andRespond(withError(HttpStatus.BAD_REQUEST, """{"status":false,"message":"Transaction has been fully reversed"}"""))
+        assertEquals(GatewayRefundStart.Rejected("Transaction has been fully reversed"), gateway.refund(refundRequest))
+
+        // Not about this refund (our key, rate limit, Paystack down, network): we cannot tell whether it was created.
+        listOf(
+            withError(HttpStatus.UNAUTHORIZED, """{"status":false,"message":"Invalid key"}"""),
+            withError(HttpStatus.TOO_MANY_REQUESTS, """{"status":false,"message":"Slow down"}"""),
+            withError(HttpStatus.INTERNAL_SERVER_ERROR, """{"status":false,"message":"Server error"}"""),
+            withError(HttpStatus.BAD_REQUEST, "<html>bad gateway</html>"),
+            withException(IOException("Read timed out")),
+        ).forEach { response ->
+            server.reset()
+            server.expect(requestTo("https://api.paystack.co/refund")).andRespond(response)
+            assertFailsWith<BadGatewayException> { gateway.refund(refundRequest) }
+        }
+    }
+
+    @Test
+    fun `fetchRefund reads a processed or failed refund, and an unknown id is null`() {
+        server.expect(requestTo("https://api.paystack.co/refund/5017041"))
+            .andExpect(method(HttpMethod.GET))
+            .andRespond(
+                json(
+                    """
+                    {"status":true,"message":"Refund retrieved","data":{"integration":412829,"transaction":3298598423,
+                      "id":5017041,"domain":"test","currency":"NGN","amount":400000,"status":"processed",
+                      "refunded_at":"2026-11-02T09:00:00.000Z","transaction_reference":"PAY-TEST-1","reason":""}}
+                    """.trimIndent(),
+                ),
+            )
+        val processed = gateway.fetchRefund("5017041")!!
+        assertEquals(GatewayRefundStatus.PROCESSED, processed.status)
+        assertEquals("PAY-TEST-1", processed.transactionReference)
+        assertNull(processed.failureReason)
+
+        server.reset()
+        server.expect(requestTo("https://api.paystack.co/refund/5017041"))
+            .andRespond(
+                json("""{"status":true,"data":{"id":5017041,"amount":400000,"status":"failed","reason":"Account closed"}}"""),
+            )
+        val failed = gateway.fetchRefund("5017041")!!
+        assertEquals(GatewayRefundStatus.FAILED, failed.status)
+        assertEquals("Account closed", failed.failureReason)
+
+        server.reset()
+        server.expect(requestTo("https://api.paystack.co/refund/1"))
+            .andRespond(withError(HttpStatus.NOT_FOUND, """{"status":false,"message":"Refund not found"}"""))
+        assertNull(gateway.fetchRefund("1"))
+    }
+
+    @Test
+    fun `findRefunds asks by transaction id and keeps only this payment's refunds`() {
+        server.expect(requestTo("https://api.paystack.co/refund?perPage=100&transaction=3298598423"))
+            .andExpect(method(HttpMethod.GET))
+            .andRespond(
+                json(
+                    """
+                    {"status":true,"message":"Refunds retrieved","data":[
+                      {"id":5017041,"transaction":3298598423,"amount":400000,"status":"processing","transaction_reference":"PAY-TEST-1"},
+                      {"id":5017999,"transaction":1111111111,"amount":900000,"status":"processed","transaction_reference":"PAY-OTHER"}
+                    ],"meta":{"total":2}}
+                    """.trimIndent(),
+                ),
+            )
+
+        val refunds = gateway.findRefunds("3298598423", "PAY-TEST-1")
+
+        assertEquals(listOf("5017041"), refunds.map { it.refundId })
+        assertEquals(GatewayRefundStatus.PENDING, refunds.single().status)
+        assertEquals("processing", refunds.single().providerStatus)
+        server.verify()
+    }
+
+    @Test
+    fun `Paystack refund statuses map to ours`() {
+        assertEquals(GatewayRefundStatus.PROCESSED, PaystackGateway.refundStatusOf("processed"))
+        assertEquals(GatewayRefundStatus.FAILED, PaystackGateway.refundStatusOf("failed"))
+        listOf("pending", "processing", "needs-attention", null).forEach {
+            assertEquals(GatewayRefundStatus.PENDING, PaystackGateway.refundStatusOf(it))
+        }
     }
 }

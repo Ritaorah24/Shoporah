@@ -11,6 +11,7 @@ import com.rita.ecommerceplatform.exception.NotFoundException
 import com.rita.ecommerceplatform.model.NotificationType
 import com.rita.ecommerceplatform.model.Order
 import com.rita.ecommerceplatform.model.OrderStatus
+import com.rita.ecommerceplatform.model.RefundStatus
 import com.rita.ecommerceplatform.repository.CustomerRepository
 import com.rita.ecommerceplatform.repository.DeliveryMethodRepository
 import com.rita.ecommerceplatform.repository.OrderItemRepository
@@ -18,6 +19,7 @@ import com.rita.ecommerceplatform.repository.OrderRepository
 import com.rita.ecommerceplatform.repository.OrderStatusHistoryRepository
 import com.rita.ecommerceplatform.repository.OrderWithCustomer
 import com.rita.ecommerceplatform.repository.PaymentRepository
+import com.rita.ecommerceplatform.repository.RefundRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
@@ -32,6 +34,7 @@ class AdminOrderService(
     private val notificationService: NotificationService,
     private val deliveryMethodRepository: DeliveryMethodRepository,
     private val orderCancellation: OrderCancellation,
+    private val refundRepository: RefundRepository,
 ) {
 
     /** Every customer's orders, newest first; only one status when given. Paging is capped like the other lists (D6). */
@@ -110,16 +113,20 @@ class AdminOrderService(
         }
     }
 
-    private fun toResponse(row: OrderWithCustomer): AdminOrderResponse =
-        AdminOrderResponse.from(
+    private fun toResponse(row: OrderWithCustomer): AdminOrderResponse {
+        val refunds = refundRepository.findByOrder(row.order.orderId)
+        return AdminOrderResponse.from(
             row,
             orderItemRepository.findByOrderId(row.order.orderId),
             statusHistoryRepository.findByOrderId(row.order.orderId),
             paymentRepository.findByOrder(row.order.orderId),
+            refunds,
             OrderStatusRules.nextStatuses(row.order.status, OrderStatusActor.ADMIN).filter { it in FULFILMENT_STATUSES },
             deliveryMethodRepository.findById(row.order.deliveryMethodId)!!,
             canCancel = OrderStatus.CANCELLED in OrderStatusRules.nextStatuses(row.order.status, OrderStatusActor.ADMIN),
+            canRefund = RefundService.isRefundable(row.order) && refunds.all { it.status == RefundStatus.FAILED },
         )
+    }
 
     private fun parseStatus(status: String?): OrderStatus? {
         val value = status?.trim()?.uppercase()?.ifEmpty { null } ?: return null

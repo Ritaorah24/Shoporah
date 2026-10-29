@@ -4,6 +4,10 @@ import com.rita.ecommerceplatform.exception.BadGatewayException
 import com.rita.ecommerceplatform.repository.api.GatewayInitRequest
 import com.rita.ecommerceplatform.repository.api.GatewayInitResult
 import com.rita.ecommerceplatform.repository.api.GatewayPaymentStatus
+import com.rita.ecommerceplatform.repository.api.GatewayRefund
+import com.rita.ecommerceplatform.repository.api.GatewayRefundRequest
+import com.rita.ecommerceplatform.repository.api.GatewayRefundStart
+import com.rita.ecommerceplatform.repository.api.GatewayRefundStatus
 import com.rita.ecommerceplatform.repository.api.GatewayVerifyResult
 import com.rita.ecommerceplatform.repository.api.PaymentGateway
 import org.slf4j.LoggerFactory
@@ -76,6 +80,78 @@ class PaystackGateway(
         }
     }
 
+    // https://paystack.com/docs/api/refund/ : `transaction` takes the payment's reference.
+    override fun refund(request: GatewayRefundRequest): GatewayRefundStart {
+        val what = "refund ${request.transactionReference}"
+        val body = buildMap {
+            put("transaction", request.transactionReference)
+            put("amount", request.amountKobo)
+            put("currency", request.currency)
+            request.merchantNote?.takeIf { it.isNotBlank() }?.let { put("merchant_note", it) }
+        }
+        val (status, responseBody) = send(what) {
+            restClient.post().uri("/refund")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(jsonMapper.writeValueAsString(body))
+        }
+        rejectionOf(status, responseBody)?.let { message ->
+            log.warn("Paystack {} was refused: HTTP {} {}", what, status.value(), message)
+            return GatewayRefundStart.Rejected(message)
+        }
+        return GatewayRefundStart.Accepted(refundOf(dataOf(status, responseBody, what), responseBody, what))
+    }
+
+    override fun fetchRefund(providerRefundId: String): GatewayRefund? {
+        val what = "fetch refund $providerRefundId"
+        val (status, responseBody) = send(what) { restClient.get().uri("/refund/{id}", providerRefundId) }
+        if (isUnknownReference(status, responseBody)) return null
+        return refundOf(dataOf(status, responseBody, what), responseBody, what)
+    }
+
+    // Paystack filters the list by transaction id; the reference check below keeps only this payment's
+    // refunds even if it did not (e.g. no id known), so another payment's refund is never taken for ours.
+    override fun findRefunds(transactionId: String?, transactionReference: String): List<GatewayRefund> {
+        val what = "list refunds of $transactionReference"
+        val (status, responseBody) = send(what) {
+            restClient.get().uri { uri ->
+                uri.path("/refund").queryParam("perPage", LIST_PAGE_SIZE)
+                transactionId?.let { uri.queryParam("transaction", it) }
+                uri.build()
+            }
+        }
+        val data = dataOf(status, responseBody, what, expectArray = true)
+        return (0 until data.size())
+            .map { refundOf(data.get(it), data.get(it).toString(), what) }
+            .filter { it.transactionReference.equals(transactionReference, ignoreCase = true) }
+    }
+
+    // A refund as Paystack describes it. On create, `transaction` is an object; on fetch and list it is the
+    // transaction id, with the reference in `transaction_reference`.
+    private fun refundOf(data: JsonNode, raw: String, what: String): GatewayRefund {
+        val providerStatus = data.text("status")
+        val status = refundStatusOf(providerStatus)
+        return GatewayRefund(
+            refundId = data.text("id") ?: throw unreadable(what),
+            transactionReference = data.text("transaction_reference")
+                ?: data.get("transaction")?.takeIf { it.isObject }?.text("reference"),
+            status = status,
+            providerStatus = providerStatus,
+            amountKobo = data.get("amount")?.takeUnless { it.isNull }?.asLong() ?: throw unreadable(what),
+            currency = data.text("currency"),
+            failureReason = if (status == GatewayRefundStatus.FAILED) data.text("reason")?.ifBlank { null } else null,
+            rawResponse = raw,
+        )
+    }
+
+    // A clear refusal: Paystack answered 4xx with its own message, so no refund was created. 401/403 (our key)
+    // and 408/429 (try later) are not about this refund, so they stay 502s.
+    private fun rejectionOf(status: HttpStatusCode, body: String): String? {
+        if (!status.is4xxClientError || status.value() in setOf(401, 403, 408, 429)) return null
+        val json = runCatching { jsonMapper.readTree(body) }.getOrNull() ?: return null
+        if (json.get("status")?.asBoolean() != false) return null
+        return json.text("message")?.ifBlank { null }
+    }
+
     /** Sends the request and returns the status and body, whatever the status. Network problems become a 502. */
     private fun send(what: String, request: () -> RestClient.RequestHeadersSpec<*>): Pair<HttpStatusCode, String> =
         try {
@@ -87,18 +163,19 @@ class PaystackGateway(
             throw BadGatewayException(PROVIDER_ERROR)
         }
 
-    /** The "data" object of a successful answer. Anything else is logged and becomes a 502. */
-    private fun dataOf(status: HttpStatusCode, body: String, what: String): JsonNode {
+    /** The "data" object (or array, for lists) of a successful answer. Anything else is logged and becomes a 502. */
+    private fun dataOf(status: HttpStatusCode, body: String, what: String, expectArray: Boolean = false): JsonNode {
         val json = parse(body, what)
         val data = json?.get("data")
-        if (!status.is2xxSuccessful || json?.get("status")?.asBoolean() != true || data == null || !data.isObject) {
+        val shapeOk = data != null && if (expectArray) data.isArray else data.isObject
+        if (!status.is2xxSuccessful || json?.get("status")?.asBoolean() != true || !shapeOk) {
             log.error("Paystack {} failed: HTTP {} {}", what, status.value(), body)
             throw BadGatewayException(PROVIDER_ERROR)
         }
-        return data
+        return data!!
     }
 
-    // Paystack answers an unknown reference with 400 (or 404) and code "transaction_not_found".
+    // Paystack answers an unknown reference (or refund id) with 400 (or 404) and a "not found" code or message.
     private fun isUnknownReference(status: HttpStatusCode, body: String): Boolean {
         if (status.value() != 400 && status.value() != 404) return false
         val json = runCatching { jsonMapper.readTree(body) }.getOrNull() ?: return status.value() == 404
@@ -123,6 +200,17 @@ class PaystackGateway(
 
     companion object {
         const val PROVIDER_ERROR = "The payment provider could not be reached, please try again later"
+
+        // Enough for every refund of one transaction (a full refund is made at most once, failures aside).
+        const val LIST_PAGE_SIZE = 100
+
+        // Refund statuses: processed and failed are final; pending, processing and needs-attention
+        // (Paystack needs the customer's account details) mean it is still in progress.
+        fun refundStatusOf(paystackStatus: String?): GatewayRefundStatus = when (paystackStatus?.lowercase()) {
+            "processed" -> GatewayRefundStatus.PROCESSED
+            "failed" -> GatewayRefundStatus.FAILED
+            else -> GatewayRefundStatus.PENDING
+        }
 
         // Paystack statuses: success, failed, reversed and abandoned are final; ongoing, pending,
         // processing and queued mean the customer has not finished yet.

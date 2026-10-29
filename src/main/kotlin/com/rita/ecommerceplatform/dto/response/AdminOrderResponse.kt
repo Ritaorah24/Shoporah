@@ -5,6 +5,7 @@ import com.rita.ecommerceplatform.model.OrderItem
 import com.rita.ecommerceplatform.model.OrderStatus
 import com.rita.ecommerceplatform.model.OrderStatusChange
 import com.rita.ecommerceplatform.model.Payment
+import com.rita.ecommerceplatform.model.Refund
 import com.rita.ecommerceplatform.repository.OrderWithCustomer
 import java.math.BigDecimal
 import java.time.LocalDateTime
@@ -26,6 +27,8 @@ data class AdminOrderResponse(
     val nextStatuses: List<String>,
     // Whether POST .../cancel is allowed now: before shipping (PENDING, CONFIRMED, PROCESSING).
     val canCancel: Boolean,
+    // Whether POST .../refund is allowed now: a paid order that is CANCELLED or DELIVERED, with no refund in progress.
+    val canRefund: Boolean,
     val items: List<OrderItemResponse>,
     val subtotal: BigDecimal,
     val deliveryMethod: OrderDeliveryMethodResponse,
@@ -36,6 +39,7 @@ data class AdminOrderResponse(
     val deliveryAddress: DeliveryAddressResponse,
     val statusHistory: List<AdminStatusChangeResponse>,
     val payments: List<AdminPaymentResponse>,
+    val refunds: List<AdminRefundResponse>,
     val createdAt: LocalDateTime,
     val updatedAt: LocalDateTime,
 ) {
@@ -45,9 +49,11 @@ data class AdminOrderResponse(
             items: List<OrderItem>,
             history: List<OrderStatusChange>,
             payments: List<Payment>,
+            refunds: List<Refund>,
             nextStatuses: List<OrderStatus>,
             deliveryMethod: DeliveryMethod,
             canCancel: Boolean,
+            canRefund: Boolean,
         ) = AdminOrderResponse(
             orderId = row.order.orderId,
             reference = row.order.reference,
@@ -59,6 +65,7 @@ data class AdminOrderResponse(
             paidAt = row.order.paidAt,
             nextStatuses = nextStatuses.map { it.name },
             canCancel = canCancel,
+            canRefund = canRefund,
             items = items.map(OrderItemResponse::from),
             subtotal = row.order.subtotal,
             deliveryMethod = OrderDeliveryMethodResponse.from(deliveryMethod),
@@ -68,6 +75,7 @@ data class AdminOrderResponse(
             deliveryAddress = DeliveryAddressResponse.from(row.order.deliveryAddress),
             statusHistory = history.map(AdminStatusChangeResponse::from),
             payments = payments.map(AdminPaymentResponse::from),
+            refunds = refunds.map(AdminRefundResponse::from),
             createdAt = row.order.createdAt,
             updatedAt = row.order.updatedAt,
         )
