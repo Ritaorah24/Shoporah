@@ -21,8 +21,22 @@ data class ProductSearchCriteria(
     val minPrice: BigDecimal? = null,
     val maxPrice: BigDecimal? = null,
     val inStockOnly: Boolean = false,
+    // Admin list only: products that need restocking.
+    val stockLevel: StockLevel? = null,
     val sort: ProductSort = ProductSort.NEWEST,
 )
+
+/**
+ * The admin list's stock filter (?stock=LOW|OUT), with the same rule as Product.availability(), so "low" means the
+ * same to admins and the public: LOW only for products that have a threshold.
+ */
+enum class StockLevel(val condition: String) {
+    LOW(
+        "p.productstockquantity > 0 AND p.productlowstockthreshold IS NOT NULL " +
+            "AND p.productstockquantity <= p.productlowstockthreshold",
+    ),
+    OUT("p.productstockquantity <= 0"),
+}
 
 /**
  * How a product listing is ordered. Each value maps to fixed SQL, so the client's sort text never reaches the query.
@@ -181,6 +195,26 @@ class ProductRepository(private val jdbcClient: JdbcClient) {
             .orElse(null)
 
     /**
+     * Adds `change` (negative to remove) to the stock of a product that is not deleted, only if the stock stays 0 or
+     * more, and returns the stock after. Null if it would go below 0 or the product is missing or deleted.
+     * Relative, so a sale between the admin loading the page and saving is never overwritten.
+     */
+    fun adjustStock(productId: Long, change: Int): Int? =
+        jdbcClient.sql(
+            """
+            UPDATE public.ec_product
+            SET productstockquantity = productstockquantity + :change, productupdatedat = $SQL_NOW
+            WHERE productid = :productId AND productstatus <> 'DELETED' AND productstockquantity + :change >= 0
+            RETURNING productstockquantity
+            """
+        )
+            .param("productId", productId)
+            .param("change", change)
+            .query(Int::class.javaObjectType)
+            .optional()
+            .orElse(null)
+
+    /**
      * Updates the editable fields of a product that is not deleted. The service merges a partial
      * PATCH with the current row first, so every field is passed. Returns rows updated (0 or 1).
      */
@@ -293,6 +327,7 @@ class ProductRepository(private val jdbcClient: JdbcClient) {
         if (criteria.inStockOnly) {
             conditions += "p.productstockquantity > 0"
         }
+        criteria.stockLevel?.let { conditions += "(${it.condition})" }
         return "WHERE " + conditions.joinToString(" AND ") to params
     }
 

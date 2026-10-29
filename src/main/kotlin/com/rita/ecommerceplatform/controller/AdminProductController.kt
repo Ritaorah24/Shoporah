@@ -2,10 +2,12 @@ package com.rita.ecommerceplatform.controller
 
 import com.rita.ecommerceplatform.config.OpenApiConfig
 import com.rita.ecommerceplatform.dto.request.CreateProductRequest
+import com.rita.ecommerceplatform.dto.request.StockAdjustmentRequest
 import com.rita.ecommerceplatform.dto.request.UpdateProductRequest
 import com.rita.ecommerceplatform.dto.request.UpdateStatusRequest
 import com.rita.ecommerceplatform.dto.response.AdminProductResponse
 import com.rita.ecommerceplatform.dto.response.PageResponse
+import com.rita.ecommerceplatform.dto.response.StockMovementResponse
 import com.rita.ecommerceplatform.exception.AccountNotActiveException
 import com.rita.ecommerceplatform.security.CurrentUser
 import com.rita.ecommerceplatform.security.UserType
@@ -39,7 +41,8 @@ class AdminProductController(private val productService: ProductService) {
 
     /**
      * Page size is capped at 50; status filters to ACTIVE or INACTIVE (default: both).
-     * minPrice, maxPrice, inStock and sort work as on the public list.
+     * minPrice, maxPrice, inStock and sort work as on the public list. stock=OUT lists products with no stock;
+     * stock=LOW those at or below their lowStockThreshold (products without a threshold are never low).
      */
     @GetMapping
     fun list(
@@ -52,8 +55,9 @@ class AdminProductController(private val productService: ProductService) {
         @RequestParam(required = false) maxPrice: BigDecimal?,
         @RequestParam(required = false) inStock: Boolean?,
         @RequestParam(required = false) sort: String?,
+        @RequestParam(required = false) stock: String?,
     ): PageResponse<AdminProductResponse> =
-        productService.listForAdmin(page, size, search, categoryId, status, ProductFilters(minPrice, maxPrice, inStock, sort))
+        productService.listForAdmin(page, size, search, categoryId, status, ProductFilters(minPrice, maxPrice, inStock, sort), stock)
 
     @GetMapping("/{productId}")
     fun get(@PathVariable productId: Long): AdminProductResponse = productService.getForAdmin(productId)
@@ -79,6 +83,25 @@ class AdminProductController(private val productService: ProductService) {
         @PathVariable productId: Long,
         @Valid @RequestBody request: UpdateStatusRequest,
     ): AdminProductResponse = productService.updateStatus(productId, request)
+
+    /**
+     * Adds or removes stock with a reason: change is +N (delivery, found) or -N (damaged, lost), never the new total,
+     * so a sale made meanwhile is kept. Stock never goes below 0 (409). Preferred over editing stockQuantity.
+     */
+    @PostMapping("/{productId}/stock-adjustments")
+    fun adjustStock(
+        @AuthenticationPrincipal jwt: Jwt,
+        @PathVariable productId: Long,
+        @Valid @RequestBody request: StockAdjustmentRequest,
+    ): AdminProductResponse = productService.adjustStock(adminId(jwt), productId, request)
+
+    /** Every stock change of the product, newest first: who, why, which order and the stock after. */
+    @GetMapping("/{productId}/stock-movements")
+    fun stockMovements(
+        @PathVariable productId: Long,
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "${Paging.DEFAULT_SIZE}") size: Int,
+    ): PageResponse<StockMovementResponse> = productService.stockMovements(productId, page, size)
 
     @DeleteMapping("/{productId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)

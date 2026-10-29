@@ -17,6 +17,8 @@ data class AdminProductResponse(
     val sellingPrice: BigDecimal,
     val stockQuantity: Int,
     val lowStockThreshold: Int?,
+    // IN_STOCK, LOW_STOCK or OUT_OF_STOCK: what the public sees, and what ?stock=LOW|OUT filters on.
+    val availability: String,
     val status: String,
     val createdByAdminId: Int,
     val createdAt: LocalDateTime,
@@ -35,6 +37,7 @@ data class AdminProductResponse(
             sellingPrice = product.sellingPrice,
             stockQuantity = product.stockQuantity,
             lowStockThreshold = product.lowStockThreshold,
+            availability = product.availability().name,
             status = product.status.name,
             createdByAdminId = product.createdByAdminId,
             createdAt = product.createdAt,

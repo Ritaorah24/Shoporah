@@ -1,11 +1,13 @@
 package com.rita.ecommerceplatform.service
 
 import com.rita.ecommerceplatform.dto.request.CreateProductRequest
+import com.rita.ecommerceplatform.dto.request.StockAdjustmentRequest
 import com.rita.ecommerceplatform.dto.request.UpdateProductRequest
 import com.rita.ecommerceplatform.dto.request.UpdateStatusRequest
 import com.rita.ecommerceplatform.dto.response.AdminProductResponse
 import com.rita.ecommerceplatform.dto.response.PageResponse
 import com.rita.ecommerceplatform.dto.response.ProductResponse
+import com.rita.ecommerceplatform.dto.response.StockMovementResponse
 import com.rita.ecommerceplatform.exception.BadRequestException
 import com.rita.ecommerceplatform.exception.ConflictException
 import com.rita.ecommerceplatform.exception.NotFoundException
@@ -21,6 +23,7 @@ import org.springframework.dao.DuplicateKeyException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import com.rita.ecommerceplatform.repository.ProductSort
+import com.rita.ecommerceplatform.repository.StockLevel
 import java.math.BigDecimal
 
 /** The price, stock and sort query parameters shared by the public and admin product lists, as sent. */
@@ -63,7 +66,10 @@ class ProductService(
         return ProductResponse.from(product)
     }
 
-    /** Admin list: ACTIVE and INACTIVE (or just one, via status), in any category status. Never DELETED. */
+    /**
+     * Admin list: ACTIVE and INACTIVE (or just one, via status), in any category status. Never DELETED.
+     * stock=LOW or OUT lists the products that need restocking.
+     */
     fun listForAdmin(
         page: Int,
         size: Int,
@@ -71,6 +77,7 @@ class ProductService(
         categoryId: Int?,
         status: String?,
         filters: ProductFilters = ProductFilters(),
+        stock: String? = null,
     ): PageResponse<AdminProductResponse> {
         val statuses = when (status?.trim()?.uppercase()) {
             null, "" -> listOf(ProductStatus.ACTIVE, ProductStatus.INACTIVE)
@@ -79,6 +86,7 @@ class ProductService(
             else -> throw BadRequestException("status must be ACTIVE or INACTIVE")
         }
         val criteria = searchCriteria(statuses, activeCategoryOnly = false, search, categoryId, filters)
+            .copy(stockLevel = parseStockLevel(stock))
         val safePage = Paging.page(page)
         val safeSize = Paging.size(size)
         val products = productRepository.search(criteria, safeSize, Paging.offset(safePage, safeSize))
@@ -86,6 +94,37 @@ class ProductService(
     }
 
     fun getForAdmin(productId: Long): AdminProductResponse = AdminProductResponse.from(findNotDeleted(productId))
+
+    /**
+     * Adds or removes stock with a reason (checkpoint 2.2, Step 7), logged as RESTOCK (up) or ADJUSTMENT (down)
+     * with the reason as the note. One conditional update, so it is correct even while orders are being paid.
+     */
+    @Transactional
+    fun adjustStock(adminId: Int, productId: Long, request: StockAdjustmentRequest): AdminProductResponse {
+        val change = request.change!!
+        if (change == 0) throw BadRequestException("change must not be 0")
+        findNotDeleted(productId)
+        // Null here means removing more than there is; the stock is read again, as an order may have just taken some.
+        val stockAfter = productRepository.adjustStock(productId, change)
+            ?: throw ConflictException("Only ${productRepository.findById(productId)!!.stockQuantity} in stock")
+        val type = if (change > 0) InventoryMovementType.RESTOCK else InventoryMovementType.ADJUSTMENT
+        inventoryMovementRepository.insert(productId, type, change, stockAfter, adminId, request.reason!!.trim())
+        return getForAdmin(productId)
+    }
+
+    /** The product's stock history, newest first. Deleted products are 404, like their details. */
+    fun stockMovements(productId: Long, page: Int, size: Int): PageResponse<StockMovementResponse> {
+        findNotDeleted(productId)
+        val safePage = Paging.page(page)
+        val safeSize = Paging.size(size)
+        val movements = inventoryMovementRepository.findByProduct(productId, safeSize, Paging.offset(safePage, safeSize))
+        return PageResponse.of(
+            movements.map(StockMovementResponse::from),
+            safePage,
+            safeSize,
+            inventoryMovementRepository.countByProduct(productId),
+        )
+    }
 
     @Transactional
     fun create(adminId: Int, request: CreateProductRequest): AdminProductResponse {
@@ -216,6 +255,12 @@ class ProductService(
         val value = sort?.trim()?.lowercase()?.ifEmpty { null } ?: return ProductSort.NEWEST
         return ProductSort.entries.firstOrNull { it.param == value }
             ?: throw BadRequestException("sort must be one of ${ProductSort.entries.joinToString { it.param }}")
+    }
+
+    private fun parseStockLevel(stock: String?): StockLevel? {
+        val value = stock?.trim()?.uppercase()?.ifEmpty { null } ?: return null
+        return StockLevel.entries.firstOrNull { it.name == value }
+            ?: throw BadRequestException("stock must be one of ${StockLevel.entries.joinToString()}")
     }
 
     /** Deleted products behave as if they do not exist (D3). */
