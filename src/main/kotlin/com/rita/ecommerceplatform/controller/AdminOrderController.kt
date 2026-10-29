@@ -10,12 +10,14 @@ import com.rita.ecommerceplatform.dto.response.PageResponse
 import com.rita.ecommerceplatform.exception.AccountNotActiveException
 import com.rita.ecommerceplatform.security.CurrentUser
 import com.rita.ecommerceplatform.security.UserType
+import com.rita.ecommerceplatform.service.AdminOrderFilters
 import com.rita.ecommerceplatform.service.AdminOrderService
 import com.rita.ecommerceplatform.service.Paging
 import com.rita.ecommerceplatform.service.RefundService
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
+import org.springframework.format.annotation.DateTimeFormat
 import org.springframework.http.HttpStatus
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.security.oauth2.jwt.Jwt
@@ -28,6 +30,7 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
+import java.time.LocalDate
 
 /** Order fulfilment. SecurityConfig restricts every /api/admin URL to admins who have changed their password. */
 @Tag(name = "Admin orders", description = "List every customer's orders and move paid orders through fulfilment")
@@ -39,13 +42,25 @@ class AdminOrderController(
     private val refundService: RefundService,
 ) {
 
-    /** Newest first. Page size is capped at 50; status filters to one status, e.g. CONFIRMED (waiting to be packed). */
+    /**
+     * Newest first; page size is capped at 50. Every filter is optional and they combine (all must match):
+     * status (e.g. CONFIRMED: waiting to be packed), paymentStatus (UNPAID, PAID, REFUNDED; CANCELLED + PAID = refund
+     * needed), reference (starts with, any case: a full reference or ORD-20261029 for a day), customerId, customer
+     * (part of the email or name), from / to (days placed, inclusive, yyyy-MM-dd).
+     */
     @GetMapping
     fun list(
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "${Paging.DEFAULT_SIZE}") size: Int,
         @RequestParam(required = false) status: String?,
-    ): PageResponse<AdminOrderSummaryResponse> = adminOrderService.list(page, size, status)
+        @RequestParam(required = false) paymentStatus: String?,
+        @RequestParam(required = false) reference: String?,
+        @RequestParam(required = false) customerId: Long?,
+        @RequestParam(required = false) customer: String?,
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) from: LocalDate?,
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) to: LocalDate?,
+    ): PageResponse<AdminOrderSummaryResponse> =
+        adminOrderService.list(page, size, AdminOrderFilters(status, paymentStatus, reference, customerId, customer, from, to))
 
     @GetMapping("/{orderId}")
     fun get(@PathVariable orderId: Long): AdminOrderResponse = adminOrderService.get(orderId)

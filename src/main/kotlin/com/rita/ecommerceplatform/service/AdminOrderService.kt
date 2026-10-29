@@ -10,8 +10,10 @@ import com.rita.ecommerceplatform.exception.ConflictException
 import com.rita.ecommerceplatform.exception.NotFoundException
 import com.rita.ecommerceplatform.model.NotificationType
 import com.rita.ecommerceplatform.model.Order
+import com.rita.ecommerceplatform.model.OrderPaymentStatus
 import com.rita.ecommerceplatform.model.OrderStatus
 import com.rita.ecommerceplatform.model.RefundStatus
+import com.rita.ecommerceplatform.repository.AdminOrderSearch
 import com.rita.ecommerceplatform.repository.CustomerRepository
 import com.rita.ecommerceplatform.repository.DeliveryMethodRepository
 import com.rita.ecommerceplatform.repository.OrderItemRepository
@@ -22,6 +24,20 @@ import com.rita.ecommerceplatform.repository.PaymentRepository
 import com.rita.ecommerceplatform.repository.RefundRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.time.LocalDate
+
+/** The admin order list's query parameters, as sent (checked in AdminOrderService). from / to are days, both inclusive. */
+data class AdminOrderFilters(
+    val status: String? = null,
+    val paymentStatus: String? = null,
+    // The start of a reference, e.g. ORD-20261029 for that day's orders, or the whole reference.
+    val reference: String? = null,
+    val customerId: Long? = null,
+    // Part of the customer's email or name.
+    val customer: String? = null,
+    val from: LocalDate? = null,
+    val to: LocalDate? = null,
+)
 
 /** Orders as admins see and fulfil them: every customer's orders, unlike OrderService, which is customer-scoped. */
 @Service
@@ -37,19 +53,22 @@ class AdminOrderService(
     private val refundRepository: RefundRepository,
 ) {
 
-    /** Every customer's orders, newest first; only one status when given. Paging is capped like the other lists (D6). */
-    fun list(page: Int, size: Int, status: String?): PageResponse<AdminOrderSummaryResponse> {
-        val statusFilter = parseStatus(status)
+    /**
+     * Every customer's orders, newest first, narrowed by any of the filters (all must match).
+     * Paging is capped like the other lists (D6).
+     */
+    fun list(page: Int, size: Int, filters: AdminOrderFilters = AdminOrderFilters()): PageResponse<AdminOrderSummaryResponse> {
+        val search = toSearch(filters)
         val safePage = Paging.page(page)
         val safeSize = Paging.size(size)
-        val rows = orderRepository.findAllWithCustomer(statusFilter, safeSize, Paging.offset(safePage, safeSize))
+        val rows = orderRepository.findAllWithCustomer(search, safeSize, Paging.offset(safePage, safeSize))
         // One grouped query for the whole page, not one per order.
         val quantities = orderItemRepository.quantitiesByOrderIds(rows.map { it.order.orderId })
         return PageResponse.of(
             rows.map { AdminOrderSummaryResponse.from(it, quantities[it.order.orderId] ?: 0) },
             safePage,
             safeSize,
-            orderRepository.countAll(statusFilter),
+            orderRepository.countAll(search),
         )
     }
 
@@ -128,10 +147,27 @@ class AdminOrderService(
         )
     }
 
-    private fun parseStatus(status: String?): OrderStatus? {
-        val value = status?.trim()?.uppercase()?.ifEmpty { null } ?: return null
-        return OrderStatus.entries.firstOrNull { it.name == value }
-            ?: throw BadRequestException("status must be one of ${OrderStatus.entries.joinToString()}")
+    // Blank text filters are ignored; a bad status or an inverted date range is 400.
+    private fun toSearch(filters: AdminOrderFilters): AdminOrderSearch {
+        if (filters.from != null && filters.to != null && filters.from > filters.to) {
+            throw BadRequestException("from must not be after to")
+        }
+        return AdminOrderSearch(
+            status = parseEnum(filters.status, "status", OrderStatus.entries),
+            paymentStatus = parseEnum(filters.paymentStatus, "paymentStatus", OrderPaymentStatus.entries),
+            referenceStartsWith = filters.reference?.trim()?.ifEmpty { null },
+            customerId = filters.customerId,
+            customerContains = filters.customer?.trim()?.ifEmpty { null },
+            placedFrom = filters.from?.atStartOfDay(),
+            // `to` is a whole day: everything before the next midnight.
+            placedBefore = filters.to?.plusDays(1)?.atStartOfDay(),
+        )
+    }
+
+    private fun <E : Enum<E>> parseEnum(value: String?, name: String, entries: List<E>): E? {
+        val wanted = value?.trim()?.uppercase()?.ifEmpty { null } ?: return null
+        return entries.firstOrNull { it.name == wanted }
+            ?: throw BadRequestException("$name must be one of ${entries.joinToString()}")
     }
 
     private fun orderNotFound() = NotFoundException("Order not found")

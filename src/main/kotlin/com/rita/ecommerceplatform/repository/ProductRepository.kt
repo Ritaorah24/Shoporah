@@ -314,7 +314,7 @@ class ProductRepository(private val jdbcClient: JdbcClient) {
         criteria.nameContains?.let {
             // Partial, case-insensitive name match (D5); uses the ix__ec_product__name_trgm index.
             conditions += "(p.productname::TEXT) ILIKE :namePattern ESCAPE '\\'"
-            params["namePattern"] = "%${escapeLike(it)}%"
+            params["namePattern"] = containsPattern(it)
         }
         criteria.minPrice?.let {
             conditions += "p.productsellingprice >= :minPrice"
@@ -330,8 +330,4 @@ class ProductRepository(private val jdbcClient: JdbcClient) {
         criteria.stockLevel?.let { conditions += "(${it.condition})" }
         return "WHERE " + conditions.joinToString(" AND ") to params
     }
-
-    // So a search for "50%" or "a_b" matches those characters literally instead of as wildcards.
-    private fun escapeLike(term: String): String =
-        term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 }

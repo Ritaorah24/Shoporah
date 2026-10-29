@@ -33,6 +33,23 @@ data class OrderWithCustomer(
 )
 
 /**
+ * Filters for the admin order list; null means "any". The dates are in the platform's time (UTC+1):
+ * placedFrom inclusive, placedBefore exclusive.
+ */
+data class AdminOrderSearch(
+    val status: OrderStatus? = null,
+    val paymentStatus: OrderPaymentStatus? = null,
+    val referenceStartsWith: String? = null,
+    val customerId: Long? = null,
+    val customerContains: String? = null,
+    val placedFrom: LocalDateTime? = null,
+    val placedBefore: LocalDateTime? = null,
+)
+
+/** A customer's orders, as counted for the admin customer view. */
+data class CustomerOrderTotals(val orderCount: Long, val paidOrderCount: Long, val totalSpent: BigDecimal)
+
+/**
  * Customer queries are scoped by customerId, so a customer only ever sees their own orders.
  * Admin queries (findAllWithCustomer, findByIdWithCustomer, countAll, updateStatus) are not scoped.
  */
@@ -225,29 +242,116 @@ class OrderRepository(private val jdbcClient: JdbcClient) {
         )
     }
 
-    /** One page of every customer's orders, newest first; only those with `status` when it is given. */
-    fun findAllWithCustomer(status: OrderStatus?, limit: Int, offset: Long): List<OrderWithCustomer> =
-        jdbcClient.sql(
+    /** One page of every customer's orders matching the search, newest first. */
+    fun findAllWithCustomer(search: AdminOrderSearch, limit: Int, offset: Long): List<OrderWithCustomer> {
+        val (where, params) = whereClause(search)
+        return jdbcClient.sql(
             """
             SELECT o.*, c.customerfirstname, c.customerlastname, c.customeremail
             FROM public.ec_order o
             JOIN public.ec_customer c ON c.customerid = o.ordercustomerid
-            WHERE (CAST(:status AS text) IS NULL OR o.orderstatus = :status)
+            $where
             ORDER BY o.ordercreatedat DESC, o.orderid DESC
             LIMIT :limit OFFSET :offset
             """
         )
-            .param("status", status?.name)
-            .param("limit", limit)
-            .param("offset", offset)
+            .params(params + mapOf("limit" to limit, "offset" to offset))
             .query(withCustomerMapper)
             .list()
+    }
 
-    fun countAll(status: OrderStatus?): Long =
-        jdbcClient.sql("SELECT COUNT(*) FROM public.ec_order WHERE (CAST(:status AS text) IS NULL OR orderstatus = :status)")
-            .param("status", status?.name)
+    fun countAll(search: AdminOrderSearch): Long {
+        val (where, params) = whereClause(search)
+        return jdbcClient.sql(
+            """
+            SELECT COUNT(*)
+            FROM public.ec_order o
+            JOIN public.ec_customer c ON c.customerid = o.ordercustomerid
+            $where
+            """
+        )
+            .params(params)
             .query(Long::class.javaObjectType)
             .single()
+    }
+
+    /** How many orders each of these customers has placed (one grouped query for a whole page of customers). */
+    fun countByCustomerIds(customerIds: Collection<Long>): Map<Long, Long> {
+        if (customerIds.isEmpty()) return emptyMap()
+        return jdbcClient.sql(
+            """
+            SELECT ordercustomerid, COUNT(*) AS ordercount
+            FROM public.ec_order
+            WHERE ordercustomerid IN (:customerIds)
+            GROUP BY ordercustomerid
+            """
+        )
+            .param("customerIds", customerIds)
+            .query { rs, _ -> rs.getLong("ordercustomerid") to rs.getLong("ordercount") }
+            .list()
+            .toMap()
+    }
+
+    /**
+     * One customer's order totals for the admin view. Spent counts orders whose payment status is PAID: a refunded
+     * order is REFUNDED, so it no longer counts; a cancelled order still waiting for its refund still does.
+     */
+    fun customerTotals(customerId: Long): CustomerOrderTotals =
+        jdbcClient.sql(
+            """
+            SELECT COUNT(*) AS ordercount,
+                   COUNT(*) FILTER (WHERE orderpaymentstatus = 'PAID') AS paidcount,
+                   COALESCE(SUM(ordertotal) FILTER (WHERE orderpaymentstatus = 'PAID'), 0) AS spent
+            FROM public.ec_order
+            WHERE ordercustomerid = :customerId
+            """
+        )
+            .param("customerId", customerId)
+            .query { rs, _ -> CustomerOrderTotals(rs.getLong("ordercount"), rs.getLong("paidcount"), rs.getBigDecimal("spent")) }
+            .single()
+
+    /**
+     * Builds the WHERE clause from fixed SQL fragments only; every user value is a named parameter,
+     * so search text can never change the SQL (like ProductRepository).
+     */
+    private fun whereClause(search: AdminOrderSearch): Pair<String, Map<String, Any>> {
+        val conditions = mutableListOf<String>()
+        val params = mutableMapOf<String, Any>()
+
+        search.status?.let {
+            conditions += "o.orderstatus = :status"
+            params["status"] = it.name
+        }
+        search.paymentStatus?.let {
+            conditions += "o.orderpaymentstatus = :paymentStatus"
+            params["paymentStatus"] = it.name
+        }
+        search.referenceStartsWith?.let {
+            conditions += "(o.orderreference::TEXT) ILIKE :referencePattern ESCAPE '\\'"
+            params["referencePattern"] = startsWithPattern(it)
+        }
+        search.customerId?.let {
+            conditions += "o.ordercustomerid = :customerId"
+            params["customerId"] = it
+        }
+        search.customerContains?.let {
+            // Email, first name, last name or the full name ("Ada Obi").
+            conditions += """
+                ((c.customeremail::TEXT) ILIKE :customerPattern ESCAPE '\'
+                 OR (c.customerfirstname::TEXT || ' ' || c.customerlastname::TEXT) ILIKE :customerPattern ESCAPE '\')
+            """.trimIndent()
+            params["customerPattern"] = containsPattern(it)
+        }
+        search.placedFrom?.let {
+            conditions += "o.ordercreatedat >= :placedFrom"
+            params["placedFrom"] = it
+        }
+        search.placedBefore?.let {
+            conditions += "o.ordercreatedat < :placedBefore"
+            params["placedBefore"] = it
+        }
+        return (if (conditions.isEmpty()) "" else "WHERE " + conditions.joinToString(" AND ")) to params
+    }
 
     fun findByIdWithCustomer(orderId: Long): OrderWithCustomer? =
         jdbcClient.sql(

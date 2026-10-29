@@ -71,6 +71,52 @@ class CustomerRepository(private val jdbcClient: JdbcClient) {
             .optional()
             .orElse(null)
 
+    /**
+     * One page of customers for admins, newest first: only `status` when given, and only those whose email,
+     * full name or phone number contains `contains` (any case). Reads ec_customer only, never the auth table.
+     */
+    fun search(status: CustomerStatus?, contains: String?, limit: Int, offset: Long): List<Customer> {
+        val (where, params) = searchWhere(status, contains)
+        return jdbcClient.sql(
+            """
+            SELECT * FROM public.ec_customer
+            $where
+            ORDER BY customercreatedat DESC, customerid DESC
+            LIMIT :limit OFFSET :offset
+            """
+        )
+            .params(params + mapOf("limit" to limit, "offset" to offset))
+            .query(rowMapper)
+            .list()
+    }
+
+    fun count(status: CustomerStatus?, contains: String?): Long {
+        val (where, params) = searchWhere(status, contains)
+        return jdbcClient.sql("SELECT COUNT(*) FROM public.ec_customer $where")
+            .params(params)
+            .query(Long::class.javaObjectType)
+            .single()
+    }
+
+    // Fixed SQL fragments only; the values are named parameters.
+    private fun searchWhere(status: CustomerStatus?, contains: String?): Pair<String, Map<String, Any>> {
+        val conditions = mutableListOf<String>()
+        val params = mutableMapOf<String, Any>()
+        status?.let {
+            conditions += "customerstatus = :status"
+            params["status"] = it.name
+        }
+        contains?.let {
+            conditions += """
+                ((customeremail::TEXT) ILIKE :pattern ESCAPE '\'
+                 OR (customerfirstname::TEXT || ' ' || customerlastname::TEXT) ILIKE :pattern ESCAPE '\'
+                 OR (customerphonenumber::TEXT) ILIKE :pattern ESCAPE '\')
+            """.trimIndent()
+            params["pattern"] = containsPattern(it)
+        }
+        return (if (conditions.isEmpty()) "" else "WHERE " + conditions.joinToString(" AND ")) to params
+    }
+
     /** Updates the editable profile fields (not email). Returns the number of rows updated (0 or 1). */
     fun updateProfile(customerId: Long, firstName: String, lastName: String, phoneNumber: String?): Int =
         jdbcClient.sql(
