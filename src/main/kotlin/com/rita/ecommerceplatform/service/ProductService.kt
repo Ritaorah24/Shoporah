@@ -17,6 +17,7 @@ import com.rita.ecommerceplatform.model.Product
 import com.rita.ecommerceplatform.model.ProductStatus
 import com.rita.ecommerceplatform.repository.CategoryRepository
 import com.rita.ecommerceplatform.repository.InventoryMovementRepository
+import com.rita.ecommerceplatform.repository.ProductImageRepository
 import com.rita.ecommerceplatform.repository.ProductRepository
 import com.rita.ecommerceplatform.repository.ProductSearchCriteria
 import org.springframework.dao.DuplicateKeyException
@@ -40,6 +41,7 @@ class ProductService(
     private val productRepository: ProductRepository,
     private val categoryRepository: CategoryRepository,
     private val inventoryMovementRepository: InventoryMovementRepository,
+    private val productImageRepository: ProductImageRepository,
 ) {
 
     /**
@@ -57,13 +59,20 @@ class ProductService(
         val safePage = Paging.page(page)
         val safeSize = Paging.size(size)
         val products = productRepository.search(criteria, safeSize, Paging.offset(safePage, safeSize))
-        return PageResponse.of(products.map(ProductResponse::from), safePage, safeSize, productRepository.count(criteria))
+        // One query for the whole page's images, not one per product.
+        val images = productImageRepository.findByProductIds(products.map { it.productId })
+        return PageResponse.of(
+            products.map { ProductResponse.from(it, images[it.productId].orEmpty()) },
+            safePage,
+            safeSize,
+            productRepository.count(criteria),
+        )
     }
 
     /** Public details. A hidden product is 404, not 403, so the public cannot tell that it exists. */
     fun getPublic(productId: Long): ProductResponse {
         val product = productRepository.findPublicById(productId) ?: throw productNotFound()
-        return ProductResponse.from(product)
+        return ProductResponse.from(product, productImageRepository.findByProduct(productId))
     }
 
     /**
@@ -90,10 +99,17 @@ class ProductService(
         val safePage = Paging.page(page)
         val safeSize = Paging.size(size)
         val products = productRepository.search(criteria, safeSize, Paging.offset(safePage, safeSize))
-        return PageResponse.of(products.map(AdminProductResponse::from), safePage, safeSize, productRepository.count(criteria))
+        val images = productImageRepository.findByProductIds(products.map { it.productId })
+        return PageResponse.of(
+            products.map { AdminProductResponse.from(it, images[it.productId].orEmpty()) },
+            safePage,
+            safeSize,
+            productRepository.count(criteria),
+        )
     }
 
-    fun getForAdmin(productId: Long): AdminProductResponse = AdminProductResponse.from(findNotDeleted(productId))
+    fun getForAdmin(productId: Long): AdminProductResponse =
+        AdminProductResponse.from(findNotDeleted(productId), productImageRepository.findByProduct(productId))
 
     /**
      * Adds or removes stock with a reason (checkpoint 2.2, Step 7), logged as RESTOCK (up) or ADJUSTMENT (down)

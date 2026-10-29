@@ -1,5 +1,6 @@
 package com.rita.ecommerceplatform.service
 
+import com.rita.ecommerceplatform.dto.request.UpdateProductImageRequest
 import com.rita.ecommerceplatform.dto.response.AdminProductImageResponse
 import com.rita.ecommerceplatform.exception.BadRequestException
 import com.rita.ecommerceplatform.exception.ConflictException
@@ -57,6 +58,29 @@ class ProductImageService(
             throw e
         }
         return AdminProductImageResponse.from(image)
+    }
+
+    /**
+     * Changes an image's alt text, its place in the order, or makes it the primary image (the old primary loses the
+     * flag in the same transaction). Returns the product's images as they now are.
+     */
+    fun update(productId: Long, imageId: Long, request: UpdateProductImageRequest): List<AdminProductImageResponse> {
+        if (request.altText == null && request.sortOrder == null && request.primary == null) {
+            throw BadRequestException("Nothing to update")
+        }
+        if (request.primary == false) throw BadRequestException("Choose another image as primary instead")
+        return transactionTemplate.execute {
+            // The product lock makes primary changes for one product run one at a time, so there is always one primary.
+            lockNotDeleted(productId)
+            val image = productImageRepository.findById(productId, imageId) ?: throw NotFoundException("Image not found")
+            productImageRepository.update(
+                imageId = imageId,
+                altText = if (request.altText != null) request.altText.trim().ifEmpty { null } else image.altText,
+                sortOrder = request.sortOrder ?: image.sortOrder,
+            )
+            if (request.primary == true) productImageRepository.makePrimary(productId, imageId)
+            productImageRepository.findByProduct(productId).map(AdminProductImageResponse::from)
+        }!!
     }
 
     /**

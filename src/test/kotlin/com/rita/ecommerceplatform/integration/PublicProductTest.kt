@@ -107,8 +107,12 @@ class PublicProductTest : IntegrationTestBase() {
         val productId = createProduct()
         val result = mockMvc.get("/api/products/$productId").andExpect { status { isOk() } }.andReturn()
 
+        // primaryImageUrl and images since checkpoint 2.2 Step 8b; still no SKU, stock, status or timestamps.
         assertEquals(
-            setOf("productId", "name", "description", "categoryId", "categoryName", "price", "discountPrice", "sellingPrice", "availability"),
+            setOf(
+                "productId", "name", "description", "categoryId", "categoryName", "price", "discountPrice", "sellingPrice",
+                "availability", "primaryImageUrl", "images",
+            ),
             readJson(result).propertyNames().asSequence().toSet(),
         )
     }

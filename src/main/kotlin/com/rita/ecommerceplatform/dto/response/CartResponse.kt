@@ -18,6 +18,8 @@ data class CartResponse(
 data class CartItemResponse(
     val productId: Long,
     val name: String,
+    // The product's primary image (a thumbnail); null when it has none.
+    val imageUrl: String?,
     val price: BigDecimal,
     val discountPrice: BigDecimal?,
     // What one unit costs: the discount price if there is one, otherwise the price.

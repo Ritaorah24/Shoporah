@@ -58,6 +58,62 @@ class ProductImageRepository(private val jdbcClient: JdbcClient) {
             .query(rowMapper)
             .list()
 
+    /** The images of several products (a page of a list) in one query, each product's in the same order as findByProduct. */
+    fun findByProductIds(productIds: Collection<Long>): Map<Long, List<ProductImage>> {
+        if (productIds.isEmpty()) return emptyMap()
+        return jdbcClient.sql(
+            """
+            SELECT * FROM public.ec_product_image
+            WHERE productimageproductid IN (:productIds)
+            ORDER BY productimageproductid, productimageisprimary DESC, productimagesortorder, productimageid
+            """
+        )
+            .param("productIds", productIds)
+            .query(rowMapper)
+            .list()
+            .groupBy { it.productId }
+    }
+
+    /** Changes an image's alt text and sort order (the service passes both, merged with the current row). Returns rows updated. */
+    fun update(imageId: Long, altText: String?, sortOrder: Int): Int =
+        jdbcClient.sql(
+            """
+            UPDATE public.ec_product_image
+            SET productimagealttext = :altText, productimagesortorder = :sortOrder, productimageupdatedat = $SQL_NOW
+            WHERE productimageid = :imageId
+            """
+        )
+            .param("imageId", imageId)
+            .param("altText", altText)
+            .param("sortOrder", sortOrder)
+            .update()
+
+    /**
+     * Makes this image the product's only primary one: the old flag is cleared first, because
+     * uq__ec_productimage__primary allows one primary at any moment. Call with the product row locked.
+     */
+    fun makePrimary(productId: Long, imageId: Long) {
+        jdbcClient.sql(
+            """
+            UPDATE public.ec_product_image
+            SET productimageisprimary = FALSE, productimageupdatedat = $SQL_NOW
+            WHERE productimageproductid = :productId AND productimageisprimary AND productimageid <> :imageId
+            """
+        )
+            .param("productId", productId)
+            .param("imageId", imageId)
+            .update()
+        jdbcClient.sql(
+            """
+            UPDATE public.ec_product_image
+            SET productimageisprimary = TRUE, productimageupdatedat = $SQL_NOW
+            WHERE productimageid = :imageId AND NOT productimageisprimary
+            """
+        )
+            .param("imageId", imageId)
+            .update()
+    }
+
     /** One of the product's images; null if it does not exist or belongs to another product. */
     fun findById(productId: Long, imageId: Long): ProductImage? =
         jdbcClient.sql("SELECT * FROM public.ec_product_image WHERE productimageid = :imageId AND productimageproductid = :productId")

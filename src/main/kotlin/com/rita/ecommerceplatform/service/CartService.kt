@@ -11,6 +11,7 @@ import com.rita.ecommerceplatform.model.CategoryStatus
 import com.rita.ecommerceplatform.model.ProductStatus
 import com.rita.ecommerceplatform.repository.CartRepository
 import com.rita.ecommerceplatform.repository.CustomerRepository
+import com.rita.ecommerceplatform.repository.ProductImageRepository
 import com.rita.ecommerceplatform.repository.ProductRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -28,6 +29,7 @@ class CartService(
     private val cartRepository: CartRepository,
     private val productRepository: ProductRepository,
     private val customerRepository: CustomerRepository,
+    private val productImageRepository: ProductImageRepository,
 ) {
 
     /** A customer who never added anything gets an empty cart; no cart row is created just by looking. */
@@ -100,11 +102,14 @@ class CartService(
     }
 
     private fun toResponse(items: List<CartItem>): CartResponse {
+        // Each product's primary image, from one query for the whole cart.
+        val images = productImageRepository.findByProductIds(items.map { it.productId })
         val lines = items.map { item ->
             val issue = issueOf(item)
             CartItemResponse(
                 productId = item.productId,
                 name = item.productName,
+                imageUrl = images[item.productId]?.firstOrNull { it.isPrimary }?.url,
                 price = item.price,
                 discountPrice = item.discountPrice,
                 unitPrice = item.sellingPrice,

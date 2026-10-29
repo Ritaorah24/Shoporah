@@ -1,6 +1,7 @@
 package com.rita.ecommerceplatform.dto.response
 
 import com.rita.ecommerceplatform.model.Product
+import com.rita.ecommerceplatform.model.ProductImage
 import java.math.BigDecimal
 import java.time.LocalDateTime
 
@@ -21,11 +22,16 @@ data class AdminProductResponse(
     val availability: String,
     val status: String,
     val createdByAdminId: Int,
+    // The main image; null when the product has no images.
+    val primaryImageUrl: String?,
+    // Primary first, then by sortOrder; managed at /api/admin/products/{productId}/images.
+    val images: List<AdminProductImageResponse>,
     val createdAt: LocalDateTime,
     val updatedAt: LocalDateTime,
 ) {
     companion object {
-        fun from(product: Product) = AdminProductResponse(
+        /** `images` in the order the repository returns them (primary first). */
+        fun from(product: Product, images: List<ProductImage>) = AdminProductResponse(
             productId = product.productId,
             name = product.name,
             description = product.description,
@@ -40,6 +46,8 @@ data class AdminProductResponse(
             availability = product.availability().name,
             status = product.status.name,
             createdByAdminId = product.createdByAdminId,
+            primaryImageUrl = images.firstOrNull { it.isPrimary }?.url,
+            images = images.map(AdminProductImageResponse::from),
             createdAt = product.createdAt,
             updatedAt = product.updatedAt,
         )

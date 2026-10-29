@@ -1,6 +1,7 @@
 package com.rita.ecommerceplatform.dto.response
 
 import com.rita.ecommerceplatform.model.Product
+import com.rita.ecommerceplatform.model.ProductImage
 import java.math.BigDecimal
 
 /**
@@ -17,9 +18,14 @@ data class ProductResponse(
     val discountPrice: BigDecimal?,
     val sellingPrice: BigDecimal,
     val availability: String,
+    // The main image (the thumbnail in lists); null when the product has no images.
+    val primaryImageUrl: String?,
+    // Primary first, then in the admin's order; empty when there are none.
+    val images: List<ProductImageResponse>,
 ) {
     companion object {
-        fun from(product: Product) = ProductResponse(
+        /** `images` in the order the repository returns them (primary first). */
+        fun from(product: Product, images: List<ProductImage>) = ProductResponse(
             productId = product.productId,
             name = product.name,
             description = product.description,
@@ -29,6 +35,8 @@ data class ProductResponse(
             discountPrice = product.discountPrice,
             sellingPrice = product.sellingPrice,
             availability = product.availability().name,
+            primaryImageUrl = images.firstOrNull { it.isPrimary }?.url,
+            images = images.map(ProductImageResponse::from),
         )
     }
 }
