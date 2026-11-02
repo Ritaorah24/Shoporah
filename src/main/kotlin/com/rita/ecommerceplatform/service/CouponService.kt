@@ -4,6 +4,7 @@ import com.rita.ecommerceplatform.dto.request.CreateCouponRequest
 import com.rita.ecommerceplatform.dto.request.UpdateCouponRequest
 import com.rita.ecommerceplatform.dto.request.UpdateStatusRequest
 import com.rita.ecommerceplatform.dto.response.AdminCouponResponse
+import com.rita.ecommerceplatform.dto.response.CouponPreviewResponse
 import com.rita.ecommerceplatform.dto.response.PageResponse
 import com.rita.ecommerceplatform.exception.BadRequestException
 import com.rita.ecommerceplatform.exception.ConflictException
@@ -21,11 +22,32 @@ import java.time.LocalDateTime
 import java.time.ZoneOffset
 
 /**
- * Coupon management for admins (checkpoint 3.1, Step 1). Customers use coupons at checkout from Step 2.
+ * Coupon management for admins (checkpoint 3.1, Step 1) and the customer's preview (Step 2); OrderService applies them at checkout.
  * Delete is soft and final: orders reference their coupon (ON DELETE RESTRICT), and a deleted code is never reused.
  */
 @Service
-class CouponService(private val couponRepository: CouponRepository) {
+class CouponService(
+    private val couponRepository: CouponRepository,
+    private val cartService: CartService,
+) {
+
+    /**
+     * What `code` would save on the customer's cart now, with the same rules as checkout (CouponCheck).
+     * Uses the cart's subtotal (items that can be bought); counts no use and locks nothing.
+     */
+    fun preview(customerId: Long, code: String): CouponPreviewResponse {
+        val cart = cartService.getCart(customerId)
+        if (cart.items.isEmpty()) throw BadRequestException("Cart is empty")
+        val coupon = couponRepository.findByCode(code)
+        val discount = CouponCheck.discountFor(coupon, code, cart.subtotal, now())
+        return CouponPreviewResponse(
+            code = coupon!!.code,
+            description = coupon.description,
+            subtotal = cart.subtotal,
+            discountAmount = discount,
+            subtotalAfterDiscount = cart.subtotal - discount,
+        )
+    }
 
     /** Newest first; never DELETED. status narrows to ACTIVE or INACTIVE; code matches the start of the code, any case. */
     fun list(page: Int, size: Int, status: String?, code: String?): PageResponse<AdminCouponResponse> {

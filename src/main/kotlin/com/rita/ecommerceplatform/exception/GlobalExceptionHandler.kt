@@ -37,7 +37,8 @@ class GlobalExceptionHandler : ResponseEntityExceptionHandler() {
     /** Our own business errors: status and message come from the exception. */
     @ExceptionHandler(ApiException::class)
     fun handleApiException(ex: ApiException, request: HttpServletRequest): ResponseEntity<ApiError> =
-        ResponseEntity.status(ex.status).body(apiError(ex.status, ex.message ?: ex.status.reasonPhrase, request.requestURI))
+        ResponseEntity.status(ex.status)
+            .body(apiError(ex.status, ex.message ?: ex.status.reasonPhrase, request.requestURI, ex.fieldErrors))
 
     /** A bug. The client gets a generic message; the stack trace goes to the log only. */
     @ExceptionHandler(Exception::class)

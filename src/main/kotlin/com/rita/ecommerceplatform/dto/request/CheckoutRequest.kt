@@ -15,4 +15,9 @@ data class CheckoutRequest(
     @JsonDeserialize(using = TrimStringDeserializer::class)
     @field:Size(max = 30)
     val deliveryMethodCode: String? = null,
+
+    // Optional coupon code, any case (POST /api/customer/coupons/validate previews it). The discount comes off the subtotal.
+    @JsonDeserialize(using = TrimStringDeserializer::class)
+    @field:Size(max = 30)
+    val couponCode: String? = null,
 )

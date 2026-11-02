@@ -34,6 +34,8 @@ data class AdminOrderResponse(
     val deliveryMethod: OrderDeliveryMethodResponse,
     // The fee as it was at checkout, even if the method's fee has changed since.
     val deliveryFee: BigDecimal,
+    // The coupon used at checkout (null without one); discountAmount is what it took off the subtotal.
+    val couponCode: String?,
     val discountAmount: BigDecimal,
     val total: BigDecimal,
     val deliveryAddress: DeliveryAddressResponse,
@@ -52,6 +54,7 @@ data class AdminOrderResponse(
             refunds: List<Refund>,
             nextStatuses: List<OrderStatus>,
             deliveryMethod: DeliveryMethod,
+            couponCode: String?,
             canCancel: Boolean,
             canRefund: Boolean,
         ) = AdminOrderResponse(
@@ -70,6 +73,7 @@ data class AdminOrderResponse(
             subtotal = row.order.subtotal,
             deliveryMethod = OrderDeliveryMethodResponse.from(deliveryMethod),
             deliveryFee = row.order.deliveryFee,
+            couponCode = couponCode,
             discountAmount = row.order.discountAmount,
             total = row.order.total,
             deliveryAddress = DeliveryAddressResponse.from(row.order.deliveryAddress),

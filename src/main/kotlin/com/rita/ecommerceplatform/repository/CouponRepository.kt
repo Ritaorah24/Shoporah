@@ -59,6 +59,53 @@ class CouponRepository(private val jdbcClient: JdbcClient) {
             .optional()
             .orElse(null)
 
+    /** By code, any status, case-insensitive (CITEXT). The checkout preview reads it without a lock. */
+    fun findByCode(code: String): Coupon? =
+        jdbcClient.sql("SELECT * FROM public.ec_coupon WHERE couponcode = :code")
+            .param("code", code)
+            .query(rowMapper)
+            .optional()
+            .orElse(null)
+
+    /** Like findByCode, but locks the row until the transaction ends, so two checkouts cannot both take the last use. */
+    fun lockByCode(code: String): Coupon? =
+        jdbcClient.sql("SELECT * FROM public.ec_coupon WHERE couponcode = :code FOR UPDATE")
+            .param("code", code)
+            .query(rowMapper)
+            .optional()
+            .orElse(null)
+
+    /**
+     * Counts one use, only while the coupon is ACTIVE and below its limit. Returns the rows updated (0 or 1);
+     * the caller holds the row lock and checks for 1. ck__ec_coupon__usagecount is the last guard.
+     */
+    fun redeem(couponId: Int): Int =
+        jdbcClient.sql(
+            """
+            UPDATE public.ec_coupon
+            SET couponusagecount = couponusagecount + 1,
+                couponupdatedat = $SQL_NOW
+            WHERE couponid = :id
+              AND couponstatus = 'ACTIVE'
+              AND (couponusagelimit IS NULL OR couponusagecount < couponusagelimit)
+            """
+        )
+            .param("id", couponId)
+            .update()
+
+    /** Gives one use back (an unpaid order was cancelled). Any status: a deleted coupon's count is corrected too. */
+    fun release(couponId: Int): Int =
+        jdbcClient.sql(
+            """
+            UPDATE public.ec_coupon
+            SET couponusagecount = couponusagecount - 1,
+                couponupdatedat = $SQL_NOW
+            WHERE couponid = :id AND couponusagecount > 0
+            """
+        )
+            .param("id", couponId)
+            .update()
+
     /** Any status, DELETED included: a deleted coupon's code stays taken (uq__ec_coupon__code, case-insensitive). */
     fun existsByCode(code: String): Boolean =
         jdbcClient.sql("SELECT EXISTS (SELECT 1 FROM public.ec_coupon WHERE couponcode = :code)")

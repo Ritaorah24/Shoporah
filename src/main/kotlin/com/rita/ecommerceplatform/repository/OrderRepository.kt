@@ -18,6 +18,8 @@ data class NewOrder(
     val customerId: Long,
     val customerAddressId: Long?,
     val deliveryMethodId: Int,
+    // The coupon whose use this order counted; null without one.
+    val couponId: Int?,
     val deliveryAddress: AddressDetails,
     val subtotal: BigDecimal,
     val deliveryFee: BigDecimal,
@@ -96,13 +98,13 @@ class OrderRepository(private val jdbcClient: JdbcClient) {
         jdbcClient.sql(
             """
             INSERT INTO public.ec_order (
-                orderreference, orderidempotencykey, ordercustomerid, ordercustomeraddressid, orderdeliverymethodid,
+                orderreference, orderidempotencykey, ordercustomerid, ordercustomeraddressid, orderdeliverymethodid, ordercouponid,
                 orderrecipientname, orderrecipientphonenumber, orderaddressline1, orderaddressline2,
                 ordercity, orderstate, ordercountry, orderpostalcode,
                 ordersubtotal, orderdeliveryfee, orderdiscountamount, ordertotal
             )
             VALUES (
-                :reference, :idempotencyKey, :customerId, :customerAddressId, :deliveryMethodId,
+                :reference, :idempotencyKey, :customerId, :customerAddressId, :deliveryMethodId, :couponId,
                 :recipientName, :recipientPhoneNumber, :addressLine1, :addressLine2,
                 :city, :state, :country, :postalCode,
                 :subtotal, :deliveryFee, :discountAmount, :total
@@ -115,6 +117,7 @@ class OrderRepository(private val jdbcClient: JdbcClient) {
             .param("customerId", order.customerId)
             .param("customerAddressId", order.customerAddressId)
             .param("deliveryMethodId", order.deliveryMethodId)
+            .param("couponId", order.couponId)
             .param("recipientName", order.deliveryAddress.recipientName)
             .param("recipientPhoneNumber", order.deliveryAddress.recipientPhoneNumber)
             .param("addressLine1", order.deliveryAddress.addressLine1)

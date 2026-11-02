@@ -19,6 +19,8 @@ data class OrderResponse(
     val deliveryMethod: OrderDeliveryMethodResponse,
     // The fee as it was at checkout, even if the method's fee has changed since.
     val deliveryFee: BigDecimal,
+    // The coupon used at checkout (null without one); discountAmount is what it took off the subtotal.
+    val couponCode: String?,
     val discountAmount: BigDecimal,
     val total: BigDecimal,
     val deliveryAddress: DeliveryAddressResponse,
@@ -27,7 +29,13 @@ data class OrderResponse(
     val createdAt: LocalDateTime,
 ) {
     companion object {
-        fun from(order: Order, items: List<OrderItem>, history: List<OrderStatusChange>, deliveryMethod: DeliveryMethod) = OrderResponse(
+        fun from(
+            order: Order,
+            items: List<OrderItem>,
+            history: List<OrderStatusChange>,
+            deliveryMethod: DeliveryMethod,
+            couponCode: String?,
+        ) = OrderResponse(
             orderId = order.orderId,
             reference = order.reference,
             status = order.status.name,
@@ -36,6 +44,7 @@ data class OrderResponse(
             subtotal = order.subtotal,
             deliveryMethod = OrderDeliveryMethodResponse.from(deliveryMethod),
             deliveryFee = order.deliveryFee,
+            couponCode = couponCode,
             discountAmount = order.discountAmount,
             total = order.total,
             deliveryAddress = DeliveryAddressResponse.from(order.deliveryAddress),

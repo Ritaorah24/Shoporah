@@ -8,6 +8,7 @@ import com.rita.ecommerceplatform.model.Order
 import com.rita.ecommerceplatform.model.OrderPaymentStatus
 import com.rita.ecommerceplatform.model.OrderStatus
 import com.rita.ecommerceplatform.model.PaymentStatus
+import com.rita.ecommerceplatform.repository.CouponRepository
 import com.rita.ecommerceplatform.repository.CustomerRepository
 import com.rita.ecommerceplatform.repository.InventoryMovementRepository
 import com.rita.ecommerceplatform.repository.OrderRepository
@@ -21,7 +22,8 @@ import org.springframework.transaction.annotation.Transactional
 /**
  * Cancels orders, each in one transaction. Its own bean so that @Transactional works when the services call it
  * after settleOpenPayment (the provider call must run outside any transaction).
- * Locks are taken order → payment → products (by productId), the same order as PaymentSettlement, so they never deadlock.
+ * Locks are taken order → payment → products (by productId), the same order as PaymentSettlement, so they never deadlock;
+ * an unpaid order's coupon is locked last, and checkout locks customer → coupon, so the two never wait on each other.
  */
 @Service
 class OrderCancellation(
@@ -34,6 +36,7 @@ class OrderCancellation(
     private val statusHistoryRepository: OrderStatusHistoryRepository,
     private val customerRepository: CustomerRepository,
     private val notificationService: NotificationService,
+    private val couponRepository: CouponRepository,
 ) {
 
     /**
@@ -60,6 +63,7 @@ class OrderCancellation(
 
         closeOpenAttempt(orderId, PAYMENT_CLOSED)
         moveToCancelled(order)
+        releaseCoupon(order)
         statusHistoryRepository.insert(
             orderId = orderId,
             fromStatus = OrderStatus.PENDING,
@@ -95,6 +99,7 @@ class OrderCancellation(
         if (order.status == OrderStatus.PENDING) closeOpenAttempt(orderId, PAYMENT_CLOSED_BY_ADMIN)
         moveToCancelled(order)
         restoreStock(order, adminId)
+        releaseCoupon(order)
 
         val paid = order.paymentStatus == OrderPaymentStatus.PAID
         statusHistoryRepository.insert(
@@ -132,6 +137,14 @@ class OrderCancellation(
         check(orderRepository.updateStatus(order.orderId, order.status, OrderStatus.CANCELLED) == 1) {
             "Order ${order.orderId} changed while locked"
         }
+    }
+
+    // An unpaid order gives its coupon use back, exactly once: the order is locked and CANCELLED is final.
+    // A paid order keeps it (the coupon was redeemed; a refund returns what was paid). Lock order: order → coupon.
+    private fun releaseCoupon(order: Order) {
+        val couponId = order.couponId ?: return
+        if (order.paymentStatus != OrderPaymentStatus.UNPAID) return
+        check(couponRepository.release(couponId) == 1) { "Coupon $couponId of order ${order.reference} has no use to give back" }
     }
 
     // Puts back exactly what the payment took (its SALE movements, by productId), so an order that never took

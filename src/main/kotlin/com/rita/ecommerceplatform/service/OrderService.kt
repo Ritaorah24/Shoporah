@@ -14,6 +14,7 @@ import com.rita.ecommerceplatform.model.Order
 import com.rita.ecommerceplatform.model.OrderPaymentStatus
 import com.rita.ecommerceplatform.model.OrderStatus
 import com.rita.ecommerceplatform.repository.CartRepository
+import com.rita.ecommerceplatform.repository.CouponRepository
 import com.rita.ecommerceplatform.repository.CustomerAddressRepository
 import com.rita.ecommerceplatform.repository.CustomerRepository
 import com.rita.ecommerceplatform.repository.DeliveryMethodRepository
@@ -43,6 +44,7 @@ class OrderService(
     private val referenceGenerator: OrderReferenceGenerator,
     private val notificationService: NotificationService,
     private val orderCancellation: OrderCancellation,
+    private val couponRepository: CouponRepository,
 ) {
 
     /**
@@ -76,9 +78,22 @@ class OrderService(
         val deliveryMethod = deliveryMethodRepository.findActiveByCode(deliveryMethodCode)
             ?: throw BadRequestException("Delivery method ${deliveryMethodCode.uppercase()} is not available")
         val subtotal = items.fold(BigDecimal.ZERO.setScale(2)) { sum, item -> sum + cartService.lineTotal(item) }
-        // Coupons arrive in V2.
-        val discount = BigDecimal.ZERO.setScale(2)
+
+        // The coupon row is locked until commit and checked under the lock, so two checkouts cannot both take its
+        // last use. Lock order: customer (above) → coupon. A failure later rolls the counted use back with the order.
+        val couponCode = request?.couponCode?.ifEmpty { null }
+        val coupon = couponCode?.let { couponRepository.lockByCode(it) }
+        val discount = if (couponCode == null) {
+            BigDecimal.ZERO.setScale(2)
+        } else {
+            CouponCheck.discountFor(coupon, couponCode, subtotal, CouponService.now())
+        }
         val total = subtotal + deliveryMethod.fee - discount
+        if (coupon != null) {
+            // Paystack cannot take ₦0, and stock is only taken when a payment is confirmed.
+            if (total.signum() <= 0) CouponCheck.refuse("Coupon ${coupon.code} would make the order free, which is not supported")
+            check(couponRepository.redeem(coupon.couponId) == 1) { "Coupon ${coupon.couponId} changed while locked" }
+        }
 
         val orderId = try {
             orderRepository.insert(
@@ -88,6 +103,7 @@ class OrderService(
                     customerId = customerId,
                     customerAddressId = address.addressId,
                     deliveryMethodId = deliveryMethod.deliveryMethodId,
+                    couponId = coupon?.couponId,
                     deliveryAddress = address.details,
                     subtotal = subtotal,
                     deliveryFee = deliveryMethod.fee,
@@ -190,6 +206,7 @@ class OrderService(
             orderItemRepository.findByOrderId(order.orderId),
             statusHistoryRepository.findByOrderId(order.orderId),
             deliveryMethodRepository.findById(order.deliveryMethodId)!!,
+            order.couponId?.let { couponRepository.findById(it)!!.code },
         )
 
     companion object {

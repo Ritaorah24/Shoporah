@@ -14,6 +14,7 @@ import com.rita.ecommerceplatform.model.OrderPaymentStatus
 import com.rita.ecommerceplatform.model.OrderStatus
 import com.rita.ecommerceplatform.model.RefundStatus
 import com.rita.ecommerceplatform.repository.AdminOrderSearch
+import com.rita.ecommerceplatform.repository.CouponRepository
 import com.rita.ecommerceplatform.repository.CustomerRepository
 import com.rita.ecommerceplatform.repository.DeliveryMethodRepository
 import com.rita.ecommerceplatform.repository.OrderItemRepository
@@ -51,6 +52,7 @@ class AdminOrderService(
     private val deliveryMethodRepository: DeliveryMethodRepository,
     private val orderCancellation: OrderCancellation,
     private val refundRepository: RefundRepository,
+    private val couponRepository: CouponRepository,
 ) {
 
     /**
@@ -142,6 +144,7 @@ class AdminOrderService(
             refunds,
             OrderStatusRules.nextStatuses(row.order.status, OrderStatusActor.ADMIN).filter { it in FULFILMENT_STATUSES },
             deliveryMethodRepository.findById(row.order.deliveryMethodId)!!,
+            row.order.couponId?.let { couponRepository.findById(it)!!.code },
             canCancel = OrderStatus.CANCELLED in OrderStatusRules.nextStatuses(row.order.status, OrderStatusActor.ADMIN),
             canRefund = RefundService.isRefundable(row.order) && refunds.all { it.status == RefundStatus.FAILED },
         )
