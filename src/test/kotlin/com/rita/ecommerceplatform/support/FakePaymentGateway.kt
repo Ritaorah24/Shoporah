@@ -1,6 +1,6 @@
 package com.rita.ecommerceplatform.support
 
-import com.rita.ecommerceplatform.exception.BadGatewayException
+import com.rita.ecommerceplatform.exception.ApiErrorException
 import com.rita.ecommerceplatform.repository.api.GatewayInitRequest
 import com.rita.ecommerceplatform.repository.api.GatewayInitResult
 import com.rita.ecommerceplatform.repository.api.GatewayPaymentStatus
@@ -86,7 +86,7 @@ class FakePaymentGateway : PaymentGateway {
             "${refundIds.incrementAndGet()}", request.transactionReference, "pending", request.amountKobo, request.currency,
         )
         refunds[refund.refundId] = refund
-        if (mode == RefundStartMode.LoseAnswer) throw BadGatewayException(PaystackGateway.PROVIDER_ERROR)
+        if (mode == RefundStartMode.LoseAnswer) throw ApiErrorException(PaystackGateway.PROVIDER_ERROR)
         return GatewayRefundStart.Accepted(refund)
     }
 
@@ -158,6 +158,6 @@ class FakePaymentGateway : PaymentGateway {
         )
 
     private fun failIfDown() {
-        if (down) throw BadGatewayException(PaystackGateway.PROVIDER_ERROR)
+        if (down) throw ApiErrorException(PaystackGateway.PROVIDER_ERROR)
     }
 }

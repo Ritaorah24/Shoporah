@@ -1,6 +1,6 @@
 package com.rita.ecommerceplatform.repository.api.paystack
 
-import com.rita.ecommerceplatform.exception.BadGatewayException
+import com.rita.ecommerceplatform.exception.ApiErrorException
 import com.rita.ecommerceplatform.repository.api.GatewayInitRequest
 import com.rita.ecommerceplatform.repository.api.GatewayInitResult
 import com.rita.ecommerceplatform.repository.api.GatewayPaymentStatus
@@ -155,8 +155,7 @@ class PaystackGatewayTest {
             server.reset()
             server.expect(requestTo("https://api.paystack.co/transaction/verify/PAY-TEST-1")).andRespond(response)
 
-            val ex = assertFailsWith<BadGatewayException> { gateway.verify("PAY-TEST-1") }
-            assertEquals(HttpStatus.BAD_GATEWAY, ex.status)
+            val ex = assertFailsWith<ApiErrorException> { gateway.verify("PAY-TEST-1") }
             assertEquals(PaystackGateway.PROVIDER_ERROR, ex.message)
         }
     }
@@ -166,7 +165,7 @@ class PaystackGatewayTest {
         server.expect(requestTo("https://api.paystack.co/transaction/initialize"))
             .andRespond(withError(HttpStatus.BAD_REQUEST, """{"status":false,"message":"Duplicate Transaction Reference"}"""))
 
-        assertFailsWith<BadGatewayException> { gateway.initialize(initRequest) }
+        assertFailsWith<ApiErrorException> { gateway.initialize(initRequest) }
     }
 
     private val refundRequest = GatewayRefundRequest(
@@ -223,7 +222,7 @@ class PaystackGatewayTest {
         ).forEach { response ->
             server.reset()
             server.expect(requestTo("https://api.paystack.co/refund")).andRespond(response)
-            assertFailsWith<BadGatewayException> { gateway.refund(refundRequest) }
+            assertFailsWith<ApiErrorException> { gateway.refund(refundRequest) }
         }
     }
 

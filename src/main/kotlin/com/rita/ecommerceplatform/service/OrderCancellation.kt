@@ -1,7 +1,7 @@
 package com.rita.ecommerceplatform.service
 
-import com.rita.ecommerceplatform.exception.ConflictException
-import com.rita.ecommerceplatform.exception.NotFoundException
+import com.rita.ecommerceplatform.exception.BadRequestException
+import com.rita.ecommerceplatform.exception.UnableToLocateRecordException
 import com.rita.ecommerceplatform.model.entity.InventoryMovementType
 import com.rita.ecommerceplatform.model.entity.NotificationType
 import com.rita.ecommerceplatform.model.entity.Order
@@ -56,7 +56,7 @@ class OrderCancellation(
     @Transactional
     fun cancelByCustomer(customerId: Long, orderId: Long, reason: String?) {
         val order = orderRepository.lockById(orderId)
-        if (order == null || order.orderCustomerId != customerId) throw NotFoundException("Order not found")
+        if (order == null || order.orderCustomerId != customerId) throw UnableToLocateRecordException("Order not found")
         // Checked again under the lock: a payment may have settled since OrderService looked.
         if (order.orderStatus != OrderStatus.PENDING || order.orderPaymentStatus != OrderPaymentStatus.UNPAID) throw notCancellable()
         OrderStatusRules.ensureCanChange(order.orderStatus!!, OrderStatus.CANCELLED, OrderStatusActor.CUSTOMER)
@@ -90,9 +90,9 @@ class OrderCancellation(
      */
     @Transactional
     fun cancelByAdmin(adminId: Int, orderId: Long, reason: String) {
-        val order = orderRepository.lockById(orderId) ?: throw NotFoundException("Order not found")
+        val order = orderRepository.lockById(orderId) ?: throw UnableToLocateRecordException("Order not found")
         if (order.orderStatus == OrderStatus.SHIPPED || order.orderStatus == OrderStatus.DELIVERED) {
-            throw ConflictException("Shipped or delivered orders cannot be cancelled; use a refund instead")
+            throw BadRequestException("Shipped or delivered orders cannot be cancelled; use a refund instead")
         }
         OrderStatusRules.ensureCanChange(order.orderStatus!!, OrderStatus.CANCELLED, OrderStatusActor.ADMIN)
 
@@ -127,7 +127,7 @@ class OrderCancellation(
         paymentRepository.failStaleStarts(orderId, PaymentService.STALE_START_SECONDS, PaymentService.NOT_STARTED)
         paymentRepository.findOpenAttempt(orderId)?.let { open ->
             if (open.paymentAuthorizationUrl == null) {
-                throw ConflictException("A payment for this order is being started, try again in a moment")
+                throw BadRequestException("A payment for this order is being started, try again in a moment")
             }
             paymentRepository.markFailed(open.paymentId!!, note)
         }
@@ -172,6 +172,6 @@ class OrderCancellation(
         const val PAYMENT_CLOSED = "Closed: order cancelled by the customer"
         const val PAYMENT_CLOSED_BY_ADMIN = "Closed: order cancelled by an admin"
 
-        fun notCancellable() = ConflictException("Only unpaid pending orders can be cancelled")
+        fun notCancellable() = BadRequestException("Only unpaid pending orders can be cancelled")
     }
 }

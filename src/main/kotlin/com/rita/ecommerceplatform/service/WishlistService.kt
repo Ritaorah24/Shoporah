@@ -1,12 +1,12 @@
 package com.rita.ecommerceplatform.service
 
+import com.rita.ecommerceplatform.exception.BadRequestException
+import com.rita.ecommerceplatform.exception.UnableToLocateRecordException
 import com.rita.ecommerceplatform.model.request.AddCartItemRequest
 import com.rita.ecommerceplatform.model.request.AddWishlistItemRequest
 import com.rita.ecommerceplatform.model.request.MoveToCartRequest
 import com.rita.ecommerceplatform.model.response.WishlistItemResponse
 import com.rita.ecommerceplatform.model.response.WishlistResponse
-import com.rita.ecommerceplatform.exception.ConflictException
-import com.rita.ecommerceplatform.exception.NotFoundException
 import com.rita.ecommerceplatform.model.entity.WishlistItem
 import com.rita.ecommerceplatform.repository.database.CustomerRepository
 import com.rita.ecommerceplatform.repository.database.ProductImageRepository
@@ -41,12 +41,12 @@ class WishlistService(
     @Transactional
     fun addItem(customerId: Long, request: AddWishlistItemRequest): WishlistResponse {
         customerRepository.lockById(customerId)
-        val product = productRepository.findPublicById(request.productId!!) ?: throw NotFoundException("Product not found")
+        val product = productRepository.findPublicById(request.productId!!) ?: throw UnableToLocateRecordException("Product not found")
         val wishlistId = wishlistRepository.getOrCreateWishlistId(customerId)
 
         if (!wishlistRepository.contains(wishlistId, product.productId!!)) {
             if (wishlistRepository.countItems(wishlistId) >= MAX_ITEMS) {
-                throw ConflictException("A wishlist can hold at most $MAX_ITEMS products")
+                throw BadRequestException("A wishlist can hold at most $MAX_ITEMS products")
             }
             wishlistRepository.addItem(wishlistId, product.productId!!)
             wishlistRepository.touch(wishlistId)
@@ -101,7 +101,7 @@ class WishlistService(
         )
     }
 
-    private fun itemNotInWishlist() = NotFoundException("Item not in wishlist")
+    private fun itemNotInWishlist() = UnableToLocateRecordException("Item not in wishlist")
 
     companion object {
         const val MAX_ITEMS = 100

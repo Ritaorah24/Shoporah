@@ -31,7 +31,7 @@ class CartTest : IntegrationTestBase() {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to unique("Cat"))
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["categoryId"].asInt()
     }
 
@@ -47,7 +47,7 @@ class CartTest : IntegrationTestBase() {
                 "discountPrice" to discountPrice,
                 "stockQuantity" to stock,
             )
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["productId"].asLong()
     }
 
@@ -60,7 +60,7 @@ class CartTest : IntegrationTestBase() {
                 content = body!!
             }
             else -> mockMvc.delete(url) { header("Authorization", auth) }
-        }.andExpect { status { is2xxSuccessful() } }
+        }.andExpect { responseCode("00") }
     }
 
     private fun addItem(body: String, withToken: String = token) = mockMvc.post("/api/customer/cart/items") {
@@ -82,11 +82,11 @@ class CartTest : IntegrationTestBase() {
     @Test
     fun `a new customer has an empty cart that cannot be checked out`() {
         getCart().andExpect {
-            status { isOk() }
-            jsonPath("$.items.length()") { value(0) }
-            jsonPath("$.itemCount") { value(0) }
-            jsonPath("$.subtotal") { value(0.00) }
-            jsonPath("$.canCheckout") { value(false) }
+            responseCode("00")
+            jsonPath("$.data.items.length()") { value(0) }
+            jsonPath("$.data.itemCount") { value(0) }
+            jsonPath("$.data.subtotal") { value(0.00) }
+            jsonPath("$.data.canCheckout") { value(false) }
         }
     }
 
@@ -96,23 +96,23 @@ class CartTest : IntegrationTestBase() {
 
         // Quantity defaults to 1; the sent price is ignored.
         addItem(json("productId" to productId, "price" to 1)).andExpect {
-            status { isOk() }
-            jsonPath("$.items[0].quantity") { value(1) }
-            jsonPath("$.items[0].unitPrice") { value(800.00) }
-            jsonPath("$.subtotal") { value(800.00) }
+            responseCode("00")
+            jsonPath("$.data.items[0].quantity") { value(1) }
+            jsonPath("$.data.items[0].unitPrice") { value(800.00) }
+            jsonPath("$.data.subtotal") { value(800.00) }
         }
         addItem(json("productId" to productId, "quantity" to 2, "unitPrice" to 1, "subtotal" to 1)).andExpect {
-            status { isOk() }
-            jsonPath("$.items.length()") { value(1) }
-            jsonPath("$.items[0].quantity") { value(3) }
-            jsonPath("$.items[0].price") { value(1000.00) }
-            jsonPath("$.items[0].discountPrice") { value(800.00) }
-            jsonPath("$.items[0].lineTotal") { value(2400.00) }
-            jsonPath("$.items[0].available") { value(true) }
-            jsonPath("$.items[0].issue") { value(null) }
-            jsonPath("$.itemCount") { value(3) }
-            jsonPath("$.subtotal") { value(2400.00) }
-            jsonPath("$.canCheckout") { value(true) }
+            responseCode("00")
+            jsonPath("$.data.items.length()") { value(1) }
+            jsonPath("$.data.items[0].quantity") { value(3) }
+            jsonPath("$.data.items[0].price") { value(1000.00) }
+            jsonPath("$.data.items[0].discountPrice") { value(800.00) }
+            jsonPath("$.data.items[0].lineTotal") { value(2400.00) }
+            jsonPath("$.data.items[0].available") { value(true) }
+            jsonPath("$.data.items[0].issue") { value(null) }
+            jsonPath("$.data.itemCount") { value(3) }
+            jsonPath("$.data.subtotal") { value(2400.00) }
+            jsonPath("$.data.canCheckout") { value(true) }
         }
     }
 
@@ -122,9 +122,9 @@ class CartTest : IntegrationTestBase() {
         val case = createProduct(price = 250, discountPrice = 200)
         addItem(json("productId" to phone, "quantity" to 2))
         addItem(json("productId" to case, "quantity" to 3)).andExpect {
-            jsonPath("$.items.length()") { value(2) }
-            jsonPath("$.itemCount") { value(5) }
-            jsonPath("$.subtotal") { value(2600.00) }
+            jsonPath("$.data.items.length()") { value(2) }
+            jsonPath("$.data.itemCount") { value(5) }
+            jsonPath("$.data.subtotal") { value(2600.00) }
         }
     }
 
@@ -133,27 +133,27 @@ class CartTest : IntegrationTestBase() {
         val productId = createProduct(stock = 5)
 
         addItem(json("productId" to productId, "quantity" to 6)).andExpect {
-            status { isConflict() }
-            jsonPath("$.message") { value("Only 5 available") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("Only 5 available") }
         }
         // Exactly the stock is fine.
-        addItem(json("productId" to productId, "quantity" to 5)).andExpect { status { isOk() } }
+        addItem(json("productId" to productId, "quantity" to 5)).andExpect { responseCode("00") }
         // The cart already holds all 5, so one more is too many, and the cart is unchanged.
         addItem(json("productId" to productId, "quantity" to 1)).andExpect {
-            status { isConflict() }
-            jsonPath("$.message") { value("Only 5 available") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("Only 5 available") }
         }
         // A huge quantity cannot overflow past the check.
-        addItem(json("productId" to productId, "quantity" to Int.MAX_VALUE)).andExpect { status { isConflict() } }
-        getCart().andExpect { jsonPath("$.items[0].quantity") { value(5) } }
+        addItem(json("productId" to productId, "quantity" to Int.MAX_VALUE)).andExpect { responseCode("106") }
+        getCart().andExpect { jsonPath("$.data.items[0].quantity") { value(5) } }
     }
 
     @Test
     fun `an out-of-stock product cannot be added`() {
         val productId = createProduct(stock = 0)
         addItem(json("productId" to productId)).andExpect {
-            status { isConflict() }
-            jsonPath("$.message") { value("Out of stock") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("Out of stock") }
         }
     }
 
@@ -166,22 +166,22 @@ class CartTest : IntegrationTestBase() {
 
         listOf(inactive, deleted, 999999L).forEach { productId ->
             addItem(json("productId" to productId)).andExpect {
-                status { isNotFound() }
-                jsonPath("$.message") { value("Product not found") }
+                responseCode("25")
+                jsonPath("$.responseMessage") { value("Product not found") }
             }
         }
-        getCart().andExpect { jsonPath("$.items.length()") { value(0) } }
+        getCart().andExpect { jsonPath("$.data.items.length()") { value(0) } }
     }
 
     @Test
     fun `invalid add requests return 400`() {
         addItem(json("quantity" to 1)).andExpect {
-            status { isBadRequest() }
-            jsonPath("$.fieldErrors[0].field") { value("productId") }
+            responseCode("106")
+            jsonPath("$.data.fieldErrors[0].field") { value("productId") }
         }
         addItem(json("productId" to createProduct(), "quantity" to 0)).andExpect {
-            status { isBadRequest() }
-            jsonPath("$.fieldErrors[0].field") { value("quantity") }
+            responseCode("106")
+            jsonPath("$.data.fieldErrors[0].field") { value("quantity") }
         }
     }
 
@@ -191,35 +191,35 @@ class CartTest : IntegrationTestBase() {
         addItem(json("productId" to productId, "quantity" to 4))
 
         patchItem(productId, json("quantity" to 2)).andExpect {
-            status { isOk() }
-            jsonPath("$.items[0].quantity") { value(2) }
-            jsonPath("$.subtotal") { value(2000.00) }
+            responseCode("00")
+            jsonPath("$.data.items[0].quantity") { value(2) }
+            jsonPath("$.data.subtotal") { value(2000.00) }
         }
         patchItem(productId, json("quantity" to 6)).andExpect {
-            status { isConflict() }
-            jsonPath("$.message") { value("Only 5 available") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("Only 5 available") }
         }
         patchItem(productId, json("quantity" to 0)).andExpect {
-            status { isBadRequest() }
-            jsonPath("$.fieldErrors[0].field") { value("quantity") }
+            responseCode("106")
+            jsonPath("$.data.fieldErrors[0].field") { value("quantity") }
         }
         patchItem(productId, json("quantity" to 3, "price" to 1)).andExpect {
-            status { isBadRequest() }
-            jsonPath("$.fieldErrors[0].message") { value("only quantity can be updated") }
+            responseCode("106")
+            jsonPath("$.data.fieldErrors[0].message") { value("only quantity can be updated") }
         }
-        getCart().andExpect { jsonPath("$.items[0].quantity") { value(2) } }
+        getCart().andExpect { jsonPath("$.data.items[0].quantity") { value(2) } }
     }
 
     @Test
     fun `PATCH and DELETE on a product not in the cart return 404`() {
         val productId = createProduct()
         patchItem(productId, json("quantity" to 1)).andExpect {
-            status { isNotFound() }
-            jsonPath("$.message") { value("Item not in cart") }
+            responseCode("25")
+            jsonPath("$.responseMessage") { value("Item not in cart") }
         }
         mockMvc.delete("/api/customer/cart/items/$productId") {
             header("Authorization", "Bearer $token")
-        }.andExpect { status { isNotFound() } }
+        }.andExpect { responseCode("25") }
     }
 
     @Test
@@ -231,18 +231,18 @@ class CartTest : IntegrationTestBase() {
 
         mockMvc.delete("/api/customer/cart/items/$first") {
             header("Authorization", "Bearer $token")
-        }.andExpect { status { isNoContent() } }
+        }.andExpect { responseCode("00") }
         getCart().andExpect {
-            jsonPath("$.items.length()") { value(2) }
-            jsonPath("$.items[0].productId") { value(second) }
+            jsonPath("$.data.items.length()") { value(2) }
+            jsonPath("$.data.items[0].productId") { value(second) }
         }
 
         mockMvc.delete("/api/customer/cart") {
             header("Authorization", "Bearer $token")
-        }.andExpect { status { isNoContent() } }
+        }.andExpect { responseCode("00") }
         getCart().andExpect {
-            jsonPath("$.items.length()") { value(0) }
-            jsonPath("$.canCheckout") { value(false) }
+            jsonPath("$.data.items.length()") { value(0) }
+            jsonPath("$.data.canCheckout") { value(false) }
         }
     }
 
@@ -265,30 +265,30 @@ class CartTest : IntegrationTestBase() {
         admin("PATCH", "/api/admin/products/$soldOut", json("stockQuantity" to 0))
 
         getCart().andExpect {
-            status { isOk() }
-            jsonPath("$.items.length()") { value(5) }
-            jsonPath("$.items[0].issue") { value(null) }
-            jsonPath("$.items[1].issue") { value("PRODUCT_UNAVAILABLE") }
-            jsonPath("$.items[2].issue") { value("PRODUCT_UNAVAILABLE") }
-            jsonPath("$.items[3].issue") { value("INSUFFICIENT_STOCK") }
-            jsonPath("$.items[3].availableQuantity") { value(3) }
-            jsonPath("$.items[3].available") { value(false) }
-            jsonPath("$.items[4].issue") { value("OUT_OF_STOCK") }
-            jsonPath("$.items[4].availableQuantity") { value(null) }
-            jsonPath("$.itemCount") { value(1) }
-            jsonPath("$.subtotal") { value(100.00) }
-            jsonPath("$.canCheckout") { value(false) }
+            responseCode("00")
+            jsonPath("$.data.items.length()") { value(5) }
+            jsonPath("$.data.items[0].issue") { value(null) }
+            jsonPath("$.data.items[1].issue") { value("PRODUCT_UNAVAILABLE") }
+            jsonPath("$.data.items[2].issue") { value("PRODUCT_UNAVAILABLE") }
+            jsonPath("$.data.items[3].issue") { value("INSUFFICIENT_STOCK") }
+            jsonPath("$.data.items[3].availableQuantity") { value(3) }
+            jsonPath("$.data.items[3].available") { value(false) }
+            jsonPath("$.data.items[4].issue") { value("OUT_OF_STOCK") }
+            jsonPath("$.data.items[4].availableQuantity") { value(null) }
+            jsonPath("$.data.itemCount") { value(1) }
+            jsonPath("$.data.subtotal") { value(100.00) }
+            jsonPath("$.data.canCheckout") { value(false) }
         }
 
         // Fixing the cart makes it checkable again.
-        patchItem(lowered, json("quantity" to 3)).andExpect { status { isOk() } }
+        patchItem(lowered, json("quantity" to 3)).andExpect { responseCode("00") }
         listOf(deactivated, deleted, soldOut).forEach {
             mockMvc.delete("/api/customer/cart/items/$it") { header("Authorization", "Bearer $token") }
         }
         getCart().andExpect {
-            jsonPath("$.items.length()") { value(2) }
-            jsonPath("$.subtotal") { value(3100.00) }
-            jsonPath("$.canCheckout") { value(true) }
+            jsonPath("$.data.items.length()") { value(2) }
+            jsonPath("$.data.subtotal") { value(3100.00) }
+            jsonPath("$.data.canCheckout") { value(true) }
         }
     }
 
@@ -299,8 +299,8 @@ class CartTest : IntegrationTestBase() {
         admin("PATCH", "/api/admin/categories/$categoryId/status", json("status" to "INACTIVE"))
 
         getCart().andExpect {
-            jsonPath("$.items[0].issue") { value("PRODUCT_UNAVAILABLE") }
-            jsonPath("$.canCheckout") { value(false) }
+            jsonPath("$.data.items[0].issue") { value("PRODUCT_UNAVAILABLE") }
+            jsonPath("$.data.canCheckout") { value(false) }
         }
     }
 
@@ -309,13 +309,13 @@ class CartTest : IntegrationTestBase() {
         addItem(json("productId" to createProduct()))
         val other = newCustomerToken()
 
-        getCart(other).andExpect { jsonPath("$.items.length()") { value(0) } }
-        getCart().andExpect { jsonPath("$.items.length()") { value(1) } }
+        getCart(other).andExpect { jsonPath("$.data.items.length()") { value(0) } }
+        getCart().andExpect { jsonPath("$.data.items.length()") { value(1) } }
     }
 
     @Test
     fun `the cart needs a customer token`() {
-        mockMvc.get("/api/customer/cart").andExpect { status { isUnauthorized() } }
-        addItem(json("productId" to createProduct()), withToken = adminToken).andExpect { status { isForbidden() } }
+        mockMvc.get("/api/customer/cart").andExpect { responseCode("115") }
+        addItem(json("productId" to createProduct()), withToken = adminToken).andExpect { responseCode("107") }
     }
 }

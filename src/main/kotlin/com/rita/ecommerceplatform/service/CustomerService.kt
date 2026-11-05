@@ -1,9 +1,9 @@
 package com.rita.ecommerceplatform.service
 
+import com.rita.ecommerceplatform.exception.AccessNotAllowedException
+import com.rita.ecommerceplatform.exception.UnableToLocateRecordException
 import com.rita.ecommerceplatform.model.request.UpdateProfileRequest
 import com.rita.ecommerceplatform.model.response.CustomerProfileResponse
-import com.rita.ecommerceplatform.exception.AccountNotActiveException
-import com.rita.ecommerceplatform.exception.NotFoundException
 import com.rita.ecommerceplatform.model.entity.Customer
 import com.rita.ecommerceplatform.model.entity.CustomerStatus
 import com.rita.ecommerceplatform.repository.database.CustomerRepository
@@ -38,8 +38,8 @@ class CustomerService(private val customerRepository: CustomerRepository) {
      * the token was issued. These endpoints read the row anyway, so the check is free.
      */
     private fun findActiveCustomer(customerId: Long): Customer {
-        val customer = customerRepository.findById(customerId) ?: throw NotFoundException("Customer not found")
-        if (customer.customerStatus != CustomerStatus.ACTIVE) throw AccountNotActiveException()
+        val customer = customerRepository.findById(customerId) ?: throw UnableToLocateRecordException("Customer not found")
+        if (customer.customerStatus != CustomerStatus.ACTIVE) throw AccessNotAllowedException("Account is not active")
         return customer
     }
 }

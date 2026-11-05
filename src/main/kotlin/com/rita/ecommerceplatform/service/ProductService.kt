@@ -1,5 +1,8 @@
 package com.rita.ecommerceplatform.service
 
+import com.rita.ecommerceplatform.exception.BadRequestException
+import com.rita.ecommerceplatform.exception.RecordAlreadyExistException
+import com.rita.ecommerceplatform.exception.UnableToLocateRecordException
 import com.rita.ecommerceplatform.model.request.CreateProductRequest
 import com.rita.ecommerceplatform.model.request.StockAdjustmentRequest
 import com.rita.ecommerceplatform.model.request.UpdateProductRequest
@@ -8,9 +11,6 @@ import com.rita.ecommerceplatform.model.response.AdminProductResponse
 import com.rita.ecommerceplatform.model.response.PageResponse
 import com.rita.ecommerceplatform.model.response.ProductResponse
 import com.rita.ecommerceplatform.model.response.StockMovementResponse
-import com.rita.ecommerceplatform.exception.BadRequestException
-import com.rita.ecommerceplatform.exception.ConflictException
-import com.rita.ecommerceplatform.exception.NotFoundException
 import com.rita.ecommerceplatform.model.entity.CategoryStatus
 import com.rita.ecommerceplatform.model.entity.InventoryMovementType
 import com.rita.ecommerceplatform.model.entity.Product
@@ -122,7 +122,7 @@ class ProductService(
         findNotDeleted(productId)
         // Null here means removing more than there is; the stock is read again, as an order may have just taken some.
         val stockAfter = productRepository.adjustStock(productId, change)
-            ?: throw ConflictException("Only ${productRepository.findById(productId)!!.productStockQuantity} in stock")
+            ?: throw BadRequestException("Only ${productRepository.findById(productId)!!.productStockQuantity} in stock")
         val type = if (change > 0) InventoryMovementType.RESTOCK else InventoryMovementType.ADJUSTMENT
         inventoryMovementRepository.insert(productId, type, change, stockAfter, adminId, request.reason!!.trim())
         return getForAdmin(productId)
@@ -305,10 +305,10 @@ class ProductService(
         }
     }
 
-    private fun productNotFound() = NotFoundException("Product not found")
+    private fun productNotFound() = UnableToLocateRecordException("Product not found")
 
     // Covers deleted products too: their SKUs stay taken (unique constraint includes them).
-    private fun skuInUse() = ConflictException("SKU is already in use")
+    private fun skuInUse() = RecordAlreadyExistException("SKU is already in use")
 
     private fun String?.blankToNull(): String? = this?.trim()?.ifEmpty { null }
 }

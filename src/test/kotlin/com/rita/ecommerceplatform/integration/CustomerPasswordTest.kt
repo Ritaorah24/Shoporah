@@ -39,12 +39,12 @@ class CustomerPasswordTest : IntegrationTestBase() {
         assertNull(passwordChangedAt(customerId))
 
         changePassword(loginCustomer(email), DEFAULT_PASSWORD, "newSecret456").andExpect {
-            status { isNoContent() }
-            content { string("") }
+            responseCode("00")
+            jsonPath("$.data") { doesNotExist() }
         }
 
-        login(email, "newSecret456").andExpect { status { isOk() } }
-        login(email, DEFAULT_PASSWORD).andExpect { status { isUnauthorized() } }
+        login(email, "newSecret456").andExpect { responseCode("00") }
+        login(email, DEFAULT_PASSWORD).andExpect { responseCode("86") }
         assertNotNull(passwordChangedAt(customerId))
     }
 
@@ -54,18 +54,18 @@ class CustomerPasswordTest : IntegrationTestBase() {
         registerCustomer(email)
 
         changePassword(loginCustomer(email), "wrongpass1", "newSecret456").andExpect {
-            status { isUnauthorized() }
-            jsonPath("$.message") { value("Current password is incorrect") }
+            responseCode("86")
+            jsonPath("$.responseMessage") { value("Current password is incorrect") }
         }
 
-        login(email, DEFAULT_PASSWORD).andExpect { status { isOk() } }
+        login(email, DEFAULT_PASSWORD).andExpect { responseCode("00") }
     }
 
     @Test
     fun `the same password as the current one returns 400`() {
         changePassword(newCustomerToken(), DEFAULT_PASSWORD, DEFAULT_PASSWORD).andExpect {
-            status { isBadRequest() }
-            jsonPath("$.message") { value("New password must be different from the current password") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("New password must be different from the current password") }
         }
     }
 
@@ -74,8 +74,8 @@ class CustomerPasswordTest : IntegrationTestBase() {
         val token = newCustomerToken()
         listOf("short1", "abcdefgh", "12345678").forEach { weak ->
             changePassword(token, DEFAULT_PASSWORD, weak).andExpect {
-                status { isBadRequest() }
-                jsonPath("$.fieldErrors[*].field") { value(hasItem("newPassword")) }
+                responseCode("106")
+                jsonPath("$.data.fieldErrors[*].field") { value(hasItem("newPassword")) }
             }
         }
     }
@@ -83,9 +83,9 @@ class CustomerPasswordTest : IntegrationTestBase() {
     @Test
     fun `missing fields return 400 with both field errors`() {
         changePassword(newCustomerToken(), null, null).andExpect {
-            status { isBadRequest() }
-            jsonPath("$.fieldErrors[*].field") { value(hasItem("currentPassword")) }
-            jsonPath("$.fieldErrors[*].field") { value(hasItem("newPassword")) }
+            responseCode("106")
+            jsonPath("$.data.fieldErrors[*].field") { value(hasItem("currentPassword")) }
+            jsonPath("$.data.fieldErrors[*].field") { value(hasItem("newPassword")) }
         }
     }
 
@@ -99,18 +99,18 @@ class CustomerPasswordTest : IntegrationTestBase() {
             .update()
 
         changePassword(token, DEFAULT_PASSWORD, "newSecret456").andExpect {
-            status { isForbidden() }
-            jsonPath("$.message") { value("Account is not active") }
+            responseCode("107")
+            jsonPath("$.responseMessage") { value("Account is not active") }
         }
     }
 
     @Test
     fun `an admin token gets 403 and no token gets 401`() {
-        changePassword(loginSeedAdmin(), DEFAULT_PASSWORD, "newSecret456").andExpect { status { isForbidden() } }
+        changePassword(loginSeedAdmin(), DEFAULT_PASSWORD, "newSecret456").andExpect { responseCode("107") }
 
         mockMvc.patch("/api/customer/me/password") {
             contentType = MediaType.APPLICATION_JSON
             content = json("currentPassword" to DEFAULT_PASSWORD, "newPassword" to "newSecret456")
-        }.andExpect { status { isUnauthorized() } }
+        }.andExpect { responseCode("115") }
     }
 }

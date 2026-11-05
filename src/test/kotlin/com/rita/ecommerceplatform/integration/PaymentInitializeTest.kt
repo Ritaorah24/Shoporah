@@ -36,7 +36,7 @@ class PaymentInitializeTest : IntegrationTestBase() {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to unique("Cat"))
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["categoryId"].asInt()
     }
 
@@ -51,7 +51,7 @@ class PaymentInitializeTest : IntegrationTestBase() {
                 "price" to price,
                 "stockQuantity" to 10,
             )
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["productId"].asLong()
     }
 
@@ -67,7 +67,7 @@ class PaymentInitializeTest : IntegrationTestBase() {
                 "state" to "Lagos",
                 "country" to "Nigeria",
             )
-        }.andExpect { status { isCreated() } }
+        }.andExpect { responseCode("00") }
     }
 
     /** Puts one new product in the cart and checks out; returns the checkout response (the order). */
@@ -76,11 +76,11 @@ class PaymentInitializeTest : IntegrationTestBase() {
             header("Authorization", "Bearer $withToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("productId" to createProduct(price), "quantity" to 1)
-        }.andExpect { status { isOk() } }
+        }.andExpect { responseCode("00") }
         val result = mockMvc.post("/api/customer/orders") {
             header("Authorization", "Bearer $withToken")
             header("Idempotency-Key", UUID.randomUUID().toString())
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)
     }
 
@@ -112,11 +112,11 @@ class PaymentInitializeTest : IntegrationTestBase() {
         val total = order["total"].decimalValue()
 
         val result = initialize(order["reference"].asString()).andExpect {
-            status { isCreated() }
-            jsonPath("$.orderReference") { value(order["reference"].asString()) }
-            jsonPath("$.status") { value("PENDING") }
-            jsonPath("$.currency") { value("NGN") }
-            jsonPath("$.amount") { value(total.toDouble()) }
+            responseCode("00"); jsonPath("$.responseMessage") { value("Payment started") }
+            jsonPath("$.data.orderReference") { value(order["reference"].asString()) }
+            jsonPath("$.data.status") { value("PENDING") }
+            jsonPath("$.data.currency") { value("NGN") }
+            jsonPath("$.data.amount") { value(total.toDouble()) }
         }.andReturn()
         val body = readJson(result)
         val reference = body["paymentReference"].asString()
@@ -144,7 +144,7 @@ class PaymentInitializeTest : IntegrationTestBase() {
         val order = placeOrder(price = BigDecimal("12500.55"))
         val total = order["total"].decimalValue()
 
-        val result = initialize(order["reference"].asString()).andExpect { status { isCreated() } }.andReturn()
+        val result = initialize(order["reference"].asString()).andExpect { responseCode("00"); jsonPath("$.responseMessage") { value("Payment started") } }.andReturn()
 
         val sent = sentToGateway(readJson(result)["paymentReference"].asString()).single()
         assertEquals(total.movePointRight(2).longValueExact(), sent.amountKobo)
@@ -154,9 +154,9 @@ class PaymentInitializeTest : IntegrationTestBase() {
     @Test
     fun `starting again returns the open payment instead of a second one`() {
         val order = placeOrder()
-        val first = readJson(initialize(order["reference"].asString()).andExpect { status { isCreated() } }.andReturn())
+        val first = readJson(initialize(order["reference"].asString()).andExpect { responseCode("00"); jsonPath("$.responseMessage") { value("Payment started") } }.andReturn())
 
-        val second = readJson(initialize(order["reference"].asString()).andExpect { status { isOk() } }.andReturn())
+        val second = readJson(initialize(order["reference"].asString()).andExpect { responseCode("00"); jsonPath("$.responseMessage") { value("Successful") } }.andReturn())
 
         assertEquals(first["paymentReference"].asString(), second["paymentReference"].asString())
         assertEquals(first["authorizationUrl"].asString(), second["authorizationUrl"].asString())
@@ -168,8 +168,8 @@ class PaymentInitializeTest : IntegrationTestBase() {
     fun `the order reference is matched case-insensitively`() {
         val order = placeOrder()
         initialize(order["reference"].asString().lowercase()).andExpect {
-            status { isCreated() }
-            jsonPath("$.orderReference") { value(order["reference"].asString()) }
+            responseCode("00"); jsonPath("$.responseMessage") { value("Payment started") }
+            jsonPath("$.data.orderReference") { value(order["reference"].asString()) }
         }
     }
 
@@ -179,10 +179,10 @@ class PaymentInitializeTest : IntegrationTestBase() {
         val otherToken = newCustomerToken()
 
         initialize(order["reference"].asString(), withToken = otherToken).andExpect {
-            status { isNotFound() }
-            jsonPath("$.message") { value("Order not found") }
+            responseCode("25")
+            jsonPath("$.responseMessage") { value("Order not found") }
         }
-        initialize("ORD-DOES-NOT-EXIST").andExpect { status { isNotFound() } }
+        initialize("ORD-DOES-NOT-EXIST").andExpect { responseCode("25") }
         assertEquals(0, paymentRows(order["orderId"].asLong()).size)
     }
 
@@ -197,8 +197,8 @@ class PaymentInitializeTest : IntegrationTestBase() {
 
         listOf(cancelled, paid).forEach { order ->
             initialize(order["reference"].asString()).andExpect {
-                status { isConflict() }
-                jsonPath("$.message") { value("This order cannot be paid") }
+                responseCode("106")
+                jsonPath("$.responseMessage") { value("This order cannot be paid") }
             }
             assertEquals(0, paymentRows(order["orderId"].asLong()).size)
         }
@@ -209,13 +209,13 @@ class PaymentInitializeTest : IntegrationTestBase() {
         val order = placeOrder()
         paymentGateway.down = true
         try {
-            initialize(order["reference"].asString()).andExpect { status { isBadGateway() } }
+            initialize(order["reference"].asString()).andExpect { responseCode("22") }
         } finally {
             paymentGateway.down = false
         }
         assertEquals(listOf("FAILED"), paymentRows(order["orderId"].asLong()).map { it["paymentstatus"] })
 
-        initialize(order["reference"].asString()).andExpect { status { isCreated() } }
+        initialize(order["reference"].asString()).andExpect { responseCode("00"); jsonPath("$.responseMessage") { value("Payment started") } }
 
         val rows = paymentRows(order["orderId"].asLong())
         assertEquals(listOf("FAILED", "PENDING"), rows.map { it["paymentstatus"] })
@@ -239,8 +239,8 @@ class PaymentInitializeTest : IntegrationTestBase() {
             .update()
 
         initialize(order["reference"].asString()).andExpect {
-            status { isConflict() }
-            jsonPath("$.message") { value("A payment for this order is already being started, try again in a moment") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("A payment for this order is already being started, try again in a moment") }
         }
 
         // Older than the stale limit: the request that started it must have crashed.
@@ -251,21 +251,21 @@ class PaymentInitializeTest : IntegrationTestBase() {
             .param("orderId", orderId)
             .update()
 
-        initialize(order["reference"].asString()).andExpect { status { isCreated() } }
+        initialize(order["reference"].asString()).andExpect { responseCode("00"); jsonPath("$.responseMessage") { value("Payment started") } }
         assertEquals(listOf("FAILED", "PENDING"), paymentRows(orderId).map { it["paymentstatus"] })
     }
 
     @Test
     fun `a missing or blank order reference is rejected`() {
-        initialize(null).andExpect { status { isBadRequest() } }
-        initialize("   ").andExpect { status { isBadRequest() } }
+        initialize(null).andExpect { responseCode("106") }
+        initialize("   ").andExpect { responseCode("106") }
     }
 
     @Test
     fun `only a logged-in customer can start a payment`() {
         val order = placeOrder()
-        initialize(order["reference"].asString(), withToken = null).andExpect { status { isUnauthorized() } }
-        initialize(order["reference"].asString(), withToken = adminToken).andExpect { status { isForbidden() } }
+        initialize(order["reference"].asString(), withToken = null).andExpect { responseCode("115") }
+        initialize(order["reference"].asString(), withToken = adminToken).andExpect { responseCode("107") }
         assertEquals(0, paymentRows(order["orderId"].asLong()).size)
     }
 

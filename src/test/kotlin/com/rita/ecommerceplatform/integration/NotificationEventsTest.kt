@@ -64,7 +64,7 @@ class NotificationEventsTest : IntegrationTestBase() {
                 "state" to "Lagos",
                 "country" to "Nigeria",
             )
-        }.andExpect { status { isCreated() } }
+        }.andExpect { responseCode("00") }
         return shopper
     }
 
@@ -73,7 +73,7 @@ class NotificationEventsTest : IntegrationTestBase() {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to unique("Cat"))
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["categoryId"].asInt()
     }
 
@@ -83,12 +83,12 @@ class NotificationEventsTest : IntegrationTestBase() {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to unique("Phone"), "sku" to unique("sku"), "categoryId" to categoryId, "price" to 1000, "stockQuantity" to 10)
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         mockMvc.post("/api/customer/cart/items") {
             header("Authorization", "Bearer ${shopper.token}")
             contentType = MediaType.APPLICATION_JSON
             content = json("productId" to readJson(product)["productId"].asLong(), "quantity" to 2)
-        }.andExpect { status { isOk() } }
+        }.andExpect { responseCode("00") }
     }
 
     private fun checkout(shopper: Shopper, key: UUID = UUID.randomUUID()): ResultActionsDsl =
@@ -100,7 +100,7 @@ class NotificationEventsTest : IntegrationTestBase() {
     /** A new PENDING order; returns its orderId and reference. */
     private fun placeOrder(shopper: Shopper): Pair<Long, String> {
         fillCart(shopper)
-        val order = readJson(checkout(shopper).andExpect { status { isCreated() } }.andReturn())
+        val order = readJson(checkout(shopper).andExpect { responseCode("00"); jsonPath("$.responseMessage") { value("Order created") } }.andReturn())
         return order["orderId"].asLong() to order["reference"].asString()
     }
 
@@ -109,13 +109,13 @@ class NotificationEventsTest : IntegrationTestBase() {
             header("Authorization", "Bearer ${shopper.token}")
             contentType = MediaType.APPLICATION_JSON
             content = json("orderReference" to orderReference)
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["paymentReference"].asString()
     }
 
     private fun verify(shopper: Shopper, paymentReference: String) {
         mockMvc.get("/api/customer/payments/verify/$paymentReference") { header("Authorization", "Bearer ${shopper.token}") }
-            .andExpect { status { isOk() } }
+            .andExpect { responseCode("00") }
     }
 
     private fun webhook(paymentReference: String) {
@@ -135,7 +135,7 @@ class NotificationEventsTest : IntegrationTestBase() {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("status" to status, "note" to note)
-        }.andExpect { status { isOk() } }
+        }.andExpect { responseCode("00") }
     }
 
     private fun rows(email: String, type: NotificationType? = null): List<Row> =
@@ -180,11 +180,11 @@ class NotificationEventsTest : IntegrationTestBase() {
         val shopper = newShopper()
         fillCart(shopper)
         val key = UUID.randomUUID()
-        val order = readJson(checkout(shopper, key).andExpect { status { isCreated() } }.andReturn())
+        val order = readJson(checkout(shopper, key).andExpect { responseCode("00"); jsonPath("$.responseMessage") { value("Order created") } }.andReturn())
         val orderId = order["orderId"].asLong()
         val reference = order["reference"].asString()
 
-        checkout(shopper, key).andExpect { status { isOk() } }
+        checkout(shopper, key).andExpect { responseCode("00"); jsonPath("$.responseMessage") { value("Successful") } }
         assertEquals(1, orderRows(orderId, NotificationType.ORDER_CONFIRMATION))
 
         drainOutbox()
@@ -254,18 +254,18 @@ class NotificationEventsTest : IntegrationTestBase() {
             header("Authorization", "Bearer ${shopper.token}")
             contentType = MediaType.APPLICATION_JSON
             content = json("currentPassword" to DEFAULT_PASSWORD, "newPassword" to "changed456")
-        }.andExpect { status { isNoContent() } }
+        }.andExpect { responseCode("00") }
         assertEquals(1, rows(shopper.email, NotificationType.PASSWORD_CHANGED).size)
 
         mockMvc.post("/api/auth/forgot-password") {
             contentType = MediaType.APPLICATION_JSON
             content = json("email" to shopper.email)
-        }.andExpect { status { isAccepted() } }
+        }.andExpect { responseCode("00") }
         val token = awaitResetToken(shopper.email)
         mockMvc.post("/api/auth/reset-password") {
             contentType = MediaType.APPLICATION_JSON
             content = json("token" to token, "newPassword" to "reset789x")
-        }.andExpect { status { isNoContent() } }
+        }.andExpect { responseCode("00") }
         assertEquals(2, rows(shopper.email, NotificationType.PASSWORD_CHANGED).size)
 
         drainOutbox()

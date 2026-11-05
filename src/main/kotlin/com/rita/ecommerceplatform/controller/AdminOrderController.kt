@@ -1,13 +1,11 @@
 package com.rita.ecommerceplatform.controller
 
+import com.rita.ecommerceplatform.model.response.BaseDataResponse
+import com.rita.ecommerceplatform.exception.AccessNotAllowedException
 import com.rita.ecommerceplatform.config.OpenApiConfig
 import com.rita.ecommerceplatform.model.request.AdminCancelOrderRequest
 import com.rita.ecommerceplatform.model.request.RefundOrderRequest
 import com.rita.ecommerceplatform.model.request.UpdateOrderStatusRequest
-import com.rita.ecommerceplatform.model.response.AdminOrderResponse
-import com.rita.ecommerceplatform.model.response.AdminOrderSummaryResponse
-import com.rita.ecommerceplatform.model.response.PageResponse
-import com.rita.ecommerceplatform.exception.AccountNotActiveException
 import com.rita.ecommerceplatform.security.CurrentUser
 import com.rita.ecommerceplatform.security.UserType
 import com.rita.ecommerceplatform.service.AdminOrderFilters
@@ -18,7 +16,6 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import org.springframework.format.annotation.DateTimeFormat
-import org.springframework.http.HttpStatus
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.web.bind.annotation.GetMapping
@@ -28,7 +25,6 @@ import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
-import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 import java.time.LocalDate
 
@@ -59,11 +55,14 @@ class AdminOrderController(
         @RequestParam(required = false) customer: String?,
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) from: LocalDate?,
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) to: LocalDate?,
-    ): PageResponse<AdminOrderSummaryResponse> =
-        adminOrderService.list(page, size, AdminOrderFilters(status, paymentStatus, reference, customerId, customer, from, to))
+    ): BaseDataResponse {
+        return BaseDataResponse("00", "Successful", adminOrderService.list(page, size, AdminOrderFilters(status, paymentStatus, reference, customerId, customer, from, to)))
+    }
 
     @GetMapping("/{orderId}")
-    fun get(@PathVariable orderId: Long): AdminOrderResponse = adminOrderService.get(orderId)
+    fun get(@PathVariable orderId: Long): BaseDataResponse {
+        return BaseDataResponse("00", "Successful", adminOrderService.get(orderId))
+    }
 
     /**
      * CONFIRMED → PROCESSING → SHIPPED → DELIVERED, one step at a time. A skipped, backward or repeated step
@@ -74,7 +73,9 @@ class AdminOrderController(
         @AuthenticationPrincipal jwt: Jwt,
         @PathVariable orderId: Long,
         @Valid @RequestBody request: UpdateOrderStatusRequest,
-    ): AdminOrderResponse = adminOrderService.updateStatus(adminId(jwt), orderId, request)
+    ): BaseDataResponse {
+        return BaseDataResponse("00", "Successful", adminOrderService.updateStatus(adminId(jwt), orderId, request))
+    }
 
     /**
      * Cancels an order that has not shipped, with a required reason. A paid order's stock goes back and the order
@@ -85,7 +86,9 @@ class AdminOrderController(
         @AuthenticationPrincipal jwt: Jwt,
         @PathVariable orderId: Long,
         @Valid @RequestBody request: AdminCancelOrderRequest,
-    ): AdminOrderResponse = adminOrderService.cancel(adminId(jwt), orderId, request)
+    ): BaseDataResponse {
+        return BaseDataResponse("00", "Successful", adminOrderService.cancel(adminId(jwt), orderId, request))
+    }
 
     /**
      * Refunds the whole order total to the customer through Paystack: a paid order that is CANCELLED, or DELIVERED
@@ -93,17 +96,18 @@ class AdminOrderController(
      * see refunds[] on the order, and POST /api/admin/refunds/{refundId}/refresh to check on it.
      */
     @PostMapping("/{orderId}/refund")
-    @ResponseStatus(HttpStatus.ACCEPTED)
     fun refund(
         @AuthenticationPrincipal jwt: Jwt,
         @PathVariable orderId: Long,
         @Valid @RequestBody request: RefundOrderRequest,
-    ): AdminOrderResponse = refundService.start(adminId(jwt), orderId, request)
+    ): BaseDataResponse {
+        return BaseDataResponse("00", "Successful", refundService.start(adminId(jwt), orderId, request))
+    }
 
     // Roles already restrict this URL to admin tokens; this guards against a mis-issued token.
     private fun adminId(jwt: Jwt): Int {
         val currentUser = CurrentUser.from(jwt)
-        if (currentUser.userType != UserType.ADMIN) throw AccountNotActiveException()
+        if (currentUser.userType != UserType.ADMIN) throw AccessNotAllowedException("Account is not active")
         return currentUser.id.toInt()
     }
 }

@@ -36,7 +36,7 @@ class ProductImageDisplayTest : IntegrationTestBase() {
                 header("Authorization", "Bearer $adminToken")
                 contentType = MediaType.APPLICATION_JSON
                 content = json("name" to "Cat-${UUID.randomUUID().toString().take(8)}")
-            }.andExpect { status { isCreated() } }.andReturn(),
+            }.andExpect { responseCode("00") }.andReturn(),
         )["categoryId"].asInt()
     }
 
@@ -51,7 +51,7 @@ class ProductImageDisplayTest : IntegrationTestBase() {
                 "price" to 1000,
                 "stockQuantity" to 10,
             )
-        }.andExpect { status { isCreated() } }.andReturn(),
+        }.andExpect { responseCode("00") }.andReturn(),
     )["productId"].asLong()
 
     /** Uploads an image and returns (imageId, url). */
@@ -61,7 +61,7 @@ class ProductImageDisplayTest : IntegrationTestBase() {
                 header("Authorization", "Bearer $adminToken")
                 file(MockMultipartFile("file", "photo", "image/jpeg", content))
                 altText?.let { param("altText", it) }
-            }.andExpect { status { isCreated() } }.andReturn(),
+            }.andExpect { responseCode("00") }.andReturn(),
         )
         return image["imageId"].asLong() to image["url"].asString()
     }
@@ -74,16 +74,16 @@ class ProductImageDisplayTest : IntegrationTestBase() {
         }
 
     private fun publicProduct(productId: Long): JsonNode = readJson(
-        mockMvc.get("/api/products/$productId").andExpect { status { isOk() } }.andReturn(),
+        mockMvc.get("/api/products/$productId").andExpect { responseCode("00") }.andReturn(),
     )
 
     private fun adminProduct(productId: Long): JsonNode = readJson(
         mockMvc.get("/api/admin/products/$productId") { header("Authorization", "Bearer $adminToken") }
-            .andExpect { status { isOk() } }.andReturn(),
+            .andExpect { responseCode("00") }.andReturn(),
     )
 
     private fun publicList(): Map<Long, JsonNode> = readJson(
-        mockMvc.get("/api/products") { param("categoryId", categoryId.toString()) }.andExpect { status { isOk() } }.andReturn(),
+        mockMvc.get("/api/products") { param("categoryId", categoryId.toString()) }.andExpect { responseCode("00") }.andReturn(),
     )["content"].toList().associateBy { it["productId"].asLong() }
 
     private fun imageIds(images: JsonNode): List<Long> = images.toList().map { it["imageId"].asLong() }
@@ -142,7 +142,7 @@ class ProductImageDisplayTest : IntegrationTestBase() {
             mockMvc.get("/api/admin/products") {
                 header("Authorization", "Bearer $adminToken")
                 param("categoryId", categoryId.toString())
-            }.andExpect { status { isOk() } }.andReturn(),
+            }.andExpect { responseCode("00") }.andReturn(),
         )["content"].toList().associateBy { it["productId"].asLong() }
         assertEquals(onlyUrl, adminList.getValue(withOne)["primaryImageUrl"].asString())
     }
@@ -154,15 +154,15 @@ class ProductImageDisplayTest : IntegrationTestBase() {
         val (second, secondUrl) = upload(productId)
 
         patchImage(productId, second, "primary" to true).andExpect {
-            status { isOk() }
-            jsonPath("$[0].imageId") { value(second) }
-            jsonPath("$[0].primary") { value(true) }
-            jsonPath("$[1].imageId") { value(first) }
-            jsonPath("$[1].primary") { value(false) }
+            responseCode("00")
+            jsonPath("$.data[0].imageId") { value(second) }
+            jsonPath("$.data[0].primary") { value(true) }
+            jsonPath("$.data[1].imageId") { value(first) }
+            jsonPath("$.data[1].primary") { value(false) }
         }
         assertEquals(secondUrl, publicList().getValue(productId)["primaryImageUrl"].asString())
         // Making the primary image primary again changes nothing.
-        patchImage(productId, second, "primary" to true).andExpect { status { isOk() } }
+        patchImage(productId, second, "primary" to true).andExpect { responseCode("00") }
         assertEquals(listOf(second, first), imageIds(adminProduct(productId)["images"]))
     }
 
@@ -176,13 +176,13 @@ class ProductImageDisplayTest : IntegrationTestBase() {
         val pool = Executors.newFixedThreadPool(2)
         val statuses = try {
             pool.invokeAll(listOf(second, third).map { id ->
-                Callable { patchImage(productId, id, "primary" to true).andReturn().response.status }
+                Callable { patchImage(productId, id, "primary" to true).andReturn().responseCodeOf() }
             }).map { it.get() }
         } finally {
             pool.shutdown()
         }
 
-        assertEquals(listOf(200, 200), statuses)
+        assertEquals(listOf("00", "00"), statuses)
         val primaries = adminProduct(productId)["images"].toList().filter { it["primary"].asBoolean() }
         assertEquals(1, primaries.size)
         assertTrue(primaries.single()["imageId"].asLong() in setOf(second, third))
@@ -197,29 +197,29 @@ class ProductImageDisplayTest : IntegrationTestBase() {
 
         // Third moves before second (primary stays first whatever its sortOrder).
         patchImage(productId, third, "sortOrder" to 0, "altText" to "  Side view  ").andExpect {
-            status { isOk() }
-            jsonPath("$[1].imageId") { value(third) }
-            jsonPath("$[1].altText") { value("Side view") }
+            responseCode("00")
+            jsonPath("$.data[1].imageId") { value(third) }
+            jsonPath("$.data[1].altText") { value("Side view") }
         }
         assertEquals(listOf(first, third, second), imageIds(adminProduct(productId)["images"]))
 
         patchImage(productId, first, "altText" to "").andExpect {
-            status { isOk() }
-            jsonPath("$[0].altText") { doesNotExist() }
+            responseCode("00")
+            jsonPath("$.data[0].altText") { doesNotExist() }
         }
         assertTrue(publicProduct(productId)["images"][0].isNullAt("altText"))
 
         patchImage(productId, second, "primary" to false).andExpect {
-            status { isBadRequest() }
-            jsonPath("$.message") { value("Choose another image as primary instead") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("Choose another image as primary instead") }
         }
         patchImage(productId, second).andExpect {
-            status { isBadRequest() }
-            jsonPath("$.message") { value("Nothing to update") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("Nothing to update") }
         }
-        patchImage(productId, second, "altText" to "x".repeat(201)).andExpect { status { isBadRequest() } }
-        patchImage(productId, second, "sortOrder" to 1000).andExpect { status { isBadRequest() } }
-        patchImage(productId, second, "sortOrder" to -1).andExpect { status { isBadRequest() } }
+        patchImage(productId, second, "altText" to "x".repeat(201)).andExpect { responseCode("106") }
+        patchImage(productId, second, "sortOrder" to 1000).andExpect { responseCode("106") }
+        patchImage(productId, second, "sortOrder" to -1).andExpect { responseCode("106") }
     }
 
     @Test
@@ -228,12 +228,12 @@ class ProductImageDisplayTest : IntegrationTestBase() {
         val (imageId, _) = upload(productId)
         val other = createProduct()
 
-        patchImage(other, imageId, "altText" to "x").andExpect { status { isNotFound() } }
-        patchImage(productId, imageId, "altText" to "x", withToken = newCustomerToken()).andExpect { status { isForbidden() } }
+        patchImage(other, imageId, "altText" to "x").andExpect { responseCode("25") }
+        patchImage(productId, imageId, "altText" to "x", withToken = newCustomerToken()).andExpect { responseCode("107") }
 
         mockMvc.delete("/api/admin/products/$productId") { header("Authorization", "Bearer $adminToken") }
-            .andExpect { status { isNoContent() } }
-        patchImage(productId, imageId, "altText" to "x").andExpect { status { isNotFound() } }
+            .andExpect { responseCode("00") }
+        patchImage(productId, imageId, "altText" to "x").andExpect { responseCode("25") }
     }
 
     @Test
@@ -247,11 +247,11 @@ class ProductImageDisplayTest : IntegrationTestBase() {
                 header("Authorization", "Bearer $token")
                 contentType = MediaType.APPLICATION_JSON
                 content = json("productId" to productId, "quantity" to 1)
-            }.andExpect { status { isOk() } }
+            }.andExpect { responseCode("00") }
         }
 
         val items = readJson(
-            mockMvc.get("/api/customer/cart") { header("Authorization", "Bearer $token") }.andExpect { status { isOk() } }.andReturn(),
+            mockMvc.get("/api/customer/cart") { header("Authorization", "Bearer $token") }.andExpect { responseCode("00") }.andReturn(),
         )["items"].toList().associateBy { it["productId"].asLong() }
         assertEquals(url, items.getValue(withImage)["imageUrl"].asString())
         assertTrue(items.getValue(withoutImage).isNullAt("imageUrl"))

@@ -10,31 +10,27 @@ import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.patch
 import org.springframework.test.web.servlet.post
 
-/** Spring MVC's own errors come back in the same ApiError shape as ours. */
+/** Spring MVC's own errors come back in the same BaseResponse shape as ours. */
 class ErrorFormatTest : IntegrationTestBase() {
 
-    private fun ResultActionsDsl.expectApiError(code: Int, message: String, path: String) = andExpect {
-        status { isEqualTo(code) }
-        jsonPath("$.timestamp") { isString() }
-        jsonPath("$.status") { value(code) }
-        jsonPath("$.error") { isString() }
-        jsonPath("$.message") { value(message) }
-        jsonPath("$.path") { value(path) }
-        jsonPath("$.fieldErrors") { doesNotExist() }
+    private fun ResultActionsDsl.expectError(code: String, message: String) = andExpect {
+        responseCode(code)
+        jsonPath("$.responseMessage") { value(message) }
+        jsonPath("$.data") { doesNotExist() }
     }
 
     @Test
     fun `unknown URL returns 404`() {
         mockMvc.get("/api/customer/nothing") {
             header("Authorization", "Bearer ${newCustomerToken()}")
-        }.expectApiError(404, "No endpoint found for this URL", "/api/customer/nothing")
+        }.expectError("25", "No endpoint found for this URL")
     }
 
     @Test
     fun `unsupported method returns 405 with the Allow header`() {
         mockMvc.delete("/api/customer/me") {
             header("Authorization", "Bearer ${newCustomerToken()}")
-        }.expectApiError(405, "HTTP method DELETE is not supported for this URL", "/api/customer/me")
+        }.expectError("106", "HTTP method DELETE is not supported for this URL")
             .andExpect { header { string("Allow", containsString("GET")) } }
     }
 
@@ -44,7 +40,7 @@ class ErrorFormatTest : IntegrationTestBase() {
             header("Authorization", "Bearer ${newCustomerToken()}")
             contentType = MediaType.TEXT_PLAIN
             content = "hello"
-        }.expectApiError(415, "Content-Type must be application/json", "/api/customer/me")
+        }.expectError("106", "Content-Type must be application/json")
     }
 
     @Test
@@ -52,6 +48,6 @@ class ErrorFormatTest : IntegrationTestBase() {
         mockMvc.post("/api/auth/register") {
             contentType = MediaType.APPLICATION_JSON
             content = """{"firstName":"""
-        }.expectApiError(400, "Malformed or unreadable JSON request body", "/api/auth/register")
+        }.expectError("106", "Malformed or unreadable JSON request body")
     }
 }

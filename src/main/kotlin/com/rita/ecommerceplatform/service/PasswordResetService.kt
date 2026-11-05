@@ -1,10 +1,10 @@
 package com.rita.ecommerceplatform.service
 
+import com.rita.ecommerceplatform.exception.AccessNotAllowedException
+import com.rita.ecommerceplatform.exception.BadRequestException
 import com.rita.ecommerceplatform.config.EmailExecutorConfig
 import com.rita.ecommerceplatform.model.request.ForgotPasswordRequest
 import com.rita.ecommerceplatform.model.request.ResetPasswordRequest
-import com.rita.ecommerceplatform.exception.AccountNotActiveException
-import com.rita.ecommerceplatform.exception.BadRequestException
 import com.rita.ecommerceplatform.model.entity.Customer
 import com.rita.ecommerceplatform.model.entity.CustomerAuthStatus
 import com.rita.ecommerceplatform.model.entity.CustomerStatus
@@ -77,7 +77,7 @@ class PasswordResetService(
         val customer = customerRepository.findById(auth.customerAuthCustomerId!!) ?: throw invalidLink()
         // Only someone holding a valid link gets this far, so revealing the status here is fine.
         if (customer.customerStatus != CustomerStatus.ACTIVE || auth.customerAuthStatus != CustomerAuthStatus.ACTIVE) {
-            throw AccountNotActiveException()
+            throw AccessNotAllowedException("Account is not active")
         }
         if (customerAuthRepository.resetPassword(tokenHash, passwordEncoder.encode(request.newPassword!!)!!) != 1) {
             throw invalidLink()

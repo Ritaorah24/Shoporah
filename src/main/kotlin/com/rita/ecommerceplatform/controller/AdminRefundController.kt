@@ -1,7 +1,7 @@
 package com.rita.ecommerceplatform.controller
 
+import com.rita.ecommerceplatform.model.response.BaseDataResponse
 import com.rita.ecommerceplatform.config.OpenApiConfig
-import com.rita.ecommerceplatform.model.response.AdminOrderResponse
 import com.rita.ecommerceplatform.service.RefundService
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
@@ -22,5 +22,7 @@ class AdminRefundController(private val refundService: RefundService) {
      * emails the customer; FAILED leaves the order as it was so it can be refunded again. Returns the order.
      */
     @PostMapping("/{refundId}/refresh")
-    fun refresh(@PathVariable refundId: Long): AdminOrderResponse = refundService.refresh(refundId)
+    fun refresh(@PathVariable refundId: Long): BaseDataResponse {
+        return BaseDataResponse("00", "Successful", refundService.refresh(refundId))
+    }
 }

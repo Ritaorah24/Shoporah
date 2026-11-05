@@ -40,7 +40,7 @@ class AdminCustomerTest : IntegrationTestBase() {
                     "phoneNumber" to phone,
                     "password" to DEFAULT_PASSWORD,
                 )
-            }.andExpect { status { isCreated() } }.andReturn(),
+            }.andExpect { responseCode("00") }.andReturn(),
         )["customerId"].asLong()
         return id to email
     }
@@ -73,7 +73,7 @@ class AdminCustomerTest : IntegrationTestBase() {
         mockMvc.get("/api/admin/customers") {
             header("Authorization", "Bearer $adminToken")
             params.forEach { (name, value) -> param(name, value) }
-        }.andExpect { status { isOk() } }.andReturn(),
+        }.andExpect { responseCode("00") }.andReturn(),
     )
 
     private fun ids(vararg params: Pair<String, String>): List<Long> =
@@ -124,18 +124,18 @@ class AdminCustomerTest : IntegrationTestBase() {
         insertOrder(ada, 9000, "REFUNDED")
 
         mockMvc.get("/api/admin/customers/$ada") { header("Authorization", "Bearer $adminToken") }.andExpect {
-            status { isOk() }
-            jsonPath("$.email") { value(adaEmail) }
-            jsonPath("$.firstName") { value("Ada") }
-            jsonPath("$.orderCount") { value(4) }
-            jsonPath("$.paidOrderCount") { value(2) }
-            jsonPath("$.totalSpent") { value(6500.0) }
+            responseCode("00")
+            jsonPath("$.data.email") { value(adaEmail) }
+            jsonPath("$.data.firstName") { value("Ada") }
+            jsonPath("$.data.orderCount") { value(4) }
+            jsonPath("$.data.paidOrderCount") { value(2) }
+            jsonPath("$.data.totalSpent") { value(6500.0) }
         }
 
         val (newcomer, _) = register("Bola")
         mockMvc.get("/api/admin/customers/$newcomer") { header("Authorization", "Bearer $adminToken") }.andExpect {
-            jsonPath("$.orderCount") { value(0) }
-            jsonPath("$.totalSpent") { value(0) }
+            jsonPath("$.data.orderCount") { value(0) }
+            jsonPath("$.data.totalSpent") { value(0) }
         }
     }
 
@@ -143,23 +143,23 @@ class AdminCustomerTest : IntegrationTestBase() {
     fun `no secrets are returned, unknown customers are 404, bad status is 400 and customers are refused`() {
         val (ada, _) = register("Ada")
         val body = mockMvc.get("/api/admin/customers/$ada") { header("Authorization", "Bearer $adminToken") }
-            .andExpect { status { isOk() } }.andReturn().response.contentAsString
+            .andExpect { responseCode("00") }.andReturn().response.contentAsString
         listOf("password", "hash", "token").forEach { assertFalse(body.contains(it, ignoreCase = true), body) }
 
         mockMvc.get("/api/admin/customers/999999999") { header("Authorization", "Bearer $adminToken") }
-            .andExpect { status { isNotFound() } }
+            .andExpect { responseCode("25") }
         mockMvc.get("/api/admin/customers") {
             header("Authorization", "Bearer $adminToken")
             param("status", "GONE")
         }.andExpect {
-            status { isBadRequest() }
-            jsonPath("$.message") { value("status must be one of ACTIVE, SUSPENDED, DEACTIVATED, DELETED") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("status must be one of ACTIVE, SUSPENDED, DEACTIVATED, DELETED") }
         }
 
         val customerToken = newCustomerToken()
         mockMvc.get("/api/admin/customers") { header("Authorization", "Bearer $customerToken") }
-            .andExpect { status { isForbidden() } }
+            .andExpect { responseCode("107") }
         mockMvc.get("/api/admin/customers/$ada") { header("Authorization", "Bearer $customerToken") }
-            .andExpect { status { isForbidden() } }
+            .andExpect { responseCode("107") }
     }
 }

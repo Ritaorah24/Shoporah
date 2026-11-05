@@ -1,7 +1,7 @@
 package com.rita.ecommerceplatform.service
 
-import com.rita.ecommerceplatform.exception.ConflictException
-import com.rita.ecommerceplatform.exception.ForbiddenException
+import com.rita.ecommerceplatform.exception.BadRequestException
+import com.rita.ecommerceplatform.exception.AccessNotAllowedException
 import com.rita.ecommerceplatform.model.entity.OrderStatus
 import com.rita.ecommerceplatform.model.entity.OrderStatus.CANCELLED
 import com.rita.ecommerceplatform.model.entity.OrderStatus.CONFIRMED
@@ -41,7 +41,7 @@ class OrderStatusRulesTest {
                 if (actor in actors) {
                     assertDoesNotThrow("$actor $from -> $to") { OrderStatusRules.ensureCanChange(from, to, actor) }
                 } else {
-                    assertFailsWith<ForbiddenException>("$actor $from -> $to") {
+                    assertFailsWith<AccessNotAllowedException>("$actor $from -> $to") {
                         OrderStatusRules.ensureCanChange(from, to, actor)
                     }
                 }
@@ -56,7 +56,7 @@ class OrderStatusRulesTest {
             OrderStatus.entries.forEach { to ->
                 if ((from to to) !in expected) {
                     OrderStatusActor.entries.forEach { actor ->
-                        assertFailsWith<ConflictException>("$actor $from -> $to") {
+                        assertFailsWith<BadRequestException>("$actor $from -> $to") {
                             OrderStatusRules.ensureCanChange(from, to, actor)
                         }
                     }
@@ -91,10 +91,10 @@ class OrderStatusRulesTest {
 
     @Test
     fun `error messages name the change and the actor`() {
-        val conflict = assertFailsWith<ConflictException> { OrderStatusRules.ensureCanChange(SHIPPED, PENDING, ADMIN) }
+        val conflict = assertFailsWith<BadRequestException> { OrderStatusRules.ensureCanChange(SHIPPED, PENDING, ADMIN) }
         assertEquals("Order status cannot change from SHIPPED to PENDING", conflict.message)
 
-        val forbidden = assertFailsWith<ForbiddenException> {
+        val forbidden = assertFailsWith<AccessNotAllowedException> {
             OrderStatusRules.ensureCanChange(CONFIRMED, CANCELLED, CUSTOMER)
         }
         assertEquals("CUSTOMER cannot change an order from CONFIRMED to CANCELLED", forbidden.message)

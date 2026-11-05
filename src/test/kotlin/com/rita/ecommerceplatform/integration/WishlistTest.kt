@@ -31,7 +31,7 @@ class WishlistTest : IntegrationTestBase() {
                 header("Authorization", "Bearer $adminToken")
                 contentType = MediaType.APPLICATION_JSON
                 content = json("name" to unique("Cat"))
-            }.andExpect { status { isCreated() } }.andReturn()
+            }.andExpect { responseCode("00") }.andReturn()
         )["categoryId"].asInt()
     }
 
@@ -46,7 +46,7 @@ class WishlistTest : IntegrationTestBase() {
                     "name" to name, "sku" to unique("sku"), "categoryId" to categoryId, "price" to 1000,
                     "discountPrice" to 900, "stockQuantity" to stock, "lowStockThreshold" to lowStockThreshold,
                 )
-            }.andExpect { status { isCreated() } }.andReturn()
+            }.andExpect { responseCode("00") }.andReturn()
         )["productId"].asLong()
 
     private fun add(productId: Long, withToken: String = token): ResultActionsDsl =
@@ -58,7 +58,7 @@ class WishlistTest : IntegrationTestBase() {
 
     private fun wishlist(withToken: String = token): JsonNode =
         readJson(mockMvc.get("/api/customer/wishlist") { header("Authorization", "Bearer $withToken") }
-            .andExpect { status { isOk() } }.andReturn())
+            .andExpect { responseCode("00") }.andReturn())
 
     private fun ids(list: JsonNode): List<Long> = list["items"].toList().map { it["productId"].asLong() }
 
@@ -76,7 +76,7 @@ class WishlistTest : IntegrationTestBase() {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json("productId" to productId, "quantity" to quantity)
-        }.andExpect { status { isOk() } }
+        }.andExpect { responseCode("00") }
     }
 
     /** productId → quantity in the customer's cart. */
@@ -89,7 +89,7 @@ class WishlistTest : IntegrationTestBase() {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("status" to status)
-        }.andExpect { status { isOk() } }
+        }.andExpect { responseCode("00") }
     }
 
     @Test
@@ -98,10 +98,10 @@ class WishlistTest : IntegrationTestBase() {
         val second = createProduct(stock = 2, lowStockThreshold = 5)
 
         add(first).andExpect {
-            status { isOk() }
-            jsonPath("$.itemCount") { value(1) }
+            responseCode("00")
+            jsonPath("$.data.itemCount") { value(1) }
         }
-        add(second).andExpect { status { isOk() } }
+        add(second).andExpect { responseCode("00") }
 
         val list = wishlist()
         assertEquals(listOf(second, first), ids(list))
@@ -119,7 +119,7 @@ class WishlistTest : IntegrationTestBase() {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("clearDiscountPrice" to true)
-        }.andExpect { status { isOk() } }
+        }.andExpect { responseCode("00") }
         assertEquals(1000.0, wishlist()["items"][1]["sellingPrice"].asDouble())
     }
 
@@ -129,28 +129,28 @@ class WishlistTest : IntegrationTestBase() {
         add(productId)
         val addedAt = wishlist()["items"][0]["addedAt"].asString()
         add(productId).andExpect {
-            status { isOk() }
-            jsonPath("$.itemCount") { value(1) }
-            jsonPath("$.items[0].addedAt") { value(addedAt) }
+            responseCode("00")
+            jsonPath("$.data.itemCount") { value(1) }
+            jsonPath("$.data.items[0].addedAt") { value(addedAt) }
         }
 
         val soldOut = createProduct(stock = 0)
         add(soldOut).andExpect {
-            status { isOk() }
-            jsonPath("$.items[0].availability") { value("OUT_OF_STOCK") }
+            responseCode("00")
+            jsonPath("$.data.items[0].availability") { value("OUT_OF_STOCK") }
         }
 
         val inactive = createProduct().also { setProductStatus(it, "INACTIVE") }
         add(inactive).andExpect {
-            status { isNotFound() }
-            jsonPath("$.message") { value("Product not found") }
+            responseCode("25")
+            jsonPath("$.responseMessage") { value("Product not found") }
         }
-        add(999999).andExpect { status { isNotFound() } }
+        add(999999).andExpect { responseCode("25") }
         mockMvc.post("/api/customer/wishlist/items") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = "{}"
-        }.andExpect { status { isBadRequest() } }
+        }.andExpect { responseCode("106") }
         assertEquals(2, wishlist()["itemCount"].asInt())
     }
 
@@ -163,7 +163,7 @@ class WishlistTest : IntegrationTestBase() {
 
         setProductStatus(deactivated, "INACTIVE")
         mockMvc.delete("/api/admin/products/$deleted") { header("Authorization", "Bearer $adminToken") }
-            .andExpect { status { isNoContent() } }
+            .andExpect { responseCode("00") }
 
         val items = wishlist()["items"].toList()
         assertEquals(2, items.size)
@@ -172,16 +172,16 @@ class WishlistTest : IntegrationTestBase() {
             assertEquals(true, it["availability"].isNull)
         }
         move(deactivated).andExpect {
-            status { isNotFound() }
-            jsonPath("$.message") { value("Product not found") }
+            responseCode("25")
+            jsonPath("$.responseMessage") { value("Product not found") }
         }
         assertEquals(2, wishlist()["itemCount"].asInt())
 
         mockMvc.delete("/api/customer/wishlist/items/$deleted") { header("Authorization", "Bearer $token") }
-            .andExpect { status { isNoContent() } }
+            .andExpect { responseCode("00") }
         mockMvc.delete("/api/customer/wishlist/items/$deleted") { header("Authorization", "Bearer $token") }.andExpect {
-            status { isNotFound() }
-            jsonPath("$.message") { value("Item not in wishlist") }
+            responseCode("25")
+            jsonPath("$.responseMessage") { value("Item not in wishlist") }
         }
         assertEquals(listOf(deactivated), ids(wishlist()))
     }
@@ -194,17 +194,17 @@ class WishlistTest : IntegrationTestBase() {
         add(three)
 
         move(one).andExpect {
-            status { isOk() }
-            jsonPath("$.itemCount") { value(1) }
-            jsonPath("$.items[0].productId") { value(three) }
+            responseCode("00")
+            jsonPath("$.data.itemCount") { value(1) }
+            jsonPath("$.data.items[0].productId") { value(three) }
         }
         addToCart(three, 2)
-        move(three, quantity = 3).andExpect { jsonPath("$.itemCount") { value(0) } }
+        move(three, quantity = 3).andExpect { jsonPath("$.data.itemCount") { value(0) } }
 
         assertEquals(mapOf(one to 1, three to 5), cart())
         move(one).andExpect {
-            status { isNotFound() }
-            jsonPath("$.message") { value("Item not in wishlist") }
+            responseCode("25")
+            jsonPath("$.responseMessage") { value("Item not in wishlist") }
         }
     }
 
@@ -214,13 +214,13 @@ class WishlistTest : IntegrationTestBase() {
         add(productId)
 
         move(productId, quantity = 5).andExpect {
-            status { isConflict() }
-            jsonPath("$.message") { value("Only 4 available") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("Only 4 available") }
         }
         addToCart(productId, 3)
         move(productId, quantity = 2).andExpect {
-            status { isConflict() }
-            jsonPath("$.message") { value("Only 4 available") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("Only 4 available") }
         }
         assertEquals(mapOf(productId to 3), cart())
         assertEquals(listOf(productId), ids(wishlist()))
@@ -228,14 +228,14 @@ class WishlistTest : IntegrationTestBase() {
         val soldOut = createProduct(stock = 0)
         add(soldOut)
         move(soldOut).andExpect {
-            status { isConflict() }
-            jsonPath("$.message") { value("Out of stock") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("Out of stock") }
         }
         assertEquals(setOf(productId, soldOut), ids(wishlist()).toSet())
-        move(productId, quantity = 0).andExpect { status { isBadRequest() } }
+        move(productId, quantity = 0).andExpect { responseCode("106") }
 
         // Exactly the stock is fine.
-        move(productId, quantity = 1).andExpect { status { isOk() } }
+        move(productId, quantity = 1).andExpect { responseCode("00") }
         assertEquals(mapOf(productId to 4), cart())
     }
 
@@ -246,12 +246,12 @@ class WishlistTest : IntegrationTestBase() {
 
         val pool = Executors.newFixedThreadPool(2)
         val statuses = try {
-            pool.invokeAll(List(2) { Callable { move(productId, quantity = 2).andReturn().response.status } }).map { it.get() }
+            pool.invokeAll(List(2) { Callable { move(productId, quantity = 2).andReturn().responseCodeOf() } }).map { it.get() }
         } finally {
             pool.shutdown()
         }
 
-        assertEquals(listOf(200, 404), statuses.sorted())
+        assertEquals(listOf("00", "25"), statuses.sorted())
         assertEquals(mapOf(productId to 2), cart())
         assertEquals(0, wishlist()["itemCount"].asInt())
     }
@@ -267,16 +267,16 @@ class WishlistTest : IntegrationTestBase() {
             """
         ).param("categoryId", categoryId).param("adminId", seedAdminId()).param("prefix", unique("bulk"))
             .query(Long::class.javaObjectType).list().map { it!! }
-        productIds.take(99).forEach { add(it).andExpect { status { isOk() } } }
-        add(productIds[99]).andExpect { jsonPath("$.itemCount") { value(100) } }
+        productIds.take(99).forEach { add(it).andExpect { responseCode("00") } }
+        add(productIds[99]).andExpect { jsonPath("$.data.itemCount") { value(100) } }
 
         val extra = createProduct()
         add(extra).andExpect {
-            status { isConflict() }
-            jsonPath("$.message") { value("A wishlist can hold at most 100 products") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("A wishlist can hold at most 100 products") }
         }
         // One already on the list is still fine.
-        add(productIds[0]).andExpect { status { isOk() } }
+        add(productIds[0]).andExpect { responseCode("00") }
     }
 
     @Test
@@ -287,12 +287,12 @@ class WishlistTest : IntegrationTestBase() {
 
         assertEquals(emptyList(), ids(wishlist(other)))
         mockMvc.delete("/api/customer/wishlist/items/$productId") { header("Authorization", "Bearer $other") }
-            .andExpect { status { isNotFound() } }
+            .andExpect { responseCode("25") }
         assertEquals(listOf(productId), ids(wishlist()))
 
         mockMvc.get("/api/customer/wishlist") { header("Authorization", "Bearer $adminToken") }
-            .andExpect { status { isForbidden() } }
-        add(productId, withToken = adminToken).andExpect { status { isForbidden() } }
-        mockMvc.get("/api/customer/wishlist").andExpect { status { isUnauthorized() } }
+            .andExpect { responseCode("107") }
+        add(productId, withToken = adminToken).andExpect { responseCode("107") }
+        mockMvc.get("/api/customer/wishlist").andExpect { responseCode("115") }
     }
 }

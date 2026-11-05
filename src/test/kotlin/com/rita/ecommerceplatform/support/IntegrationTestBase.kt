@@ -1,5 +1,6 @@
 package com.rita.ecommerceplatform.support
 
+import org.springframework.test.web.servlet.MockMvcResultMatchersDsl
 import com.rita.ecommerceplatform.repository.database.CartRepository
 import com.rita.ecommerceplatform.repository.database.ProductImageRepository
 import com.rita.ecommerceplatform.service.NotificationSender
@@ -80,7 +81,21 @@ abstract class IntegrationTestBase {
 
     protected fun json(vararg fields: Pair<String, Any?>): String = jsonMapper.writeValueAsString(mapOf(*fields))
 
-    protected fun readJson(result: MvcResult): JsonNode = jsonMapper.readTree(result.response.contentAsString)
+    /** The data of a successful response; the whole envelope of a failed one (its responseCode and responseMessage). */
+    protected fun readJson(result: MvcResult): JsonNode {
+        val body = jsonMapper.readTree(result.response.contentAsString)
+        return if (body["responseCode"]?.asString() == "00" && body.has("data")) body["data"] else body
+    }
+
+    /** What a status check became: always HTTP 200, and this response code. */
+    protected fun MockMvcResultMatchersDsl.responseCode(code: String) {
+        status { isOk() }
+        jsonPath("$.responseCode") { value(code) }
+    }
+
+    protected fun readMessage(result: MvcResult): String = jsonMapper.readTree(result.response.contentAsString)["responseMessage"].asString()
+
+    protected fun MvcResult.responseCodeOf(): String = jsonMapper.readTree(response.contentAsString)["responseCode"].asString()
 
     protected fun registerBody(email: String, password: String = DEFAULT_PASSWORD): String = json(
         "firstName" to "Test",
@@ -95,7 +110,7 @@ abstract class IntegrationTestBase {
         val result = mockMvc.post("/api/auth/register") {
             contentType = MediaType.APPLICATION_JSON
             content = registerBody(email, password)
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["customerId"].asLong()
     }
 
@@ -104,7 +119,7 @@ abstract class IntegrationTestBase {
         val result = mockMvc.post("/api/auth/login") {
             contentType = MediaType.APPLICATION_JSON
             content = json("email" to email, "password" to password)
-        }.andExpect { status { isOk() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["accessToken"].asString()
     }
 
@@ -134,7 +149,7 @@ abstract class IntegrationTestBase {
         val result = mockMvc.post("/api/admin/auth/login") {
             contentType = MediaType.APPLICATION_JSON
             content = json("email" to seedAdminEmail, "password" to seedAdminPassword)
-        }.andExpect { status { isOk() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["accessToken"].asString()
     }
 
@@ -147,7 +162,7 @@ abstract class IntegrationTestBase {
             header("Authorization", "Bearer ${loginSeedAdmin()}")
             contentType = MediaType.APPLICATION_JSON
             content = json("currentPassword" to seedAdminPassword, "newPassword" to CHANGED_ADMIN_PASSWORD)
-        }.andExpect { status { isOk() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["accessToken"].asString()
     }
 

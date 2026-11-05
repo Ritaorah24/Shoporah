@@ -1,7 +1,6 @@
 package com.rita.ecommerceplatform.repository.api.cloudinary
 
-import com.rita.ecommerceplatform.exception.BadGatewayException
-import com.rita.ecommerceplatform.exception.ServiceUnavailableException
+import com.rita.ecommerceplatform.exception.ApiErrorException
 import com.rita.ecommerceplatform.repository.api.ImageStorage
 import com.rita.ecommerceplatform.repository.api.StoredImage
 import org.slf4j.LoggerFactory
@@ -65,7 +64,7 @@ class CloudinaryImageStorage(
         // "not found" means it is already gone, which is what we wanted.
         if (result != "ok" && result != "not found") {
             log.error("Cloudinary destroy {} answered result {}", storageKey, result)
-            throw BadGatewayException(STORAGE_ERROR)
+            throw ApiErrorException(STORAGE_ERROR)
         }
     }
 
@@ -98,13 +97,13 @@ class CloudinaryImageStorage(
                 ?: throw unreadable(what)
         } catch (ex: RestClientException) {
             log.error("Cloudinary {} failed: could not reach Cloudinary", what, ex)
-            throw BadGatewayException(STORAGE_ERROR)
+            throw ApiErrorException(STORAGE_ERROR)
         }
         val json = parse(body, what)
         if (!status.is2xxSuccessful || json == null || !json.isObject || json.has("error")) {
             // Cloudinary explains errors as {"error":{"message":...}}.
             log.error("Cloudinary {} failed: HTTP {} {}", what, status.value(), json?.get("error")?.text("message") ?: body.take(500))
-            throw BadGatewayException(STORAGE_ERROR)
+            throw ApiErrorException(STORAGE_ERROR)
         }
         return json
     }
@@ -117,13 +116,13 @@ class CloudinaryImageStorage(
             null
         }
 
-    private fun unreadable(what: String): BadGatewayException {
+    private fun unreadable(what: String): ApiErrorException {
         log.error("Cloudinary {} answered without the expected fields", what)
-        return BadGatewayException(STORAGE_ERROR)
+        return ApiErrorException(STORAGE_ERROR)
     }
 
     private fun ensureConfigured() {
-        if (!properties.isConfigured) throw ServiceUnavailableException(NOT_CONFIGURED)
+        if (!properties.isConfigured) throw ApiErrorException(NOT_CONFIGURED)
     }
 
     private fun JsonNode.text(field: String): String? = get(field)?.takeUnless { it.isNull }?.asString()

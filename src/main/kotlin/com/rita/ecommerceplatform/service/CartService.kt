@@ -1,11 +1,11 @@
 package com.rita.ecommerceplatform.service
 
+import com.rita.ecommerceplatform.exception.BadRequestException
+import com.rita.ecommerceplatform.exception.UnableToLocateRecordException
 import com.rita.ecommerceplatform.model.request.AddCartItemRequest
 import com.rita.ecommerceplatform.model.request.UpdateCartItemRequest
 import com.rita.ecommerceplatform.model.response.CartItemResponse
 import com.rita.ecommerceplatform.model.response.CartResponse
-import com.rita.ecommerceplatform.exception.ConflictException
-import com.rita.ecommerceplatform.exception.NotFoundException
 import com.rita.ecommerceplatform.model.entity.CartItem
 import com.rita.ecommerceplatform.model.entity.CategoryStatus
 import com.rita.ecommerceplatform.model.entity.ProductStatus
@@ -43,7 +43,7 @@ class CartService(
     fun addItem(customerId: Long, request: AddCartItemRequest): CartResponse {
         customerRepository.lockById(customerId)
         // Only products the public can see (active, in an active category) can be added.
-        val product = productRepository.findPublicById(request.productId!!) ?: throw NotFoundException("Product not found")
+        val product = productRepository.findPublicById(request.productId!!) ?: throw UnableToLocateRecordException("Product not found")
         val cartId = cartRepository.getOrCreateCartId(customerId)
 
         val inCart = cartRepository.findQuantity(cartId, product.productId!!) ?: 0
@@ -62,7 +62,7 @@ class CartService(
         customerRepository.lockById(customerId)
         val cartId = cartRepository.findCartId(customerId) ?: throw itemNotInCart()
         cartRepository.findQuantity(cartId, productId) ?: throw itemNotInCart()
-        val product = productRepository.findPublicById(productId) ?: throw NotFoundException("Product not found")
+        val product = productRepository.findPublicById(productId) ?: throw UnableToLocateRecordException("Product not found")
 
         val quantity = request.quantity!!
         checkStock(product.productStockQuantity!!, quantity.toLong())
@@ -134,9 +134,9 @@ class CartService(
 
     // D2 (1.3): the count is shown so the customer can fix their cart.
     private fun checkStock(stock: Int, wanted: Long) {
-        if (stock <= 0) throw ConflictException("Out of stock")
-        if (wanted > stock) throw ConflictException("Only $stock available")
+        if (stock <= 0) throw BadRequestException("Out of stock")
+        if (wanted > stock) throw BadRequestException("Only $stock available")
     }
 
-    private fun itemNotInCart() = NotFoundException("Item not in cart")
+    private fun itemNotInCart() = UnableToLocateRecordException("Item not in cart")
 }

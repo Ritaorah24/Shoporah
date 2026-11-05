@@ -1,17 +1,17 @@
 package com.rita.ecommerceplatform.controller
 
+import com.rita.ecommerceplatform.model.response.BaseDataResponse
+import com.rita.ecommerceplatform.model.response.BaseResponse
+import com.rita.ecommerceplatform.exception.AccessNotAllowedException
 import com.rita.ecommerceplatform.config.OpenApiConfig
 import com.rita.ecommerceplatform.model.request.CreateAddressRequest
 import com.rita.ecommerceplatform.model.request.UpdateAddressRequest
-import com.rita.ecommerceplatform.model.response.AddressResponse
-import com.rita.ecommerceplatform.exception.AccountNotActiveException
 import com.rita.ecommerceplatform.security.CurrentUser
 import com.rita.ecommerceplatform.security.UserType
 import com.rita.ecommerceplatform.service.AddressService
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
-import org.springframework.http.HttpStatus
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.web.bind.annotation.DeleteMapping
@@ -21,7 +21,6 @@ import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
-import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 
 /** The logged-in customer's addresses: the customer always comes from the token, never from the request. */
@@ -33,41 +32,49 @@ class AddressController(private val addressService: AddressService) {
 
     /** Default address first, then newest first. */
     @GetMapping
-    fun list(@AuthenticationPrincipal jwt: Jwt): List<AddressResponse> = addressService.list(customerId(jwt))
+    fun list(@AuthenticationPrincipal jwt: Jwt): BaseDataResponse {
+        return BaseDataResponse("00", "Successful", addressService.list(customerId(jwt)))
+    }
 
     @GetMapping("/{addressId}")
-    fun get(@AuthenticationPrincipal jwt: Jwt, @PathVariable addressId: Long): AddressResponse =
-        addressService.get(customerId(jwt), addressId)
+    fun get(@AuthenticationPrincipal jwt: Jwt, @PathVariable addressId: Long): BaseDataResponse {
+        return BaseDataResponse("00", "Successful", addressService.get(customerId(jwt), addressId))
+    }
 
     /** At most 10 addresses. The first one is always the default. */
     @PostMapping
-    @ResponseStatus(HttpStatus.CREATED)
     fun create(
         @AuthenticationPrincipal jwt: Jwt,
         @Valid @RequestBody request: CreateAddressRequest,
-    ): AddressResponse = addressService.create(customerId(jwt), request)
+    ): BaseDataResponse {
+        return BaseDataResponse("00", "Successful", addressService.create(customerId(jwt), request))
+    }
 
     @PatchMapping("/{addressId}")
     fun update(
         @AuthenticationPrincipal jwt: Jwt,
         @PathVariable addressId: Long,
         @Valid @RequestBody request: UpdateAddressRequest,
-    ): AddressResponse = addressService.update(customerId(jwt), addressId, request)
+    ): BaseDataResponse {
+        return BaseDataResponse("00", "Successful", addressService.update(customerId(jwt), addressId, request))
+    }
 
     @PatchMapping("/{addressId}/default")
-    fun setDefault(@AuthenticationPrincipal jwt: Jwt, @PathVariable addressId: Long): AddressResponse =
-        addressService.setDefault(customerId(jwt), addressId)
+    fun setDefault(@AuthenticationPrincipal jwt: Jwt, @PathVariable addressId: Long): BaseDataResponse {
+        return BaseDataResponse("00", "Successful", addressService.setDefault(customerId(jwt), addressId))
+    }
 
     /** Deleting the default address leaves no default. */
     @DeleteMapping("/{addressId}")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    fun delete(@AuthenticationPrincipal jwt: Jwt, @PathVariable addressId: Long) =
+    fun delete(@AuthenticationPrincipal jwt: Jwt, @PathVariable addressId: Long): BaseResponse {
         addressService.delete(customerId(jwt), addressId)
+        return BaseResponse()
+    }
 
     // Roles already restrict /api/customer/** to customer tokens; this guards against a mis-issued token.
     private fun customerId(jwt: Jwt): Long {
         val currentUser = CurrentUser.from(jwt)
-        if (currentUser.userType != UserType.CUSTOMER) throw AccountNotActiveException()
+        if (currentUser.userType != UserType.CUSTOMER) throw AccessNotAllowedException("Account is not active")
         return currentUser.id
     }
 }

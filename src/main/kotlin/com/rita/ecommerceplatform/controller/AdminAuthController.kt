@@ -1,10 +1,10 @@
 package com.rita.ecommerceplatform.controller
 
+import com.rita.ecommerceplatform.model.response.BaseDataResponse
+import com.rita.ecommerceplatform.exception.AccessNotAllowedException
 import com.rita.ecommerceplatform.config.OpenApiConfig
 import com.rita.ecommerceplatform.model.request.ChangePasswordRequest
 import com.rita.ecommerceplatform.model.request.LoginRequest
-import com.rita.ecommerceplatform.model.response.TokenResponse
-import com.rita.ecommerceplatform.exception.AccountNotActiveException
 import com.rita.ecommerceplatform.security.CurrentUser
 import com.rita.ecommerceplatform.security.UserType
 import com.rita.ecommerceplatform.service.AuthService
@@ -25,8 +25,9 @@ import org.springframework.web.bind.annotation.RestController
 class AdminAuthController(private val authService: AuthService) {
 
     @PostMapping("/login")
-    fun login(@Valid @RequestBody request: LoginRequest): TokenResponse =
-        authService.adminLogin(request)
+    fun login(@Valid @RequestBody request: LoginRequest): BaseDataResponse {
+        return BaseDataResponse("00", "Successful", authService.adminLogin(request))
+    }
 
     /** The admin is identified by the token, never by an ID in the request. */
     @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
@@ -34,10 +35,10 @@ class AdminAuthController(private val authService: AuthService) {
     fun changePassword(
         @AuthenticationPrincipal jwt: Jwt,
         @Valid @RequestBody request: ChangePasswordRequest,
-    ): TokenResponse {
+    ): BaseDataResponse {
         val currentUser = CurrentUser.from(jwt)
         // Roles already restrict this URL to admin tokens; this guards against a mis-issued token.
-        if (currentUser.userType != UserType.ADMIN) throw AccountNotActiveException()
-        return authService.changeAdminPassword(currentUser.id.toInt(), request)
+        if (currentUser.userType != UserType.ADMIN) throw AccessNotAllowedException("Account is not active")
+        return BaseDataResponse("00", "Successful", authService.changeAdminPassword(currentUser.id.toInt(), request))
     }
 }

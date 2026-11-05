@@ -1,7 +1,6 @@
 package com.rita.ecommerceplatform.repository.api.cloudinary
 
-import com.rita.ecommerceplatform.exception.BadGatewayException
-import com.rita.ecommerceplatform.exception.ServiceUnavailableException
+import com.rita.ecommerceplatform.exception.ApiErrorException
 import org.junit.jupiter.api.Test
 import org.springframework.http.HttpMethod
 import org.springframework.http.HttpStatus
@@ -114,21 +113,21 @@ class CloudinaryImageStorageTest {
         ).forEach { response ->
             server.reset()
             server.expect(requestTo("https://api.cloudinary.com/v1_1/demo/image/upload")).andRespond(response)
-            val ex = assertFailsWith<BadGatewayException> { storage.upload(jpeg, "image/jpeg", "shoporah/products/5") }
+            val ex = assertFailsWith<ApiErrorException> { storage.upload(jpeg, "image/jpeg", "shoporah/products/5") }
             assertEquals(CloudinaryImageStorage.STORAGE_ERROR, ex.message)
         }
         server.reset()
         server.expect(requestTo("https://api.cloudinary.com/v1_1/demo/image/destroy"))
             .andRespond(withSuccess("""{"result":"error"}""", MediaType.APPLICATION_JSON))
-        assertFailsWith<BadGatewayException> { storage.delete("shoporah/products/5/abc") }
+        assertFailsWith<ApiErrorException> { storage.delete("shoporah/products/5/abc") }
     }
 
     @Test
     fun `without the Cloudinary settings nothing is sent and the answer is 503`() {
         val unconfigured = CloudinaryImageStorage(builder.build(), CloudinaryProperties("", "", ""), JsonMapper.builder().build())
-        val ex = assertFailsWith<ServiceUnavailableException> { unconfigured.upload(jpeg, "image/jpeg", "shoporah/products/5") }
+        val ex = assertFailsWith<ApiErrorException> { unconfigured.upload(jpeg, "image/jpeg", "shoporah/products/5") }
         assertEquals("Image storage is not configured", ex.message)
-        assertFailsWith<ServiceUnavailableException> { unconfigured.delete("x") }
+        assertFailsWith<ApiErrorException> { unconfigured.delete("x") }
         server.verify()
     }
 }

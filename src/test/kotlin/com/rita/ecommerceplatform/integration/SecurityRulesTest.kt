@@ -52,9 +52,9 @@ class SecurityRulesTest : IntegrationTestBase() {
         mockMvc.get("/api/customer/me") {
             header("Authorization", "Bearer $token")
         }.andExpect {
-            status { isUnauthorized() }
+            responseCode("115")
             header { string("WWW-Authenticate", containsString("Bearer")) }
-            jsonPath("$.message") { value("Missing, invalid or expired access token") }
+            jsonPath("$.responseMessage") { value("Missing, invalid or expired access token") }
         }
     }
 
@@ -64,7 +64,7 @@ class SecurityRulesTest : IntegrationTestBase() {
         val customerId = registerCustomer()
         mockMvc.get("/api/customer/me") {
             header("Authorization", "Bearer ${customerToken(customerId)}")
-        }.andExpect { status { isOk() } }
+        }.andExpect { responseCode("00") }
     }
 
     @Test
@@ -111,8 +111,8 @@ class SecurityRulesTest : IntegrationTestBase() {
             contentType = MediaType.APPLICATION_JSON
             content = json("email" to uniqueEmail(), "password" to DEFAULT_PASSWORD)
         }.andExpect {
-            status { isUnauthorized() }
-            jsonPath("$.message") { value("Missing, invalid or expired access token") }
+            responseCode("115")
+            jsonPath("$.responseMessage") { value("Missing, invalid or expired access token") }
         }
     }
 }

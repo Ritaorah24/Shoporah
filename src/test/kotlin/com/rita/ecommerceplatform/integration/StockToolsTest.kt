@@ -36,7 +36,7 @@ class StockToolsTest : IntegrationTestBase() {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to unique("Cat"))
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["categoryId"].asInt()
     }
 
@@ -52,7 +52,7 @@ class StockToolsTest : IntegrationTestBase() {
                 "stockQuantity" to stock,
                 "lowStockThreshold" to threshold,
             )
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["productId"].asLong()
     }
 
@@ -61,7 +61,7 @@ class StockToolsTest : IntegrationTestBase() {
             header("Authorization", "Bearer $adminToken")
             param("categoryId", categoryId.toString())
             params.forEach { (name, value) -> param(name, value) }
-        }.andExpect { status { isOk() } }.andReturn(),
+        }.andExpect { responseCode("00") }.andReturn(),
     )
 
     private fun ids(vararg params: Pair<String, String>): Set<Long> =
@@ -78,7 +78,7 @@ class StockToolsTest : IntegrationTestBase() {
         mockMvc.get("/api/admin/products/$productId/stock-movements") {
             header("Authorization", "Bearer $adminToken")
             params.forEach { (name, value) -> param(name, value) }
-        }.andExpect { status { isOk() } }.andReturn(),
+        }.andExpect { responseCode("00") }.andReturn(),
     )
 
     private fun stock(productId: Long): Int =
@@ -117,7 +117,7 @@ class StockToolsTest : IntegrationTestBase() {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("status" to "INACTIVE")
-        }.andExpect { status { isOk() } }
+        }.andExpect { responseCode("00") }
 
         assertEquals(setOf(lowPhone), ids("stock" to "LOW", "search" to "phone"))
         assertEquals(setOf(inactive), ids("stock" to "OUT", "status" to "INACTIVE"))
@@ -128,8 +128,8 @@ class StockToolsTest : IntegrationTestBase() {
             header("Authorization", "Bearer $adminToken")
             param("stock", "EMPTY")
         }.andExpect {
-            status { isBadRequest() }
-            jsonPath("$.message") { value("stock must be one of LOW, OUT") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("stock must be one of LOW, OUT") }
         }
     }
 
@@ -138,12 +138,12 @@ class StockToolsTest : IntegrationTestBase() {
         val productId = createProduct(stock = 10)
 
         adjust(productId, 20, reason = "  Delivery from supplier  ").andExpect {
-            status { isOk() }
-            jsonPath("$.stockQuantity") { value(30) }
+            responseCode("00")
+            jsonPath("$.data.stockQuantity") { value(30) }
         }
         adjust(productId, -3, reason = "Damaged in the warehouse").andExpect {
-            status { isOk() }
-            jsonPath("$.stockQuantity") { value(27) }
+            responseCode("00")
+            jsonPath("$.data.stockQuantity") { value(27) }
         }
 
         val content = movements(productId)["content"]
@@ -162,28 +162,28 @@ class StockToolsTest : IntegrationTestBase() {
         val productId = createProduct(stock = 5)
 
         adjust(productId, -6).andExpect {
-            status { isConflict() }
-            jsonPath("$.message") { value("Only 5 in stock") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("Only 5 in stock") }
         }
         adjust(productId, 0).andExpect {
-            status { isBadRequest() }
-            jsonPath("$.message") { value("change must not be 0") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("change must not be 0") }
         }
-        adjust(productId, null).andExpect { status { isBadRequest() } }
-        adjust(productId, 100_001).andExpect { status { isBadRequest() } }
-        adjust(productId, -100_001).andExpect { status { isBadRequest() } }
-        adjust(productId, 1, reason = null).andExpect { status { isBadRequest() } }
-        adjust(productId, 1, reason = "   ").andExpect { status { isBadRequest() } }
-        adjust(productId, 1, reason = "x".repeat(301)).andExpect { status { isBadRequest() } }
+        adjust(productId, null).andExpect { responseCode("106") }
+        adjust(productId, 100_001).andExpect { responseCode("106") }
+        adjust(productId, -100_001).andExpect { responseCode("106") }
+        adjust(productId, 1, reason = null).andExpect { responseCode("106") }
+        adjust(productId, 1, reason = "   ").andExpect { responseCode("106") }
+        adjust(productId, 1, reason = "x".repeat(301)).andExpect { responseCode("106") }
 
         assertEquals(5, stock(productId))
         assertEquals(1, movementCount(productId))
 
         // Down to exactly 0 is fine.
         adjust(productId, -5, reason = "Stock count").andExpect {
-            status { isOk() }
-            jsonPath("$.stockQuantity") { value(0) }
-            jsonPath("$.availability") { value("OUT_OF_STOCK") }
+            responseCode("00")
+            jsonPath("$.data.stockQuantity") { value(0) }
+            jsonPath("$.data.availability") { value("OUT_OF_STOCK") }
         }
     }
 
@@ -193,14 +193,14 @@ class StockToolsTest : IntegrationTestBase() {
         val pool = Executors.newFixedThreadPool(8)
         val statuses = try {
             // 8 removals of 1 from a stock of 5, plus nothing else: exactly 5 can succeed.
-            pool.invokeAll(List(8) { Callable { adjust(productId, -1, reason = "Count").andReturn().response.status } })
+            pool.invokeAll(List(8) { Callable { adjust(productId, -1, reason = "Count").andReturn().responseCodeOf() } })
                 .map { it.get() }
         } finally {
             pool.shutdown()
         }
 
-        assertEquals(5, statuses.count { it == 200 })
-        assertEquals(3, statuses.count { it == 409 })
+        assertEquals(5, statuses.count { it == "00" })
+        assertEquals(3, statuses.count { it == "106" })
         assertEquals(0, stock(productId))
         // Initial stock + one movement per successful removal; each stockAfter is distinct (4, 3, 2, 1, 0).
         assertEquals(6, movementCount(productId))
@@ -215,9 +215,9 @@ class StockToolsTest : IntegrationTestBase() {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("stockQuantity" to 12)
-        }.andExpect { status { isOk() } }
+        }.andExpect { responseCode("00") }
         val orderReference = buyTwo(productId)
-        adjust(productId, -1, reason = "Lost in transit").andExpect { status { isOk() } }
+        adjust(productId, -1, reason = "Lost in transit").andExpect { responseCode("00") }
 
         val all = movements(productId)
         assertEquals(4, all["totalElements"].asInt())
@@ -247,28 +247,28 @@ class StockToolsTest : IntegrationTestBase() {
                 "state" to "Lagos",
                 "country" to "Nigeria",
             )
-        }.andExpect { status { isCreated() } }
+        }.andExpect { responseCode("00") }
         mockMvc.post("/api/customer/cart/items") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json("productId" to productId, "quantity" to 2)
-        }.andExpect { status { isOk() } }
+        }.andExpect { responseCode("00") }
         val reference = readJson(
             mockMvc.post("/api/customer/orders") {
                 header("Authorization", "Bearer $token")
                 header("Idempotency-Key", UUID.randomUUID().toString())
-            }.andExpect { status { isCreated() } }.andReturn(),
+            }.andExpect { responseCode("00") }.andReturn(),
         )["reference"].asString()
         val paymentReference = readJson(
             mockMvc.post("/api/customer/payments/initialize") {
                 header("Authorization", "Bearer $token")
                 contentType = MediaType.APPLICATION_JSON
                 content = json("orderReference" to reference)
-            }.andExpect { status { isCreated() } }.andReturn(),
+            }.andExpect { responseCode("00") }.andReturn(),
         )["paymentReference"].asString()
         paymentGateway.pay(paymentReference)
         mockMvc.get("/api/customer/payments/verify/$paymentReference") { header("Authorization", "Bearer $token") }
-            .andExpect { status { isOk() } }
+            .andExpect { responseCode("00") }
         return reference
     }
 
@@ -276,22 +276,22 @@ class StockToolsTest : IntegrationTestBase() {
     fun `deleted or unknown products are 404 and customers are refused`() {
         val productId = createProduct(stock = 5)
         mockMvc.delete("/api/admin/products/$productId") { header("Authorization", "Bearer $adminToken") }
-            .andExpect { status { isNoContent() } }
+            .andExpect { responseCode("00") }
 
-        adjust(productId, 1).andExpect { status { isNotFound() } }
+        adjust(productId, 1).andExpect { responseCode("25") }
         mockMvc.get("/api/admin/products/$productId/stock-movements") { header("Authorization", "Bearer $adminToken") }
-            .andExpect { status { isNotFound() } }
-        adjust(999_999_999, 1).andExpect { status { isNotFound() } }
+            .andExpect { responseCode("25") }
+        adjust(999_999_999, 1).andExpect { responseCode("25") }
         assertEquals(5, stock(productId))
 
         val customerToken = newCustomerToken()
         val other = createProduct(stock = 5)
-        adjust(other, 1, withToken = customerToken).andExpect { status { isForbidden() } }
+        adjust(other, 1, withToken = customerToken).andExpect { responseCode("107") }
         mockMvc.get("/api/admin/products/$other/stock-movements") { header("Authorization", "Bearer $customerToken") }
-            .andExpect { status { isForbidden() } }
+            .andExpect { responseCode("107") }
         mockMvc.get("/api/admin/products") {
             header("Authorization", "Bearer $customerToken")
             param("stock", "LOW")
-        }.andExpect { status { isForbidden() } }
+        }.andExpect { responseCode("107") }
     }
 }

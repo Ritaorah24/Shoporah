@@ -1,14 +1,14 @@
 package com.rita.ecommerceplatform.service
 
+import com.rita.ecommerceplatform.exception.BadRequestException
+import com.rita.ecommerceplatform.exception.RecordAlreadyExistException
+import com.rita.ecommerceplatform.exception.UnableToLocateRecordException
 import com.rita.ecommerceplatform.model.request.CreateCouponRequest
 import com.rita.ecommerceplatform.model.request.UpdateCouponRequest
 import com.rita.ecommerceplatform.model.request.UpdateStatusRequest
 import com.rita.ecommerceplatform.model.response.AdminCouponResponse
 import com.rita.ecommerceplatform.model.response.CouponPreviewResponse
 import com.rita.ecommerceplatform.model.response.PageResponse
-import com.rita.ecommerceplatform.exception.BadRequestException
-import com.rita.ecommerceplatform.exception.ConflictException
-import com.rita.ecommerceplatform.exception.NotFoundException
 import com.rita.ecommerceplatform.model.entity.Coupon
 import com.rita.ecommerceplatform.model.entity.CouponDiscountType
 import com.rita.ecommerceplatform.model.entity.CouponStatus
@@ -122,7 +122,7 @@ class CouponService(
         // Only a newly sent expiry must be in the future; an expired coupon can still have its other fields edited.
         request.expiresAt?.let(::checkNotPast)
         if (terms.usageLimit != null && terms.usageLimit < existing.couponUsageCount!!) {
-            throw ConflictException("Already used ${existing.couponUsageCount} times, so usageLimit cannot be lower than that")
+            throw BadRequestException("Already used ${existing.couponUsageCount} times, so usageLimit cannot be lower than that")
         }
 
         couponRepository.update(couponId, terms)
@@ -163,9 +163,9 @@ class CouponService(
     private fun findNotDeleted(couponId: Int): Coupon =
         couponRepository.findById(couponId)?.takeUnless { it.couponStatus == CouponStatus.DELETED } ?: throw couponNotFound()
 
-    private fun couponNotFound() = NotFoundException("Coupon not found")
+    private fun couponNotFound() = UnableToLocateRecordException("Coupon not found")
 
-    private fun codeInUse() = ConflictException("Coupon code is already in use")
+    private fun codeInUse() = RecordAlreadyExistException("Coupon code is already in use")
 
     private fun String?.blankToNull(): String? = this?.trim()?.ifEmpty { null }
 

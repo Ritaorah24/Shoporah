@@ -45,7 +45,7 @@ class PaymentVerifyTest : IntegrationTestBase() {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to unique("Cat"))
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["categoryId"].asInt()
     }
 
@@ -60,7 +60,7 @@ class PaymentVerifyTest : IntegrationTestBase() {
                 "price" to 1000,
                 "stockQuantity" to stock,
             )
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["productId"].asLong()
     }
 
@@ -76,7 +76,7 @@ class PaymentVerifyTest : IntegrationTestBase() {
                 "state" to "Lagos",
                 "country" to "Nigeria",
             )
-        }.andExpect { status { isCreated() } }
+        }.andExpect { responseCode("00") }
     }
 
     /** One new product (stock 10) per quantity, all in the cart, then checkout. */
@@ -87,13 +87,13 @@ class PaymentVerifyTest : IntegrationTestBase() {
                     header("Authorization", "Bearer $token")
                     contentType = MediaType.APPLICATION_JSON
                     content = json("productId" to productId, "quantity" to quantity)
-                }.andExpect { status { isOk() } }
+                }.andExpect { responseCode("00") }
             }
         }
         val result = mockMvc.post("/api/customer/orders") {
             header("Authorization", "Bearer $token")
             header("Idempotency-Key", UUID.randomUUID().toString())
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return Placed(readJson(result), productIds)
     }
 
@@ -103,7 +103,7 @@ class PaymentVerifyTest : IntegrationTestBase() {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json("orderReference" to placed.reference)
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["paymentReference"].asString()
     }
 
@@ -166,14 +166,14 @@ class PaymentVerifyTest : IntegrationTestBase() {
         paymentGateway.pay(reference)
 
         verify(reference).andExpect {
-            status { isOk() }
-            jsonPath("$.paymentReference") { value(reference) }
-            jsonPath("$.orderReference") { value(placed.reference) }
-            jsonPath("$.paymentStatus") { value("SUCCESS") }
-            jsonPath("$.orderStatus") { value("CONFIRMED") }
-            jsonPath("$.orderPaymentStatus") { value("PAID") }
-            jsonPath("$.currency") { value("NGN") }
-            jsonPath("$.paidAt") { exists() }
+            responseCode("00")
+            jsonPath("$.data.paymentReference") { value(reference) }
+            jsonPath("$.data.orderReference") { value(placed.reference) }
+            jsonPath("$.data.paymentStatus") { value("SUCCESS") }
+            jsonPath("$.data.orderStatus") { value("CONFIRMED") }
+            jsonPath("$.data.orderPaymentStatus") { value("PAID") }
+            jsonPath("$.data.currency") { value("NGN") }
+            jsonPath("$.data.paidAt") { exists() }
         }
 
         val order = orderState(placed.orderId)
@@ -204,12 +204,12 @@ class PaymentVerifyTest : IntegrationTestBase() {
         val placed = placeOrder()
         val reference = initialize(placed)
         paymentGateway.pay(reference)
-        verify(reference).andExpect { status { isOk() } }
+        verify(reference).andExpect { responseCode("00"); jsonPath("$.responseMessage") { value("Successful") } }
 
         verify(reference).andExpect {
-            status { isOk() }
-            jsonPath("$.paymentStatus") { value("SUCCESS") }
-            jsonPath("$.orderStatus") { value("CONFIRMED") }
+            responseCode("00")
+            jsonPath("$.data.paymentStatus") { value("SUCCESS") }
+            jsonPath("$.data.orderStatus") { value("CONFIRMED") }
         }
 
         assertEquals(1, paymentGateway.verifyCalls(reference))
@@ -226,12 +226,12 @@ class PaymentVerifyTest : IntegrationTestBase() {
 
         val pool = Executors.newFixedThreadPool(2)
         val statuses = try {
-            pool.invokeAll(List(2) { Callable { verify(reference).andReturn().response.status } }).map { it.get() }
+            pool.invokeAll(List(2) { Callable { verify(reference).andReturn().responseCodeOf() } }).map { it.get() }
         } finally {
             pool.shutdown()
         }
 
-        assertEquals(listOf(200, 200), statuses)
+        assertEquals(listOf("00", "00"), statuses)
         assertEquals(8, stock(placed.productIds[0]))
         assertEquals(1, saleMovements(placed.orderId).size)
         assertEquals("CONFIRMED", orderState(placed.orderId)["status"])
@@ -243,17 +243,17 @@ class PaymentVerifyTest : IntegrationTestBase() {
         val failedReference = initialize(failed)
         paymentGateway.fail(failedReference)
         verify(failedReference).andExpect {
-            status { isOk() }
-            jsonPath("$.paymentStatus") { value("FAILED") }
-            jsonPath("$.orderStatus") { value("PENDING") }
-            jsonPath("$.orderPaymentStatus") { value("UNPAID") }
+            responseCode("00"); jsonPath("$.responseMessage") { value("Successful") }
+            jsonPath("$.data.paymentStatus") { value("FAILED") }
+            jsonPath("$.data.orderStatus") { value("PENDING") }
+            jsonPath("$.data.orderPaymentStatus") { value("UNPAID") }
         }
         assertUntouched(failed)
 
         val abandoned = placeOrder()
         val abandonedReference = initialize(abandoned)
         paymentGateway.abandon(abandonedReference)
-        verify(abandonedReference).andExpect { jsonPath("$.paymentStatus") { value("ABANDONED") } }
+        verify(abandonedReference).andExpect { jsonPath("$.data.paymentStatus") { value("ABANDONED") } }
         assertUntouched(abandoned)
 
         // The customer can try again: a new attempt starts, because the old one is no longer PENDING.
@@ -267,10 +267,10 @@ class PaymentVerifyTest : IntegrationTestBase() {
         val reference = initialize(placed)
 
         verify(reference).andExpect {
-            status { isOk() }
-            jsonPath("$.paymentStatus") { value("PENDING") }
-            jsonPath("$.orderStatus") { value("PENDING") }
-            jsonPath("$.paidAt") { value(null) }
+            responseCode("00")
+            jsonPath("$.data.paymentStatus") { value("PENDING") }
+            jsonPath("$.data.orderStatus") { value("PENDING") }
+            jsonPath("$.data.paidAt") { value(null) }
         }
         assertEquals("PENDING", paymentState(reference)["status"])
         assertUntouched(placed)
@@ -282,9 +282,9 @@ class PaymentVerifyTest : IntegrationTestBase() {
         val cheapReference = initialize(cheap)
         paymentGateway.pay(cheapReference, amountKobo = 100)
         verify(cheapReference).andExpect {
-            status { isOk() }
-            jsonPath("$.paymentStatus") { value("FAILED") }
-            jsonPath("$.orderPaymentStatus") { value("UNPAID") }
+            responseCode("00"); jsonPath("$.responseMessage") { value("Successful") }
+            jsonPath("$.data.paymentStatus") { value("FAILED") }
+            jsonPath("$.data.orderPaymentStatus") { value("UNPAID") }
         }
         assertEquals(PaymentSettlement.MISMATCH, paymentState(cheapReference)["paymentgatewayresponse"])
         assertUntouched(cheap)
@@ -292,7 +292,7 @@ class PaymentVerifyTest : IntegrationTestBase() {
         val dollars = placeOrder()
         val dollarsReference = initialize(dollars)
         paymentGateway.pay(dollarsReference, currency = "USD")
-        verify(dollarsReference).andExpect { jsonPath("$.paymentStatus") { value("FAILED") } }
+        verify(dollarsReference).andExpect { jsonPath("$.data.paymentStatus") { value("FAILED") } }
         assertUntouched(dollars)
     }
 
@@ -306,10 +306,10 @@ class PaymentVerifyTest : IntegrationTestBase() {
         paymentGateway.pay(reference)
 
         verify(reference).andExpect {
-            status { isOk() }
-            jsonPath("$.paymentStatus") { value("SUCCESS") }
-            jsonPath("$.orderStatus") { value("CANCELLED") }
-            jsonPath("$.orderPaymentStatus") { value("PAID") }
+            responseCode("00")
+            jsonPath("$.data.paymentStatus") { value("SUCCESS") }
+            jsonPath("$.data.orderStatus") { value("CANCELLED") }
+            jsonPath("$.data.orderPaymentStatus") { value("PAID") }
         }
 
         assertEquals(listOf(10, 1), placed.productIds.map { stock(it) })
@@ -331,11 +331,11 @@ class PaymentVerifyTest : IntegrationTestBase() {
         paymentGateway.pay(first)
         paymentGateway.pay(second)
 
-        verify(second).andExpect { jsonPath("$.paymentStatus") { value("SUCCESS") } }
+        verify(second).andExpect { jsonPath("$.data.paymentStatus") { value("SUCCESS") } }
         verify(first).andExpect {
-            status { isOk() }
-            jsonPath("$.paymentStatus") { value("FAILED") }
-            jsonPath("$.orderStatus") { value("CONFIRMED") }
+            responseCode("00")
+            jsonPath("$.data.paymentStatus") { value("FAILED") }
+            jsonPath("$.data.orderStatus") { value("CONFIRMED") }
         }
 
         assertEquals("Duplicate payment: order already paid by $second, refund needed", paymentState(first)["paymentgatewayresponse"])
@@ -351,8 +351,8 @@ class PaymentVerifyTest : IntegrationTestBase() {
             "INSERT INTO public.ec_payment (paymentorderid, paymentreference, paymentprovider, paymentamount) VALUES (:orderId, :ref, 'PAYSTACK', :amount)"
         ).param("orderId", placed.orderId).param("ref", unknown).param("amount", placed.order["total"].decimalValue()).update()
         verify(unknown).andExpect {
-            status { isOk() }
-            jsonPath("$.paymentStatus") { value("PENDING") }
+            responseCode("00")
+            jsonPath("$.data.paymentStatus") { value("PENDING") }
         }
 
         val other = placeOrder()
@@ -360,7 +360,7 @@ class PaymentVerifyTest : IntegrationTestBase() {
         paymentGateway.pay(reference)
         paymentGateway.down = true
         try {
-            verify(reference).andExpect { status { isBadGateway() } }
+            verify(reference).andExpect { responseCode("22") }
         } finally {
             paymentGateway.down = false
         }
@@ -375,12 +375,12 @@ class PaymentVerifyTest : IntegrationTestBase() {
         paymentGateway.pay(reference)
 
         verify(reference, withToken = newCustomerToken()).andExpect {
-            status { isNotFound() }
-            jsonPath("$.message") { value("Payment not found") }
+            responseCode("25")
+            jsonPath("$.responseMessage") { value("Payment not found") }
         }
-        verify("PAY-DOES-NOT-EXIST").andExpect { status { isNotFound() } }
-        verify(reference, withToken = null).andExpect { status { isUnauthorized() } }
-        verify(reference, withToken = adminToken).andExpect { status { isForbidden() } }
+        verify("PAY-DOES-NOT-EXIST").andExpect { responseCode("25") }
+        verify(reference, withToken = null).andExpect { responseCode("115") }
+        verify(reference, withToken = adminToken).andExpect { responseCode("107") }
         assertUntouched(placed)
     }
 

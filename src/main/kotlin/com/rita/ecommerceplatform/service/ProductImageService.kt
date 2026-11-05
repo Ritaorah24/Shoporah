@@ -1,11 +1,9 @@
 package com.rita.ecommerceplatform.service
 
+import com.rita.ecommerceplatform.exception.BadRequestException
+import com.rita.ecommerceplatform.exception.UnableToLocateRecordException
 import com.rita.ecommerceplatform.model.request.UpdateProductImageRequest
 import com.rita.ecommerceplatform.model.response.AdminProductImageResponse
-import com.rita.ecommerceplatform.exception.BadRequestException
-import com.rita.ecommerceplatform.exception.ConflictException
-import com.rita.ecommerceplatform.exception.NotFoundException
-import com.rita.ecommerceplatform.exception.PayloadTooLargeException
 import com.rita.ecommerceplatform.model.entity.ProductImage
 import com.rita.ecommerceplatform.model.entity.ProductStatus
 import com.rita.ecommerceplatform.repository.database.ProductImageRepository
@@ -39,7 +37,7 @@ class ProductImageService(
      */
     fun upload(productId: Long, file: MultipartFile, altText: String?): AdminProductImageResponse {
         // Spring's multipart limit refuses bigger requests first; this check also covers any other way in.
-        if (file.size > MAX_BYTES) throw PayloadTooLargeException(TOO_LARGE)
+        if (file.size > MAX_BYTES) throw BadRequestException(TOO_LARGE)
         val content = file.bytes
         if (content.isEmpty()) throw BadRequestException("The image file is empty")
         val type = ImageTypeDetector.detect(content) ?: throw BadRequestException("Only JPEG, PNG or WebP images are allowed")
@@ -72,7 +70,7 @@ class ProductImageService(
         return transactionTemplate.execute {
             // The product lock makes primary changes for one product run one at a time, so there is always one primary.
             lockNotDeleted(productId)
-            val image = productImageRepository.findById(productId, imageId) ?: throw NotFoundException("Image not found")
+            val image = productImageRepository.findById(productId, imageId) ?: throw UnableToLocateRecordException("Image not found")
             productImageRepository.update(
                 imageId = imageId,
                 altText = if (request.altText != null) request.altText.trim().ifEmpty { null } else image.productImageAltText,
@@ -90,7 +88,7 @@ class ProductImageService(
     fun delete(productId: Long, imageId: Long) {
         val image = transactionTemplate.execute {
             lockNotDeleted(productId)
-            val image = productImageRepository.findById(productId, imageId) ?: throw NotFoundException("Image not found")
+            val image = productImageRepository.findById(productId, imageId) ?: throw UnableToLocateRecordException("Image not found")
             productImageRepository.delete(imageId)
             if (image.productImageIsPrimary!!) productImageRepository.promoteFirstIfNoPrimary(productId)
             image
@@ -117,12 +115,12 @@ class ProductImageService(
     // Deleted products behave as if they do not exist (D3), images included.
     private fun findNotDeleted(productId: Long) {
         val product = productRepository.findById(productId)
-        if (product == null || product.productStatus == ProductStatus.DELETED) throw NotFoundException("Product not found")
+        if (product == null || product.productStatus == ProductStatus.DELETED) throw UnableToLocateRecordException("Product not found")
     }
 
     private fun lockNotDeleted(productId: Long) {
         val product = productRepository.findByIdForUpdate(productId)
-        if (product == null || product.productStatus == ProductStatus.DELETED) throw NotFoundException("Product not found")
+        if (product == null || product.productStatus == ProductStatus.DELETED) throw UnableToLocateRecordException("Product not found")
     }
 
     private fun deleteQuietly(storageKey: String) {
@@ -133,7 +131,7 @@ class ProductImageService(
         }
     }
 
-    private fun tooManyImages() = ConflictException("A product can have at most $MAX_IMAGES images")
+    private fun tooManyImages() = BadRequestException("A product can have at most $MAX_IMAGES images")
 
     companion object {
         const val MAX_BYTES = 5L * 1024 * 1024

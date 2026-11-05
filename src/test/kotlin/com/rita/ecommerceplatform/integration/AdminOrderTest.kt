@@ -47,7 +47,7 @@ class AdminOrderTest : IntegrationTestBase() {
                 "state" to "Lagos",
                 "country" to "Nigeria",
             )
-        }.andExpect { status { isCreated() } }
+        }.andExpect { responseCode("00") }
         return shopper
     }
 
@@ -56,7 +56,7 @@ class AdminOrderTest : IntegrationTestBase() {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to unique("Cat"))
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["categoryId"].asInt()
     }
 
@@ -66,16 +66,16 @@ class AdminOrderTest : IntegrationTestBase() {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to unique("Phone"), "sku" to unique("sku"), "categoryId" to categoryId, "price" to 1000, "stockQuantity" to 10)
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         mockMvc.post("/api/customer/cart/items") {
             header("Authorization", "Bearer ${shopper.token}")
             contentType = MediaType.APPLICATION_JSON
             content = json("productId" to readJson(product)["productId"].asLong(), "quantity" to 2)
-        }.andExpect { status { isOk() } }
+        }.andExpect { responseCode("00") }
         val order = mockMvc.post("/api/customer/orders") {
             header("Authorization", "Bearer ${shopper.token}")
             header("Idempotency-Key", UUID.randomUUID().toString())
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(order)["orderId"].asLong()
     }
 
@@ -89,11 +89,11 @@ class AdminOrderTest : IntegrationTestBase() {
             header("Authorization", "Bearer ${shopper.token}")
             contentType = MediaType.APPLICATION_JSON
             content = json("orderReference" to orderReference(orderId))
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         val reference = readJson(result)["paymentReference"].asString()
         outcome(reference)
         mockMvc.get("/api/customer/payments/verify/$reference") { header("Authorization", "Bearer ${shopper.token}") }
-            .andExpect { status { isOk() } }
+            .andExpect { responseCode("00") }
         return reference
     }
 
@@ -109,11 +109,11 @@ class AdminOrderTest : IntegrationTestBase() {
 
     private fun detail(orderId: Long): JsonNode =
         readJson(mockMvc.get("/api/admin/orders/$orderId") { header("Authorization", "Bearer $adminToken") }
-            .andExpect { status { isOk() } }.andReturn())
+            .andExpect { responseCode("00") }.andReturn())
 
     private fun list(query: String): JsonNode =
         readJson(mockMvc.get("/api/admin/orders?$query") { header("Authorization", "Bearer $adminToken") }
-            .andExpect { status { isOk() } }.andReturn())
+            .andExpect { responseCode("00") }.andReturn())
 
     private fun status(orderId: Long): String =
         jdbcClient.sql("SELECT orderstatus::text FROM public.ec_order WHERE orderid = :id")
@@ -134,21 +134,21 @@ class AdminOrderTest : IntegrationTestBase() {
         assertEquals(listOf("PROCESSING"), detail(orderId)["nextStatuses"].texts())
 
         move(orderId, "processing").andExpect {
-            status { isOk() }
-            jsonPath("$.status") { value("PROCESSING") }
-            jsonPath("$.nextStatuses[0]") { value("SHIPPED") }
+            responseCode("00")
+            jsonPath("$.data.status") { value("PROCESSING") }
+            jsonPath("$.data.nextStatuses[0]") { value("SHIPPED") }
         }
         move(orderId, "SHIPPED", note = "  GIG Logistics, tracking 12345  ").andExpect {
-            status { isOk() }
-            jsonPath("$.status") { value("SHIPPED") }
-            jsonPath("$.nextStatuses[0]") { value("DELIVERED") }
+            responseCode("00")
+            jsonPath("$.data.status") { value("SHIPPED") }
+            jsonPath("$.data.nextStatuses[0]") { value("DELIVERED") }
         }
         move(orderId, "DELIVERED", note = "  ").andExpect {
-            status { isOk() }
-            jsonPath("$.status") { value("DELIVERED") }
-            jsonPath("$.paymentStatus") { value("PAID") }
+            responseCode("00")
+            jsonPath("$.data.status") { value("DELIVERED") }
+            jsonPath("$.data.paymentStatus") { value("PAID") }
             // DELIVERED â†’ REFUNDED exists in the rules, but refunds come in V2.
-            jsonPath("$.nextStatuses.length()") { value(0) }
+            jsonPath("$.data.nextStatuses.length()") { value(0) }
         }
 
         val history = detail(orderId)["statusHistory"]
@@ -165,31 +165,31 @@ class AdminOrderTest : IntegrationTestBase() {
     fun `skipped, backward, repeated and unpaid moves are rejected`() {
         val orderId = confirmedOrder()
         move(orderId, "SHIPPED").andExpect {
-            status { isConflict() }
-            jsonPath("$.message") { value("Order status cannot change from CONFIRMED to SHIPPED") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("Order status cannot change from CONFIRMED to SHIPPED") }
         }
-        move(orderId, "DELIVERED").andExpect { status { isConflict() } }
-        move(orderId, "PROCESSING").andExpect { status { isOk() } }
-        move(orderId, "PROCESSING").andExpect { status { isConflict() } }
-        move(orderId, "SHIPPED").andExpect { status { isOk() } }
-        move(orderId, "PROCESSING").andExpect { status { isConflict() } }
-        move(orderId, "DELIVERED").andExpect { status { isOk() } }
-        move(orderId, "SHIPPED").andExpect { status { isConflict() } }
+        move(orderId, "DELIVERED").andExpect { responseCode("106") }
+        move(orderId, "PROCESSING").andExpect { responseCode("00") }
+        move(orderId, "PROCESSING").andExpect { responseCode("106") }
+        move(orderId, "SHIPPED").andExpect { responseCode("00") }
+        move(orderId, "PROCESSING").andExpect { responseCode("106") }
+        move(orderId, "DELIVERED").andExpect { responseCode("00") }
+        move(orderId, "SHIPPED").andExpect { responseCode("106") }
         assertEquals("DELIVERED", status(orderId))
         assertEquals(5, historyCount(orderId))
 
         // Not paid yet: only a verified payment can confirm it, so it cannot be processed.
         val unpaid = placeOrder(newShopper())
         move(unpaid, "PROCESSING").andExpect {
-            status { isConflict() }
-            jsonPath("$.message") { value("Order status cannot change from PENDING to PROCESSING") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("Order status cannot change from PENDING to PROCESSING") }
         }
         assertEquals("PENDING", status(unpaid))
         assertEquals(0, detail(unpaid)["nextStatuses"].size())
 
         val cancelled = placeOrder(newShopper())
         jdbcClient.sql("UPDATE public.ec_order SET orderstatus = 'CANCELLED' WHERE orderid = :id").param("id", cancelled).update()
-        move(cancelled, "PROCESSING").andExpect { status { isConflict() } }
+        move(cancelled, "PROCESSING").andExpect { responseCode("106") }
         assertEquals(1, historyCount(cancelled))
     }
 
@@ -198,13 +198,13 @@ class AdminOrderTest : IntegrationTestBase() {
         val orderId = confirmedOrder()
         listOf("CANCELLED", "CONFIRMED", "REFUNDED", "PENDING", "flying", "", null).forEach { value ->
             move(orderId, value).andExpect {
-                status { isBadRequest() }
-                jsonPath("$.fieldErrors[*].field") { value(hasItem("status")) }
+                responseCode("106")
+                jsonPath("$.data.fieldErrors[*].field") { value(hasItem("status")) }
             }
         }
         move(orderId, "PROCESSING", note = "x".repeat(501)).andExpect {
-            status { isBadRequest() }
-            jsonPath("$.fieldErrors[0].field") { value("note") }
+            responseCode("106")
+            jsonPath("$.data.fieldErrors[0].field") { value("note") }
         }
         assertEquals("CONFIRMED", status(orderId))
         assertEquals(2, historyCount(orderId))
@@ -216,12 +216,12 @@ class AdminOrderTest : IntegrationTestBase() {
 
         val pool = Executors.newFixedThreadPool(2)
         val statuses = try {
-            pool.invokeAll(List(2) { Callable { move(orderId, "PROCESSING").andReturn().response.status } }).map { it.get() }
+            pool.invokeAll(List(2) { Callable { move(orderId, "PROCESSING").andReturn().responseCodeOf() } }).map { it.get() }
         } finally {
             pool.shutdown()
         }
 
-        assertEquals(listOf(200, 409), statuses.sorted())
+        assertEquals(listOf("00", "106"), statuses.sorted())
         assertEquals("PROCESSING", status(orderId))
         assertEquals(3, historyCount(orderId))
     }
@@ -255,8 +255,8 @@ class AdminOrderTest : IntegrationTestBase() {
         assertEquals(confirmedCount, confirmed["totalElements"].asLong())
 
         mockMvc.get("/api/admin/orders?status=LOST") { header("Authorization", "Bearer $adminToken") }.andExpect {
-            status { isBadRequest() }
-            jsonPath("$.message") { value("status must be one of PENDING, CONFIRMED, PROCESSING, SHIPPED, DELIVERED, CANCELLED, REFUNDED") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("status must be one of PENDING, CONFIRMED, PROCESSING, SHIPPED, DELIVERED, CANCELLED, REFUNDED") }
         }
     }
 
@@ -291,10 +291,10 @@ class AdminOrderTest : IntegrationTestBase() {
     @Test
     fun `an unknown order is a 404`() {
         mockMvc.get("/api/admin/orders/999999999") { header("Authorization", "Bearer $adminToken") }.andExpect {
-            status { isNotFound() }
-            jsonPath("$.message") { value("Order not found") }
+            responseCode("25")
+            jsonPath("$.responseMessage") { value("Order not found") }
         }
-        move(999_999_999, "PROCESSING").andExpect { status { isNotFound() } }
+        move(999_999_999, "PROCESSING").andExpect { responseCode("25") }
     }
 
     @Test
@@ -302,14 +302,14 @@ class AdminOrderTest : IntegrationTestBase() {
         val shopper = newShopper()
         val orderId = confirmedOrder(shopper)
 
-        mockMvc.get("/api/admin/orders").andExpect { status { isUnauthorized() } }
-        mockMvc.get("/api/admin/orders") { header("Authorization", "Bearer ${shopper.token}") }.andExpect { status { isForbidden() } }
-        move(orderId, "PROCESSING", token = null).andExpect { status { isUnauthorized() } }
-        move(orderId, "PROCESSING", token = shopper.token).andExpect { status { isForbidden() } }
+        mockMvc.get("/api/admin/orders").andExpect { responseCode("115") }
+        mockMvc.get("/api/admin/orders") { header("Authorization", "Bearer ${shopper.token}") }.andExpect { responseCode("107") }
+        move(orderId, "PROCESSING", token = null).andExpect { responseCode("115") }
+        move(orderId, "PROCESSING", token = shopper.token).andExpect { responseCode("107") }
 
         val mustChangeToken = loginSeedAdmin()
-        mockMvc.get("/api/admin/orders/$orderId") { header("Authorization", "Bearer $mustChangeToken") }.andExpect { status { isForbidden() } }
-        move(orderId, "PROCESSING", token = mustChangeToken).andExpect { status { isForbidden() } }
+        mockMvc.get("/api/admin/orders/$orderId") { header("Authorization", "Bearer $mustChangeToken") }.andExpect { responseCode("107") }
+        move(orderId, "PROCESSING", token = mustChangeToken).andExpect { responseCode("107") }
         assertEquals("CONFIRMED", status(orderId))
     }
 
@@ -317,16 +317,16 @@ class AdminOrderTest : IntegrationTestBase() {
     fun `the customer sees the admin's changes and notes, but not who made them`() {
         val shopper = newShopper()
         val orderId = confirmedOrder(shopper)
-        move(orderId, "PROCESSING").andExpect { status { isOk() } }
-        move(orderId, "SHIPPED", note = "GIG Logistics, tracking 12345").andExpect { status { isOk() } }
+        move(orderId, "PROCESSING").andExpect { responseCode("00") }
+        move(orderId, "SHIPPED", note = "GIG Logistics, tracking 12345").andExpect { responseCode("00") }
 
         mockMvc.get("/api/customer/orders/$orderId") { header("Authorization", "Bearer ${shopper.token}") }.andExpect {
-            status { isOk() }
-            jsonPath("$.status") { value("SHIPPED") }
-            jsonPath("$.statusHistory[3].status") { value("SHIPPED") }
-            jsonPath("$.statusHistory[3].note") { value("GIG Logistics, tracking 12345") }
-            jsonPath("$.statusHistory[3].changedBy") { doesNotExist() }
-            jsonPath("$.statusHistory[3].adminId") { doesNotExist() }
+            responseCode("00")
+            jsonPath("$.data.status") { value("SHIPPED") }
+            jsonPath("$.data.statusHistory[3].status") { value("SHIPPED") }
+            jsonPath("$.data.statusHistory[3].note") { value("GIG Logistics, tracking 12345") }
+            jsonPath("$.data.statusHistory[3].changedBy") { doesNotExist() }
+            jsonPath("$.data.statusHistory[3].adminId") { doesNotExist() }
         }
     }
 }

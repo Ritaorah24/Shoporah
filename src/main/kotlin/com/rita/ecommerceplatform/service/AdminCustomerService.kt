@@ -1,10 +1,10 @@
 package com.rita.ecommerceplatform.service
 
+import com.rita.ecommerceplatform.exception.BadRequestException
+import com.rita.ecommerceplatform.exception.UnableToLocateRecordException
 import com.rita.ecommerceplatform.model.response.AdminCustomerResponse
 import com.rita.ecommerceplatform.model.response.AdminCustomerSummaryResponse
 import com.rita.ecommerceplatform.model.response.PageResponse
-import com.rita.ecommerceplatform.exception.BadRequestException
-import com.rita.ecommerceplatform.exception.NotFoundException
 import com.rita.ecommerceplatform.model.entity.CustomerStatus
 import com.rita.ecommerceplatform.repository.database.CustomerRepository
 import com.rita.ecommerceplatform.repository.database.OrderRepository
@@ -35,7 +35,7 @@ class AdminCustomerService(
     }
 
     fun get(customerId: Long): AdminCustomerResponse {
-        val customer = customerRepository.findById(customerId) ?: throw NotFoundException("Customer not found")
+        val customer = customerRepository.findById(customerId) ?: throw UnableToLocateRecordException("Customer not found")
         return AdminCustomerResponse.from(customer, orderRepository.customerTotals(customerId))
     }
 

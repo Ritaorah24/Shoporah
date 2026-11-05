@@ -45,7 +45,7 @@ class DeliveryMethodTest : IntegrationTestBase() {
     private fun createMethod(code: String, fee: Int, name: String = "Express"): Int =
         readJson(
             create(json("code" to code, "name" to name, "fee" to fee, "estimatedMinDays" to 1, "estimatedMaxDays" to 2))
-                .andExpect { status { isCreated() } }.andReturn()
+                .andExpect { responseCode("00") }.andReturn()
         )["deliveryMethodId"].asInt()
 
     private fun update(id: Int, body: String): ResultActionsDsl =
@@ -63,7 +63,7 @@ class DeliveryMethodTest : IntegrationTestBase() {
         }
 
     private fun publicCodes(): List<String> {
-        val list = readJson(mockMvc.get("/api/delivery-methods").andExpect { status { isOk() } }.andReturn())
+        val list = readJson(mockMvc.get("/api/delivery-methods").andExpect { responseCode("00") }.andReturn())
         return (0 until list.size()).map { list[it]["code"].asString() }
     }
 
@@ -72,7 +72,7 @@ class DeliveryMethodTest : IntegrationTestBase() {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to unique("Cat"))
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["categoryId"].asInt()
     }
 
@@ -91,7 +91,7 @@ class DeliveryMethodTest : IntegrationTestBase() {
                 "state" to "Lagos",
                 "country" to "Nigeria",
             )
-        }.andExpect { status { isCreated() } }
+        }.andExpect { responseCode("00") }
         return shopper
     }
 
@@ -101,12 +101,12 @@ class DeliveryMethodTest : IntegrationTestBase() {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to unique("Phone"), "sku" to unique("sku"), "categoryId" to categoryId, "price" to 1000, "stockQuantity" to 10)
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         mockMvc.post("/api/customer/cart/items") {
             header("Authorization", "Bearer ${shopper.token}")
             contentType = MediaType.APPLICATION_JSON
             content = json("productId" to readJson(product)["productId"].asLong(), "quantity" to 2)
-        }.andExpect { status { isOk() } }
+        }.andExpect { responseCode("00") }
     }
 
     private fun checkout(shopper: Shopper, body: String? = null): ResultActionsDsl =
@@ -122,7 +122,7 @@ class DeliveryMethodTest : IntegrationTestBase() {
     private fun placeOrder(shopper: Shopper, deliveryMethodCode: String?): JsonNode {
         fillCart(shopper)
         val body = deliveryMethodCode?.let { json("deliveryMethodCode" to it) }
-        return readJson(checkout(shopper, body).andExpect { status { isCreated() } }.andReturn())
+        return readJson(checkout(shopper, body).andExpect { responseCode("00"); jsonPath("$.responseMessage") { value("Order created") } }.andReturn())
     }
 
     private fun standardId(): Int =
@@ -134,44 +134,44 @@ class DeliveryMethodTest : IntegrationTestBase() {
         val code = uniqueCode()
         create(json("code" to " ${code.lowercase()} ", "name" to " Express ", "description" to "Lagos only", "fee" to 2500, "estimatedMinDays" to 1, "estimatedMaxDays" to 2))
             .andExpect {
-                status { isCreated() }
-                jsonPath("$.code") { value(code) }
-                jsonPath("$.name") { value("Express") }
-                jsonPath("$.fee") { value(2500.00) }
-                jsonPath("$.status") { value("ACTIVE") }
+                responseCode("00")
+                jsonPath("$.data.code") { value(code) }
+                jsonPath("$.data.name") { value("Express") }
+                jsonPath("$.data.fee") { value(2500.00) }
+                jsonPath("$.data.status") { value("ACTIVE") }
             }
 
         create(json("code" to code.lowercase(), "name" to "Again", "fee" to 1)).andExpect {
-            status { isConflict() }
-            jsonPath("$.message") { value("Delivery method code is already in use") }
+            responseCode("117")
+            jsonPath("$.responseMessage") { value("Delivery method code is already in use") }
         }
     }
 
     @Test
     fun `invalid methods are rejected`() {
         create(json("code" to uniqueCode(), "name" to "X", "fee" to -1)).andExpect {
-            status { isBadRequest() }
-            jsonPath("$.fieldErrors[*].field") { value(hasItem("fee")) }
+            responseCode("106")
+            jsonPath("$.data.fieldErrors[*].field") { value(hasItem("fee")) }
         }
         create(json("code" to uniqueCode(), "name" to "X", "fee" to 10.555)).andExpect {
-            status { isBadRequest() }
-            jsonPath("$.fieldErrors[*].field") { value(hasItem("fee")) }
+            responseCode("106")
+            jsonPath("$.data.fieldErrors[*].field") { value(hasItem("fee")) }
         }
         create(json("code" to "has space", "name" to "X", "fee" to 0)).andExpect {
-            status { isBadRequest() }
-            jsonPath("$.fieldErrors[*].field") { value(hasItem("code")) }
+            responseCode("106")
+            jsonPath("$.data.fieldErrors[*].field") { value(hasItem("code")) }
         }
         create(json("code" to uniqueCode(), "name" to "X", "fee" to 0, "estimatedMinDays" to 5, "estimatedMaxDays" to 2)).andExpect {
-            status { isBadRequest() }
-            jsonPath("$.message") { value("estimatedMaxDays must not be less than estimatedMinDays") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("estimatedMaxDays must not be less than estimatedMinDays") }
         }
 
         val id = createMethod(uniqueCode(), 100)
         // Only one of the two days is sent: it is compared with the stored other one (max 2).
-        update(id, json("estimatedMinDays" to 3)).andExpect { status { isBadRequest() } }
-        update(id, json("code" to "NEWCODE")).andExpect { status { isBadRequest() } }
-        update(id, json("status" to "INACTIVE")).andExpect { status { isBadRequest() } }
-        update(id, "{}").andExpect { status { isBadRequest() } }
+        update(id, json("estimatedMinDays" to 3)).andExpect { responseCode("106") }
+        update(id, json("code" to "NEWCODE")).andExpect { responseCode("106") }
+        update(id, json("status" to "INACTIVE")).andExpect { responseCode("106") }
+        update(id, "{}").andExpect { responseCode("106") }
     }
 
     @Test
@@ -183,8 +183,8 @@ class DeliveryMethodTest : IntegrationTestBase() {
         createMethod(cheap, 500)
         val hiddenId = createMethod(hidden, 700)
         setStatus(hiddenId, "inactive").andExpect {
-            status { isOk() }
-            jsonPath("$.status") { value("INACTIVE") }
+            responseCode("00")
+            jsonPath("$.data.status") { value("INACTIVE") }
         }
 
         val codes = publicCodes()
@@ -192,23 +192,23 @@ class DeliveryMethodTest : IntegrationTestBase() {
         assertFalse(hidden in codes)
 
         mockMvc.get("/api/delivery-methods").andExpect {
-            status { isOk() }
-            jsonPath("$[0].deliveryMethodId") { doesNotExist() }
-            jsonPath("$[0].status") { doesNotExist() }
+            responseCode("00")
+            jsonPath("$.data[0].deliveryMethodId") { doesNotExist() }
+            jsonPath("$.data[0].status") { doesNotExist() }
         }
 
         // The admin list still shows it, so it can be reactivated.
         mockMvc.get("/api/admin/delivery-methods") { header("Authorization", "Bearer $adminToken") }
-            .andExpect { jsonPath("$[*].code") { value(hasItem(hidden)) } }
-        setStatus(hiddenId, "ACTIVE").andExpect { status { isOk() } }
+            .andExpect { jsonPath("$.data[*].code") { value(hasItem(hidden)) } }
+        setStatus(hiddenId, "ACTIVE").andExpect { responseCode("00") }
         assertTrue(hidden in publicCodes())
     }
 
     @Test
     fun `STANDARD cannot be deactivated`() {
         setStatus(standardId(), "INACTIVE").andExpect {
-            status { isConflict() }
-            jsonPath("$.message") { value("STANDARD is the default delivery method and cannot be deactivated") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("STANDARD is the default delivery method and cannot be deactivated") }
         }
         assertTrue("STANDARD" in publicCodes())
     }
@@ -231,14 +231,14 @@ class DeliveryMethodTest : IntegrationTestBase() {
                 header("Authorization", "Bearer ${shopper.token}")
                 contentType = MediaType.APPLICATION_JSON
                 content = json("orderReference" to order["reference"].asString())
-            }.andExpect { status { isCreated() } }.andReturn()
+            }.andExpect { responseCode("00") }.andReturn()
         )
         val sent = paymentGateway.initialized.single { it.reference == payment["paymentReference"].asString() }
         assertEquals(450_000L, sent.amountKobo)
 
         // The admin sees the same method on the order.
         mockMvc.get("/api/admin/orders/${order["orderId"].asLong()}") { header("Authorization", "Bearer $adminToken") }
-            .andExpect { jsonPath("$.deliveryMethod.code") { value(code) } }
+            .andExpect { jsonPath("$.data.deliveryMethod.code") { value(code) } }
     }
 
     @Test
@@ -255,19 +255,19 @@ class DeliveryMethodTest : IntegrationTestBase() {
         fillCart(shopper)
 
         checkout(shopper, json("deliveryMethodCode" to "NOPE")).andExpect {
-            status { isBadRequest() }
-            jsonPath("$.message") { value("Delivery method NOPE is not available") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("Delivery method NOPE is not available") }
         }
 
         val code = uniqueCode()
         setStatus(createMethod(code, 100), "INACTIVE")
         checkout(shopper, json("deliveryMethodCode" to code)).andExpect {
-            status { isBadRequest() }
-            jsonPath("$.message") { value("Delivery method $code is not available") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("Delivery method $code is not available") }
         }
 
         mockMvc.get("/api/customer/cart") { header("Authorization", "Bearer ${shopper.token}") }
-            .andExpect { jsonPath("$.items.length()") { value(1) } }
+            .andExpect { jsonPath("$.data.items.length()") { value(1) } }
     }
 
     @Test
@@ -278,16 +278,16 @@ class DeliveryMethodTest : IntegrationTestBase() {
         val first = placeOrder(shopper, code)
 
         update(id, json("fee" to 1500, "description" to "")).andExpect {
-            status { isOk() }
-            jsonPath("$.fee") { value(1500.00) }
-            jsonPath("$.description") { value(null) }
-            jsonPath("$.estimatedMaxDays") { value(2) }
+            responseCode("00")
+            jsonPath("$.data.fee") { value(1500.00) }
+            jsonPath("$.data.description") { value(null) }
+            jsonPath("$.data.estimatedMaxDays") { value(2) }
         }
         val second = placeOrder(shopper, code)
 
         val firstAgain = readJson(
             mockMvc.get("/api/customer/orders/${first["orderId"].asLong()}") { header("Authorization", "Bearer ${shopper.token}") }
-                .andExpect { status { isOk() } }.andReturn()
+                .andExpect { responseCode("00") }.andReturn()
         )
         assertEquals(0, BigDecimal("1000").compareTo(firstAgain["deliveryFee"].decimalValue()))
         assertEquals(0, BigDecimal("3000").compareTo(firstAgain["total"].decimalValue()))
@@ -298,12 +298,12 @@ class DeliveryMethodTest : IntegrationTestBase() {
     @Test
     fun `customers cannot manage delivery methods`() {
         val customerToken = newCustomerToken()
-        create(json("code" to uniqueCode(), "name" to "X", "fee" to 0), token = customerToken).andExpect { status { isForbidden() } }
+        create(json("code" to uniqueCode(), "name" to "X", "fee" to 0), token = customerToken).andExpect { responseCode("107") }
         mockMvc.get("/api/admin/delivery-methods") { header("Authorization", "Bearer $customerToken") }
-            .andExpect { status { isForbidden() } }
+            .andExpect { responseCode("107") }
         mockMvc.post("/api/admin/delivery-methods") {
             contentType = MediaType.APPLICATION_JSON
             content = json("code" to uniqueCode(), "name" to "X", "fee" to 0)
-        }.andExpect { status { isUnauthorized() } }
+        }.andExpect { responseCode("115") }
     }
 }

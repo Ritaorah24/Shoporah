@@ -36,8 +36,8 @@ class PasswordResetTest : IntegrationTestBase() {
 
     private fun forgotAccepted(email: String) {
         forgot(email).andExpect {
-            status { isAccepted() }
-            jsonPath("$.message") { value(PasswordResetService.FORGOT_REPLY) }
+            responseCode("00")
+            jsonPath("$.responseMessage") { value(PasswordResetService.FORGOT_REPLY) }
         }
     }
 
@@ -94,17 +94,17 @@ class PasswordResetTest : IntegrationTestBase() {
         assertFalse(hash.contains(token), "the raw token must not be stored")
         assertEquals(64, hash.length) // SHA-256 in hex
 
-        reset(token, "brandNew789").andExpect { status { isNoContent() } }
-        login(email, "brandNew789").andExpect { status { isOk() } }
-        login(email, DEFAULT_PASSWORD).andExpect { status { isUnauthorized() } }
+        reset(token, "brandNew789").andExpect { responseCode("00") }
+        login(email, "brandNew789").andExpect { responseCode("00") }
+        login(email, DEFAULT_PASSWORD).andExpect { responseCode("86") }
         assertEquals(null to null, resetColumns(customerId))
 
         // Single use.
         reset(token, "another789").andExpect {
-            status { isBadRequest() }
-            jsonPath("$.message") { value("Reset link is invalid or has expired") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("Reset link is invalid or has expired") }
         }
-        login(email, "brandNew789").andExpect { status { isOk() } }
+        login(email, "brandNew789").andExpect { responseCode("00") }
     }
 
     @Test
@@ -147,17 +147,17 @@ class PasswordResetTest : IntegrationTestBase() {
         moveTokenExpiry(customerId, "31 minutes")
 
         reset(token, "brandNew789").andExpect {
-            status { isBadRequest() }
-            jsonPath("$.message") { value("Reset link is invalid or has expired") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("Reset link is invalid or has expired") }
         }
-        login(email, DEFAULT_PASSWORD).andExpect { status { isOk() } }
+        login(email, DEFAULT_PASSWORD).andExpect { responseCode("00") }
     }
 
     @Test
     fun `a made-up token is rejected`() {
         reset("not-a-real-token", "brandNew789").andExpect {
-            status { isBadRequest() }
-            jsonPath("$.message") { value("Reset link is invalid or has expired") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("Reset link is invalid or has expired") }
         }
     }
 
@@ -180,8 +180,8 @@ class PasswordResetTest : IntegrationTestBase() {
         val secondToken = tokenFrom(awaitEmails(email, 2)[1])
         assertTrue(firstToken != secondToken)
 
-        reset(firstToken, "brandNew789").andExpect { status { isBadRequest() } }
-        reset(secondToken, "brandNew789").andExpect { status { isNoContent() } }
+        reset(firstToken, "brandNew789").andExpect { responseCode("106") }
+        reset(secondToken, "brandNew789").andExpect { responseCode("00") }
     }
 
     @Test
@@ -213,24 +213,24 @@ class PasswordResetTest : IntegrationTestBase() {
             .update()
 
         reset(token, "brandNew789").andExpect {
-            status { isForbidden() }
-            jsonPath("$.message") { value("Account is not active") }
+            responseCode("107")
+            jsonPath("$.responseMessage") { value("Account is not active") }
         }
     }
 
     @Test
     fun `bad input returns 400 with field errors`() {
         forgot("ada@gmailcom").andExpect {
-            status { isBadRequest() }
-            jsonPath("$.fieldErrors[0].field") { value("email") }
+            responseCode("106")
+            jsonPath("$.data.fieldErrors[0].field") { value("email") }
         }
         reset("  ", "brandNew789").andExpect {
-            status { isBadRequest() }
-            jsonPath("$.fieldErrors[*].field") { value(hasItem("token")) }
+            responseCode("106")
+            jsonPath("$.data.fieldErrors[*].field") { value(hasItem("token")) }
         }
         reset("some-token", "abcdefgh").andExpect {
-            status { isBadRequest() }
-            jsonPath("$.fieldErrors[*].field") { value(hasItem("newPassword")) }
+            responseCode("106")
+            jsonPath("$.data.fieldErrors[*].field") { value(hasItem("newPassword")) }
         }
     }
 }

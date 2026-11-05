@@ -1,11 +1,12 @@
 package com.rita.ecommerceplatform.repository.api
 
+import com.rita.ecommerceplatform.exception.ApiErrorException
 import java.time.OffsetDateTime
 
 /**
  * The payment provider, seen from our side (checkpoint 1.4, P1). PaystackGateway is the real one;
  * tests replace it with a fake, so no test ever calls Paystack. Amounts are in kobo (P8).
- * Any failure to talk to the provider is thrown as BadGatewayException (502).
+ * Any failure to talk to the provider is thrown as ApiErrorException (502).
  */
 interface PaymentGateway {
 

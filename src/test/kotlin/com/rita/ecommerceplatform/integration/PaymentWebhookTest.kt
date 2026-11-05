@@ -52,7 +52,7 @@ class PaymentWebhookTest : IntegrationTestBase() {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to unique("Cat"))
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["categoryId"].asInt()
     }
 
@@ -67,7 +67,7 @@ class PaymentWebhookTest : IntegrationTestBase() {
                 "price" to 1000,
                 "stockQuantity" to stock,
             )
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["productId"].asLong()
     }
 
@@ -83,7 +83,7 @@ class PaymentWebhookTest : IntegrationTestBase() {
                 "state" to "Lagos",
                 "country" to "Nigeria",
             )
-        }.andExpect { status { isCreated() } }
+        }.andExpect { responseCode("00") }
     }
 
     /** One new product (stock 10), quantity 2 in the cart, then checkout. */
@@ -93,11 +93,11 @@ class PaymentWebhookTest : IntegrationTestBase() {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json("productId" to productId, "quantity" to 2)
-        }.andExpect { status { isOk() } }
+        }.andExpect { responseCode("00") }
         val result = mockMvc.post("/api/customer/orders") {
             header("Authorization", "Bearer $token")
             header("Idempotency-Key", UUID.randomUUID().toString())
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return Placed(readJson(result), listOf(productId))
     }
 
@@ -107,7 +107,7 @@ class PaymentWebhookTest : IntegrationTestBase() {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json("orderReference" to placed.reference)
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["paymentReference"].asString()
     }
 
@@ -195,7 +195,7 @@ class PaymentWebhookTest : IntegrationTestBase() {
 
         webhook(body, signature = null).andExpect {
             status { isUnauthorized() }
-            jsonPath("$.message") { value("Invalid webhook signature") }
+            jsonPath("$.responseMessage") { value("Invalid webhook signature") }
         }
         webhook(body, signature = "0".repeat(128)).andExpect { status { isUnauthorized() } }
         webhook(body, signature = sign(body, key = "sk_test_someone_else")).andExpect { status { isUnauthorized() } }
@@ -227,16 +227,16 @@ class PaymentWebhookTest : IntegrationTestBase() {
         paymentGateway.pay(first)
         webhook(event(first)).andExpect { status { isOk() } }
         verify(first).andExpect {
-            status { isOk() }
-            jsonPath("$.paymentStatus") { value("SUCCESS") }
-            jsonPath("$.orderStatus") { value("CONFIRMED") }
+            responseCode("00")
+            jsonPath("$.data.paymentStatus") { value("SUCCESS") }
+            jsonPath("$.data.orderStatus") { value("CONFIRMED") }
         }
         assertConfirmedOnce(webhookFirst)
 
         val verifyFirst = placeOrder()
         val second = initialize(verifyFirst)
         paymentGateway.pay(second)
-        verify(second).andExpect { status { isOk() } }
+        verify(second).andExpect { responseCode("00"); jsonPath("$.responseMessage") { value("Successful") } }
         webhook(event(second)).andExpect { status { isOk() } }
         assertConfirmedOnce(verifyFirst)
     }
@@ -251,15 +251,15 @@ class PaymentWebhookTest : IntegrationTestBase() {
         val statuses = try {
             pool.invokeAll(
                 listOf(
-                    Callable { webhook(event(reference)).andReturn().response.status },
-                    Callable { verify(reference).andReturn().response.status },
+                    Callable { webhook(event(reference)).andReturn().response.status == 200 },
+                    Callable { verify(reference).andReturn().responseCodeOf() == "00" },
                 )
             ).map { it.get() }
         } finally {
             pool.shutdown()
         }
 
-        assertEquals(listOf(200, 200), statuses)
+        assertEquals(listOf(true, true), statuses)
         assertConfirmedOnce(placed)
     }
 

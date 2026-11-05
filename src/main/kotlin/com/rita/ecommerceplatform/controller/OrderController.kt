@@ -1,13 +1,11 @@
 package com.rita.ecommerceplatform.controller
 
+import com.rita.ecommerceplatform.model.response.BaseDataResponse
+import com.rita.ecommerceplatform.exception.AccessNotAllowedException
+import com.rita.ecommerceplatform.exception.BadRequestException
 import com.rita.ecommerceplatform.config.OpenApiConfig
 import com.rita.ecommerceplatform.model.request.CancelOrderRequest
 import com.rita.ecommerceplatform.model.request.CheckoutRequest
-import com.rita.ecommerceplatform.model.response.OrderResponse
-import com.rita.ecommerceplatform.model.response.OrderSummaryResponse
-import com.rita.ecommerceplatform.model.response.PageResponse
-import com.rita.ecommerceplatform.exception.AccountNotActiveException
-import com.rita.ecommerceplatform.exception.BadRequestException
 import com.rita.ecommerceplatform.security.CurrentUser
 import com.rita.ecommerceplatform.security.UserType
 import com.rita.ecommerceplatform.service.OrderService
@@ -16,8 +14,6 @@ import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
-import org.springframework.http.HttpStatus
-import org.springframework.http.ResponseEntity
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.web.bind.annotation.GetMapping
@@ -38,7 +34,7 @@ import java.util.UUID
 class OrderController(private val orderService: OrderService) {
 
     /**
-     * Places an order from the cart. 201 when created; 200 with the same order when this
+     * Places an order from the cart. responseMessage "Order created" when created; "Successful" with the same order when this
      * Idempotency-Key was already used (a retry), so retrying never creates a second order.
      */
     @PostMapping
@@ -47,9 +43,9 @@ class OrderController(private val orderService: OrderService) {
         @Parameter(description = "A new UUID per checkout attempt; send the same one again when retrying")
         @RequestHeader(IDEMPOTENCY_KEY, required = false) idempotencyKey: String?,
         @Valid @RequestBody(required = false) request: CheckoutRequest?,
-    ): ResponseEntity<OrderResponse> {
+    ): BaseDataResponse {
         val result = orderService.checkout(customerId(jwt), parseKey(idempotencyKey), request)
-        return ResponseEntity.status(if (result.created) HttpStatus.CREATED else HttpStatus.OK).body(result.order)
+        return BaseDataResponse("00", if (result.created) "Order created" else "Successful", result.order)
     }
 
     /** The customer's orders, newest first. Page size is capped at 50. */
@@ -58,12 +54,15 @@ class OrderController(private val orderService: OrderService) {
         @AuthenticationPrincipal jwt: Jwt,
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "${Paging.DEFAULT_SIZE}") size: Int,
-    ): PageResponse<OrderSummaryResponse> = orderService.list(customerId(jwt), page, size)
+    ): BaseDataResponse {
+        return BaseDataResponse("00", "Successful", orderService.list(customerId(jwt), page, size))
+    }
 
     /** Items, totals, delivery address and status history of one of the customer's own orders. */
     @GetMapping("/{orderId}")
-    fun get(@AuthenticationPrincipal jwt: Jwt, @PathVariable orderId: Long): OrderResponse =
-        orderService.get(customerId(jwt), orderId)
+    fun get(@AuthenticationPrincipal jwt: Jwt, @PathVariable orderId: Long): BaseDataResponse {
+        return BaseDataResponse("00", "Successful", orderService.get(customerId(jwt), orderId))
+    }
 
     /**
      * Cancels one of the customer's own orders while it is PENDING and UNPAID (409 otherwise, e.g. once paid).
@@ -74,7 +73,9 @@ class OrderController(private val orderService: OrderService) {
         @AuthenticationPrincipal jwt: Jwt,
         @PathVariable orderId: Long,
         @Valid @RequestBody(required = false) request: CancelOrderRequest?,
-    ): OrderResponse = orderService.cancel(customerId(jwt), orderId, request)
+    ): BaseDataResponse {
+        return BaseDataResponse("00", "Successful", orderService.cancel(customerId(jwt), orderId, request))
+    }
 
     // Read as a String and checked here, so a missing or malformed key gets a clear message.
     private fun parseKey(value: String?): UUID {
@@ -89,7 +90,7 @@ class OrderController(private val orderService: OrderService) {
     // Roles already restrict /api/customer/** to customer tokens; this guards against a mis-issued token.
     private fun customerId(jwt: Jwt): Long {
         val currentUser = CurrentUser.from(jwt)
-        if (currentUser.userType != UserType.CUSTOMER) throw AccountNotActiveException()
+        if (currentUser.userType != UserType.CUSTOMER) throw AccessNotAllowedException("Account is not active")
         return currentUser.id
     }
 

@@ -1,6 +1,6 @@
 package com.rita.ecommerceplatform.repository.api.paystack
 
-import com.rita.ecommerceplatform.exception.BadGatewayException
+import com.rita.ecommerceplatform.exception.ApiErrorException
 import com.rita.ecommerceplatform.repository.api.GatewayInitRequest
 import com.rita.ecommerceplatform.repository.api.GatewayInitResult
 import com.rita.ecommerceplatform.repository.api.GatewayPaymentStatus
@@ -160,7 +160,7 @@ class PaystackGateway(
             } ?: throw unreadable(what)
         } catch (ex: RestClientException) {
             log.error("Paystack {} failed: could not reach Paystack", what, ex)
-            throw BadGatewayException(PROVIDER_ERROR)
+            throw ApiErrorException(PROVIDER_ERROR)
         }
 
     /** The "data" object (or array, for lists) of a successful answer. Anything else is logged and becomes a 502. */
@@ -170,7 +170,7 @@ class PaystackGateway(
         val shapeOk = data != null && if (expectArray) data.isArray else data.isObject
         if (!status.is2xxSuccessful || json?.get("status")?.asBoolean() != true || !shapeOk) {
             log.error("Paystack {} failed: HTTP {} {}", what, status.value(), body)
-            throw BadGatewayException(PROVIDER_ERROR)
+            throw ApiErrorException(PROVIDER_ERROR)
         }
         return data!!
     }
@@ -191,9 +191,9 @@ class PaystackGateway(
             null
         }
 
-    private fun unreadable(what: String, cause: Exception? = null): BadGatewayException {
+    private fun unreadable(what: String, cause: Exception? = null): ApiErrorException {
         log.error("Paystack {} answered without the expected fields", what, cause)
-        return BadGatewayException(PROVIDER_ERROR)
+        return ApiErrorException(PROVIDER_ERROR)
     }
 
     private fun JsonNode.text(field: String): String? = get(field)?.takeUnless { it.isNull }?.asString()

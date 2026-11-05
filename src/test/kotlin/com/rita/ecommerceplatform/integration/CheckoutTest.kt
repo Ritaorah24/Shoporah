@@ -41,7 +41,7 @@ class CheckoutTest : IntegrationTestBase() {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to unique("Cat"))
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["categoryId"].asInt()
     }
 
@@ -57,7 +57,7 @@ class CheckoutTest : IntegrationTestBase() {
                 "discountPrice" to discountPrice,
                 "stockQuantity" to stock,
             )
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["productId"].asLong()
     }
 
@@ -66,7 +66,7 @@ class CheckoutTest : IntegrationTestBase() {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = body
-        }.andExpect { status { isOk() } }
+        }.andExpect { responseCode("00") }
     }
 
     private fun createAddress(withToken: String = token, city: String = "Ikeja", isDefault: Boolean? = null): Long {
@@ -82,7 +82,7 @@ class CheckoutTest : IntegrationTestBase() {
                 "country" to "Nigeria",
                 "isDefault" to isDefault,
             )
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["addressId"].asLong()
     }
 
@@ -91,7 +91,7 @@ class CheckoutTest : IntegrationTestBase() {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json("productId" to productId, "quantity" to quantity)
-        }.andExpect { status { isOk() } }
+        }.andExpect { responseCode("00") }
     }
 
     private fun checkout(key: String? = UUID.randomUUID().toString(), body: String? = null, withToken: String = token): ResultActionsDsl =
@@ -113,7 +113,7 @@ class CheckoutTest : IntegrationTestBase() {
     private fun cartQuantities(): List<Int> {
         val result = mockMvc.get("/api/customer/cart") {
             header("Authorization", "Bearer $token")
-        }.andExpect { status { isOk() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["items"].toList().map { it["quantity"].asInt() }
     }
 
@@ -126,24 +126,24 @@ class CheckoutTest : IntegrationTestBase() {
         addToCart(case, 1)
 
         val result = checkout().andExpect {
-            status { isCreated() }
-            jsonPath("$.orderId") { isNumber() }
-            jsonPath("$.reference") { value(matchesPattern("^ORD-\\d{8}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{8}$")) }
-            jsonPath("$.status") { value("PENDING") }
-            jsonPath("$.paymentStatus") { value("UNPAID") }
-            jsonPath("$.items.length()") { value(2) }
-            jsonPath("$.items[0].productId") { value(phone) }
-            jsonPath("$.items[0].unitPrice") { value(800.00) }
-            jsonPath("$.items[0].quantity") { value(2) }
-            jsonPath("$.items[0].lineTotal") { value(1600.00) }
-            jsonPath("$.items[0].productSku") { isString() }
-            jsonPath("$.items[1].unitPrice") { value(500.00) }
-            jsonPath("$.subtotal") { value(2100.00) }
-            jsonPath("$.deliveryFee") { value(0.00) }
-            jsonPath("$.discountAmount") { value(0.00) }
-            jsonPath("$.total") { value(2100.00) }
-            jsonPath("$.deliveryAddress.city") { value("Ikeja") }
-            jsonPath("$.deliveryAddress.recipientName") { value("Ada Obi") }
+            responseCode("00"); jsonPath("$.responseMessage") { value("Order created") }
+            jsonPath("$.data.orderId") { isNumber() }
+            jsonPath("$.data.reference") { value(matchesPattern("^ORD-\\d{8}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{8}$")) }
+            jsonPath("$.data.status") { value("PENDING") }
+            jsonPath("$.data.paymentStatus") { value("UNPAID") }
+            jsonPath("$.data.items.length()") { value(2) }
+            jsonPath("$.data.items[0].productId") { value(phone) }
+            jsonPath("$.data.items[0].unitPrice") { value(800.00) }
+            jsonPath("$.data.items[0].quantity") { value(2) }
+            jsonPath("$.data.items[0].lineTotal") { value(1600.00) }
+            jsonPath("$.data.items[0].productSku") { isString() }
+            jsonPath("$.data.items[1].unitPrice") { value(500.00) }
+            jsonPath("$.data.subtotal") { value(2100.00) }
+            jsonPath("$.data.deliveryFee") { value(0.00) }
+            jsonPath("$.data.discountAmount") { value(0.00) }
+            jsonPath("$.data.total") { value(2100.00) }
+            jsonPath("$.data.deliveryAddress.city") { value("Ikeja") }
+            jsonPath("$.data.deliveryAddress.recipientName") { value("Ada Obi") }
         }.andReturn()
 
         assertEquals(emptyList(), cartQuantities())
@@ -168,11 +168,11 @@ class CheckoutTest : IntegrationTestBase() {
         addToCart(createProduct(price = 1000), 2)
 
         checkout(body = """{"price": 1, "unitPrice": 1, "subtotal": 1, "total": 1, "discountAmount": 1999}""").andExpect {
-            status { isCreated() }
-            jsonPath("$.items[0].unitPrice") { value(1000.00) }
-            jsonPath("$.subtotal") { value(2000.00) }
-            jsonPath("$.discountAmount") { value(0.00) }
-            jsonPath("$.total") { value(2000.00) }
+            responseCode("00"); jsonPath("$.responseMessage") { value("Order created") }
+            jsonPath("$.data.items[0].unitPrice") { value(1000.00) }
+            jsonPath("$.data.subtotal") { value(2000.00) }
+            jsonPath("$.data.discountAmount") { value(0.00) }
+            jsonPath("$.data.total") { value(2000.00) }
         }
     }
 
@@ -182,9 +182,9 @@ class CheckoutTest : IntegrationTestBase() {
         addToCart(createProduct())
         val key = UUID.randomUUID().toString()
 
-        val first = readJson(checkout(key).andExpect { status { isCreated() } }.andReturn())
+        val first = readJson(checkout(key).andExpect { responseCode("00"); jsonPath("$.responseMessage") { value("Order created") } }.andReturn())
         // The cart is empty now, but the retry still returns the original order.
-        val retry = readJson(checkout(key).andExpect { status { isOk() } }.andReturn())
+        val retry = readJson(checkout(key).andExpect { responseCode("00"); jsonPath("$.responseMessage") { value("Successful") } }.andReturn())
 
         assertEquals(first["orderId"].asLong(), retry["orderId"].asLong())
         assertEquals(first["reference"].asString(), retry["reference"].asString())
@@ -192,12 +192,12 @@ class CheckoutTest : IntegrationTestBase() {
 
         // A new key with an empty cart is a new attempt, and fails.
         checkout().andExpect {
-            status { isBadRequest() }
-            jsonPath("$.message") { value("Cart is empty") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("Cart is empty") }
         }
         // A new key with a refilled cart is a second order.
         addToCart(createProduct())
-        checkout().andExpect { status { isCreated() } }
+        checkout().andExpect { responseCode("00"); jsonPath("$.responseMessage") { value("Order created") } }
         assertEquals(2, orderCount())
     }
 
@@ -209,12 +209,12 @@ class CheckoutTest : IntegrationTestBase() {
 
         val pool = Executors.newFixedThreadPool(2)
         val statuses = try {
-            pool.invokeAll(List(2) { Callable { checkout(key).andReturn().response.status } }).map { it.get() }
+            pool.invokeAll(List(2) { Callable { readMessage(checkout(key).andReturn()) } }).map { it.get() }
         } finally {
             pool.shutdown()
         }
 
-        assertEquals(listOf(200, 201), statuses.sorted())
+        assertEquals(listOf("Order created", "Successful"), statuses.sorted())
         assertEquals(1, orderCount())
     }
 
@@ -223,7 +223,7 @@ class CheckoutTest : IntegrationTestBase() {
         createAddress()
         addToCart(createProduct())
         val key = UUID.randomUUID().toString()
-        checkout(key).andExpect { status { isCreated() } }
+        checkout(key).andExpect { responseCode("00"); jsonPath("$.responseMessage") { value("Order created") } }
 
         val otherToken = newCustomerToken()
         createAddress(withToken = otherToken)
@@ -231,8 +231,8 @@ class CheckoutTest : IntegrationTestBase() {
             header("Authorization", "Bearer $otherToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("productId" to createProduct())
-        }.andExpect { status { isOk() } }
-        checkout(key, withToken = otherToken).andExpect { status { isCreated() } }
+        }.andExpect { responseCode("00") }
+        checkout(key, withToken = otherToken).andExpect { responseCode("00"); jsonPath("$.responseMessage") { value("Order created") } }
     }
 
     @Test
@@ -241,29 +241,29 @@ class CheckoutTest : IntegrationTestBase() {
         val productId = createProduct(price = 1000)
         addToCart(productId)
         val key = UUID.randomUUID().toString()
-        checkout(key).andExpect { status { isCreated() } }
+        checkout(key).andExpect { responseCode("00"); jsonPath("$.responseMessage") { value("Order created") } }
 
         adminPatch("/api/admin/products/$productId", json("price" to 5000, "name" to "Renamed"))
         mockMvc.patch("/api/customer/addresses/$addressId") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json("city" to "Yaba")
-        }.andExpect { status { isOk() } }
+        }.andExpect { responseCode("00") }
 
         // The retry reads the stored order back from the database.
         checkout(key).andExpect {
-            status { isOk() }
-            jsonPath("$.items[0].unitPrice") { value(1000.00) }
-            jsonPath("$.items[0].productName") { value(not("Renamed")) }
-            jsonPath("$.total") { value(1000.00) }
-            jsonPath("$.deliveryAddress.city") { value("Ikeja") }
+            responseCode("00"); jsonPath("$.responseMessage") { value("Successful") }
+            jsonPath("$.data.items[0].unitPrice") { value(1000.00) }
+            jsonPath("$.data.items[0].productName") { value(not("Renamed")) }
+            jsonPath("$.data.total") { value(1000.00) }
+            jsonPath("$.data.deliveryAddress.city") { value("Ikeja") }
         }
 
         // Deleting the address does not touch the order either.
         mockMvc.delete("/api/customer/addresses/$addressId") {
             header("Authorization", "Bearer $token")
-        }.andExpect { status { isNoContent() } }
-        checkout(key).andExpect { jsonPath("$.deliveryAddress.city") { value("Ikeja") } }
+        }.andExpect { responseCode("00") }
+        checkout(key).andExpect { jsonPath("$.data.deliveryAddress.city") { value("Ikeja") } }
     }
 
     @Test
@@ -273,8 +273,8 @@ class CheckoutTest : IntegrationTestBase() {
         addToCart(createProduct())
 
         checkout(body = json("addressId" to other)).andExpect {
-            status { isCreated() }
-            jsonPath("$.deliveryAddress.city") { value("Abuja") }
+            responseCode("00"); jsonPath("$.responseMessage") { value("Order created") }
+            jsonPath("$.data.deliveryAddress.city") { value("Abuja") }
         }
     }
 
@@ -284,13 +284,13 @@ class CheckoutTest : IntegrationTestBase() {
         val othersAddress = createAddress(withToken = newCustomerToken())
 
         checkout(body = json("addressId" to othersAddress)).andExpect {
-            status { isBadRequest() }
-            jsonPath("$.message") { value("Address $othersAddress does not exist") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("Address $othersAddress does not exist") }
         }
         // No address saved, so no default either.
         checkout().andExpect {
-            status { isBadRequest() }
-            jsonPath("$.message") { value("No delivery address: send addressId or set a default address") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("No delivery address: send addressId or set a default address") }
         }
         assertEquals(0, orderCount())
         assertEquals(listOf(1), cartQuantities())
@@ -300,8 +300,8 @@ class CheckoutTest : IntegrationTestBase() {
     fun `an empty cart cannot be checked out`() {
         createAddress()
         checkout().andExpect {
-            status { isBadRequest() }
-            jsonPath("$.message") { value("Cart is empty") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("Cart is empty") }
         }
     }
 
@@ -319,12 +319,12 @@ class CheckoutTest : IntegrationTestBase() {
         adminPatch("/api/admin/products/$deactivated/status", json("status" to "INACTIVE"))
 
         checkout().andExpect {
-            status { isConflict() }
-            jsonPath("$.message") { value(containsString("Some items cannot be ordered")) }
-            jsonPath("$.message") { value(containsString("Lowered-")) }
-            jsonPath("$.message") { value(containsString("(INSUFFICIENT_STOCK)")) }
-            jsonPath("$.message") { value(containsString("Gone-")) }
-            jsonPath("$.message") { value(containsString("(PRODUCT_UNAVAILABLE)")) }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value(containsString("Some items cannot be ordered")) }
+            jsonPath("$.responseMessage") { value(containsString("Lowered-")) }
+            jsonPath("$.responseMessage") { value(containsString("(INSUFFICIENT_STOCK)")) }
+            jsonPath("$.responseMessage") { value(containsString("Gone-")) }
+            jsonPath("$.responseMessage") { value(containsString("(PRODUCT_UNAVAILABLE)")) }
         }
         assertEquals(0, orderCount())
         assertEquals(listOf(5, 1, 1), cartQuantities())
@@ -336,12 +336,12 @@ class CheckoutTest : IntegrationTestBase() {
         addToCart(createProduct())
 
         checkout(key = null).andExpect {
-            status { isBadRequest() }
-            jsonPath("$.message") { value("Idempotency-Key header is required") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("Idempotency-Key header is required") }
         }
         checkout(key = "not-a-uuid").andExpect {
-            status { isBadRequest() }
-            jsonPath("$.message") { value("Idempotency-Key header must be a UUID") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("Idempotency-Key header must be a UUID") }
         }
         assertEquals(0, orderCount())
     }
@@ -350,7 +350,7 @@ class CheckoutTest : IntegrationTestBase() {
     fun `checkout needs a customer token`() {
         mockMvc.post("/api/customer/orders") {
             header("Idempotency-Key", UUID.randomUUID().toString())
-        }.andExpect { status { isUnauthorized() } }
-        checkout(withToken = adminToken).andExpect { status { isForbidden() } }
+        }.andExpect { responseCode("115") }
+        checkout(withToken = adminToken).andExpect { responseCode("107") }
     }
 }

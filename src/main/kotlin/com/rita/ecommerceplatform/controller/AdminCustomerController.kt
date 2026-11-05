@@ -1,9 +1,7 @@
 package com.rita.ecommerceplatform.controller
 
+import com.rita.ecommerceplatform.model.response.BaseDataResponse
 import com.rita.ecommerceplatform.config.OpenApiConfig
-import com.rita.ecommerceplatform.model.response.AdminCustomerResponse
-import com.rita.ecommerceplatform.model.response.AdminCustomerSummaryResponse
-import com.rita.ecommerceplatform.model.response.PageResponse
 import com.rita.ecommerceplatform.service.AdminCustomerService
 import com.rita.ecommerceplatform.service.Paging
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
@@ -31,9 +29,13 @@ class AdminCustomerController(private val adminCustomerService: AdminCustomerSer
         @RequestParam(defaultValue = "${Paging.DEFAULT_SIZE}") size: Int,
         @RequestParam(required = false) search: String?,
         @RequestParam(required = false) status: String?,
-    ): PageResponse<AdminCustomerSummaryResponse> = adminCustomerService.list(page, size, search, status)
+    ): BaseDataResponse {
+        return BaseDataResponse("00", "Successful", adminCustomerService.list(page, size, search, status))
+    }
 
     /** The customer with their order totals; their orders: GET /api/admin/orders?customerId={customerId}. */
     @GetMapping("/{customerId}")
-    fun get(@PathVariable customerId: Long): AdminCustomerResponse = adminCustomerService.get(customerId)
+    fun get(@PathVariable customerId: Long): BaseDataResponse {
+        return BaseDataResponse("00", "Successful", adminCustomerService.get(customerId))
+    }
 }

@@ -2,14 +2,13 @@ package com.rita.ecommerceplatform.security
 
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
-import org.springframework.http.HttpStatus
 import org.springframework.security.access.AccessDeniedException
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.security.web.access.AccessDeniedHandler
 import org.springframework.stereotype.Component
 import tools.jackson.databind.json.JsonMapper
 
-/** 403: the token is valid, but it does not allow this URL. */
+/** 107: the token is valid, but it does not allow this URL. */
 @Component
 class JsonAccessDeniedHandler(private val jsonMapper: JsonMapper) : AccessDeniedHandler {
 
@@ -21,6 +20,6 @@ class JsonAccessDeniedHandler(private val jsonMapper: JsonMapper) : AccessDenied
         } else {
             "You do not have permission to access this resource"
         }
-        writeApiError(jsonMapper, request, response, HttpStatus.FORBIDDEN, message)
+        writeResponse(jsonMapper, response, "107", message)
     }
 }

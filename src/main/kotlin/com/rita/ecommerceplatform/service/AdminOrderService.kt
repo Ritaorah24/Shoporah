@@ -1,13 +1,12 @@
 package com.rita.ecommerceplatform.service
 
+import com.rita.ecommerceplatform.exception.BadRequestException
+import com.rita.ecommerceplatform.exception.UnableToLocateRecordException
 import com.rita.ecommerceplatform.model.request.AdminCancelOrderRequest
 import com.rita.ecommerceplatform.model.request.UpdateOrderStatusRequest
 import com.rita.ecommerceplatform.model.response.AdminOrderResponse
 import com.rita.ecommerceplatform.model.response.AdminOrderSummaryResponse
 import com.rita.ecommerceplatform.model.response.PageResponse
-import com.rita.ecommerceplatform.exception.BadRequestException
-import com.rita.ecommerceplatform.exception.ConflictException
-import com.rita.ecommerceplatform.exception.NotFoundException
 import com.rita.ecommerceplatform.model.entity.NotificationType
 import com.rita.ecommerceplatform.model.entity.Order
 import com.rita.ecommerceplatform.model.entity.OrderPaymentStatus
@@ -110,7 +109,7 @@ class AdminOrderService(
     fun cancel(adminId: Int, orderId: Long, request: AdminCancelOrderRequest): AdminOrderResponse {
         val order = orderRepository.findByIdWithCustomer(orderId)?.order ?: throw orderNotFound()
         if (order.orderStatus == OrderStatus.PENDING && orderCancellation.settleOpenPayment(orderId)) {
-            throw ConflictException("This order was just paid; check it and cancel again if needed")
+            throw BadRequestException("This order was just paid; check it and cancel again if needed")
         }
         orderCancellation.cancelByAdmin(adminId, orderId, request.reason!!.trim())
         return get(orderId)
@@ -173,7 +172,7 @@ class AdminOrderService(
             ?: throw BadRequestException("$name must be one of ${entries.joinToString()}")
     }
 
-    private fun orderNotFound() = NotFoundException("Order not found")
+    private fun orderNotFound() = UnableToLocateRecordException("Order not found")
 
     companion object {
         // What an admin may set with PATCH .../status (UpdateOrderStatusRequest). Cancel has its own endpoint.

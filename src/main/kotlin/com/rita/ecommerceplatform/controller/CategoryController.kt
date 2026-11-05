@@ -1,6 +1,6 @@
 package com.rita.ecommerceplatform.controller
 
-import com.rita.ecommerceplatform.model.response.CategoryResponse
+import com.rita.ecommerceplatform.model.response.BaseDataResponse
 import com.rita.ecommerceplatform.service.CategoryService
 import io.swagger.v3.oas.annotations.tags.Tag
 import org.springframework.web.bind.annotation.GetMapping
@@ -14,5 +14,7 @@ import org.springframework.web.bind.annotation.RestController
 class CategoryController(private val categoryService: CategoryService) {
 
     @GetMapping
-    fun list(): List<CategoryResponse> = categoryService.listActive()
+    fun list(): BaseDataResponse {
+        return BaseDataResponse("00", "Successful", categoryService.listActive())
+    }
 }

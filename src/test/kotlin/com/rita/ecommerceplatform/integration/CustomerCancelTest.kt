@@ -39,7 +39,7 @@ class CustomerCancelTest : IntegrationTestBase() {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to unique("Cat"))
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["categoryId"].asInt()
     }
 
@@ -54,7 +54,7 @@ class CustomerCancelTest : IntegrationTestBase() {
                 "price" to 1000,
                 "stockQuantity" to 10,
             )
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["productId"].asLong()
     }
 
@@ -70,7 +70,7 @@ class CustomerCancelTest : IntegrationTestBase() {
                 "state" to "Lagos",
                 "country" to "Nigeria",
             )
-        }.andExpect { status { isCreated() } }
+        }.andExpect { responseCode("00") }
     }
 
     /** One new product (stock 10), 2 of it in the cart, then checkout. */
@@ -80,11 +80,11 @@ class CustomerCancelTest : IntegrationTestBase() {
             header("Authorization", "Bearer $customerToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("productId" to productId, "quantity" to 2)
-        }.andExpect { status { isOk() } }
+        }.andExpect { responseCode("00") }
         val result = mockMvc.post("/api/customer/orders") {
             header("Authorization", "Bearer $customerToken")
             header("Idempotency-Key", UUID.randomUUID().toString())
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         val order = readJson(result)
         return Placed(order["orderId"].asLong(), order["reference"].asString(), productId)
     }
@@ -94,7 +94,7 @@ class CustomerCancelTest : IntegrationTestBase() {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json("orderReference" to placed.reference)
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["paymentReference"].asString()
     }
 
@@ -129,13 +129,13 @@ class CustomerCancelTest : IntegrationTestBase() {
         val placed = placeOrder()
 
         cancel(placed.orderId, reason = "  Ordered the wrong size  ").andExpect {
-            status { isOk() }
-            jsonPath("$.orderId") { value(placed.orderId) }
-            jsonPath("$.status") { value("CANCELLED") }
-            jsonPath("$.paymentStatus") { value("UNPAID") }
-            jsonPath("$.statusHistory.length()") { value(2) }
-            jsonPath("$.statusHistory[1].status") { value("CANCELLED") }
-            jsonPath("$.statusHistory[1].note") { value("${OrderCancellation.CANCELLED_BY_CUSTOMER}: Ordered the wrong size") }
+            responseCode("00")
+            jsonPath("$.data.orderId") { value(placed.orderId) }
+            jsonPath("$.data.status") { value("CANCELLED") }
+            jsonPath("$.data.paymentStatus") { value("UNPAID") }
+            jsonPath("$.data.statusHistory.length()") { value(2) }
+            jsonPath("$.data.statusHistory[1].status") { value("CANCELLED") }
+            jsonPath("$.data.statusHistory[1].note") { value("${OrderCancellation.CANCELLED_BY_CUSTOMER}: Ordered the wrong size") }
         }
 
         val changedBy = jdbcClient.sql(
@@ -156,9 +156,9 @@ class CustomerCancelTest : IntegrationTestBase() {
         val reference = initialize(placed)
 
         cancel(placed.orderId).andExpect {
-            status { isOk() }
-            jsonPath("$.status") { value("CANCELLED") }
-            jsonPath("$.statusHistory[1].note") { value(OrderCancellation.CANCELLED_BY_CUSTOMER) }
+            responseCode("00")
+            jsonPath("$.data.status") { value("CANCELLED") }
+            jsonPath("$.data.statusHistory[1].note") { value(OrderCancellation.CANCELLED_BY_CUSTOMER) }
         }
 
         val payment = paymentState(reference)
@@ -175,8 +175,8 @@ class CustomerCancelTest : IntegrationTestBase() {
         paymentGateway.pay(reference)
 
         cancel(placed.orderId).andExpect {
-            status { isConflict() }
-            jsonPath("$.message") { value("This order has already been paid and can no longer be cancelled") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("This order has already been paid and can no longer be cancelled") }
         }
 
         assertEquals("CONFIRMED", orderStatus(placed.orderId))
@@ -193,7 +193,7 @@ class CustomerCancelTest : IntegrationTestBase() {
 
         paymentGateway.down = true
         try {
-            cancel(placed.orderId).andExpect { status { isBadGateway() } }
+            cancel(placed.orderId).andExpect { responseCode("22") }
         } finally {
             paymentGateway.down = false
         }
@@ -209,11 +209,11 @@ class CustomerCancelTest : IntegrationTestBase() {
         val reference = initialize(placed)
         paymentGateway.pay(reference)
         mockMvc.get("/api/customer/payments/verify/$reference") { header("Authorization", "Bearer $token") }
-            .andExpect { status { isOk() } }
+            .andExpect { responseCode("00"); jsonPath("$.responseMessage") { value("Successful") } }
 
         cancel(placed.orderId).andExpect {
-            status { isConflict() }
-            jsonPath("$.message") { value("Only unpaid pending orders can be cancelled") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("Only unpaid pending orders can be cancelled") }
         }
         assertEquals("CONFIRMED", orderStatus(placed.orderId))
         assertEquals(8, stock(placed.productId))
@@ -223,10 +223,10 @@ class CustomerCancelTest : IntegrationTestBase() {
     fun `cancelling twice is refused the second time and sends one email`() {
         val placed = placeOrder()
 
-        cancel(placed.orderId).andExpect { status { isOk() } }
+        cancel(placed.orderId).andExpect { responseCode("00") }
         cancel(placed.orderId).andExpect {
-            status { isConflict() }
-            jsonPath("$.message") { value("Only unpaid pending orders can be cancelled") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("Only unpaid pending orders can be cancelled") }
         }
         assertEquals(1, cancelledSubjects().size)
     }
@@ -237,25 +237,25 @@ class CustomerCancelTest : IntegrationTestBase() {
         val otherToken = newCustomerToken()
 
         cancel(placed.orderId, withToken = otherToken).andExpect {
-            status { isNotFound() }
-            jsonPath("$.message") { value("Order not found") }
+            responseCode("25")
+            jsonPath("$.responseMessage") { value("Order not found") }
         }
-        cancel(999_999_999).andExpect { status { isNotFound() } }
+        cancel(999_999_999).andExpect { responseCode("25") }
         assertEquals("PENDING", orderStatus(placed.orderId))
     }
 
     @Test
     fun `a cancelled order cannot be paid`() {
         val placed = placeOrder()
-        cancel(placed.orderId).andExpect { status { isOk() } }
+        cancel(placed.orderId).andExpect { responseCode("00") }
 
         mockMvc.post("/api/customer/payments/initialize") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json("orderReference" to placed.reference)
         }.andExpect {
-            status { isConflict() }
-            jsonPath("$.message") { value("This order cannot be paid") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("This order cannot be paid") }
         }
     }
 
@@ -263,9 +263,9 @@ class CustomerCancelTest : IntegrationTestBase() {
     fun `a too long reason, no token and an admin token are rejected`() {
         val placed = placeOrder()
 
-        cancel(placed.orderId, reason = "x".repeat(501)).andExpect { status { isBadRequest() } }
-        cancel(placed.orderId, withToken = null).andExpect { status { isUnauthorized() } }
-        cancel(placed.orderId, withToken = adminToken).andExpect { status { isForbidden() } }
+        cancel(placed.orderId, reason = "x".repeat(501)).andExpect { responseCode("106") }
+        cancel(placed.orderId, withToken = null).andExpect { responseCode("115") }
+        cancel(placed.orderId, withToken = adminToken).andExpect { responseCode("107") }
         assertEquals("PENDING", orderStatus(placed.orderId))
     }
 }

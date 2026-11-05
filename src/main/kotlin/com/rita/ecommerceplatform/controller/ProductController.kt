@@ -1,7 +1,6 @@
 package com.rita.ecommerceplatform.controller
 
-import com.rita.ecommerceplatform.model.response.PageResponse
-import com.rita.ecommerceplatform.model.response.ProductResponse
+import com.rita.ecommerceplatform.model.response.BaseDataResponse
 import com.rita.ecommerceplatform.service.Paging
 import com.rita.ecommerceplatform.service.ProductFilters
 import com.rita.ecommerceplatform.service.ProductService
@@ -33,9 +32,12 @@ class ProductController(private val productService: ProductService) {
         @RequestParam(required = false) maxPrice: BigDecimal?,
         @RequestParam(required = false) inStock: Boolean?,
         @RequestParam(required = false) sort: String?,
-    ): PageResponse<ProductResponse> =
-        productService.listPublic(page, size, search, categoryId, ProductFilters(minPrice, maxPrice, inStock, sort))
+    ): BaseDataResponse {
+        return BaseDataResponse("00", "Successful", productService.listPublic(page, size, search, categoryId, ProductFilters(minPrice, maxPrice, inStock, sort)))
+    }
 
     @GetMapping("/{productId}")
-    fun get(@PathVariable productId: Long): ProductResponse = productService.getPublic(productId)
+    fun get(@PathVariable productId: Long): BaseDataResponse {
+        return BaseDataResponse("00", "Successful", productService.getPublic(productId))
+    }
 }

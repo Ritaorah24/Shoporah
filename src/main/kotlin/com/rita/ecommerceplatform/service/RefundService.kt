@@ -1,11 +1,10 @@
 package com.rita.ecommerceplatform.service
 
+import com.rita.ecommerceplatform.exception.ApiErrorException
+import com.rita.ecommerceplatform.exception.BadRequestException
+import com.rita.ecommerceplatform.exception.UnableToLocateRecordException
 import com.rita.ecommerceplatform.model.request.RefundOrderRequest
 import com.rita.ecommerceplatform.model.response.AdminOrderResponse
-import com.rita.ecommerceplatform.exception.BadGatewayException
-import com.rita.ecommerceplatform.exception.BadRequestException
-import com.rita.ecommerceplatform.exception.ConflictException
-import com.rita.ecommerceplatform.exception.NotFoundException
 import com.rita.ecommerceplatform.model.entity.Order
 import com.rita.ecommerceplatform.model.entity.OrderPaymentStatus
 import com.rita.ecommerceplatform.model.entity.OrderStatus
@@ -62,7 +61,7 @@ class RefundService(
                     merchantNote = reason,
                 ),
             )
-        } catch (e: BadGatewayException) {
+        } catch (e: ApiErrorException) {
             log.warn("Refund {} of order {}: the provider could not be reached; left PENDING until refreshed", refund.refundId, orderId)
             null
         }
@@ -79,7 +78,7 @@ class RefundService(
      * is how a refund finishes). A settled refund is returned as stored, without asking the provider again.
      */
     fun refresh(refundId: Long): AdminOrderResponse {
-        val refund = refundRepository.findById(refundId) ?: throw NotFoundException("Refund not found")
+        val refund = refundRepository.findById(refundId) ?: throw UnableToLocateRecordException("Refund not found")
         if (refund.refundStatus == RefundStatus.PENDING) {
             if (refund.refundProviderRefundId != null) {
                 paymentGateway.fetchRefund(refund.refundProviderRefundId!!)?.let { refundSettlement.settle(refundId, it) }
@@ -149,7 +148,7 @@ class RefundService(
     /** Runs in one short transaction: checks the order can be refunded and records a PENDING refund. */
     private fun createRefund(adminId: Int, orderId: Long, reason: String, restock: Boolean): Pair<Refund, Payment> {
         // Refund starts and settles for one order run one at a time.
-        val order = orderRepository.lockById(orderId) ?: throw NotFoundException("Order not found")
+        val order = orderRepository.lockById(orderId) ?: throw UnableToLocateRecordException("Order not found")
         ensureRefundable(order)
         if (restock && order.orderStatus != OrderStatus.DELIVERED) {
             throw BadRequestException("restock is only for delivered orders: a cancelled order's stock was already put back")
@@ -178,13 +177,13 @@ class RefundService(
                 (order.orderStatus == OrderStatus.CANCELLED || order.orderStatus == OrderStatus.DELIVERED)
 
         private fun ensureRefundable(order: Order) {
-            if (order.orderPaymentStatus == OrderPaymentStatus.REFUNDED) throw ConflictException("This order has already been refunded")
-            if (order.orderPaymentStatus != OrderPaymentStatus.PAID) throw ConflictException("Only paid orders can be refunded")
+            if (order.orderPaymentStatus == OrderPaymentStatus.REFUNDED) throw BadRequestException("This order has already been refunded")
+            if (order.orderPaymentStatus != OrderPaymentStatus.PAID) throw BadRequestException("Only paid orders can be refunded")
             if (!isRefundable(order)) {
-                throw ConflictException("Only cancelled or delivered orders can be refunded; cancel the order first if it has not shipped")
+                throw BadRequestException("Only cancelled or delivered orders can be refunded; cancel the order first if it has not shipped")
             }
         }
 
-        private fun refundInProgress() = ConflictException("A refund for this order is already in progress")
+        private fun refundInProgress() = BadRequestException("A refund for this order is already in progress")
     }
 }

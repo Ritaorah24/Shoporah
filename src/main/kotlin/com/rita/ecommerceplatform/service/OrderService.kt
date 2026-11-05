@@ -1,13 +1,13 @@
 package com.rita.ecommerceplatform.service
 
+import com.rita.ecommerceplatform.exception.BadRequestException
+import com.rita.ecommerceplatform.exception.DuplicateTransactionException
+import com.rita.ecommerceplatform.exception.UnableToLocateRecordException
 import com.rita.ecommerceplatform.model.request.CancelOrderRequest
 import com.rita.ecommerceplatform.model.request.CheckoutRequest
 import com.rita.ecommerceplatform.model.response.OrderResponse
 import com.rita.ecommerceplatform.model.response.OrderSummaryResponse
 import com.rita.ecommerceplatform.model.response.PageResponse
-import com.rita.ecommerceplatform.exception.BadRequestException
-import com.rita.ecommerceplatform.exception.ConflictException
-import com.rita.ecommerceplatform.exception.NotFoundException
 import com.rita.ecommerceplatform.model.entity.CustomerAddress
 import com.rita.ecommerceplatform.model.entity.NotificationType
 import com.rita.ecommerceplatform.model.entity.Order
@@ -70,7 +70,7 @@ class OrderService(
         // Same rules as the cart view (CartService.issueOf), so the cart and checkout never disagree.
         val problems = items.mapNotNull { item -> cartService.issueOf(item)?.let { "${item.productName} ($it)" } }
         if (problems.isNotEmpty()) {
-            throw ConflictException("Some items cannot be ordered: ${problems.joinToString(", ")}")
+            throw BadRequestException("Some items cannot be ordered: ${problems.joinToString(", ")}")
         }
 
         // The fee is read here, inside the transaction, and copied onto the order: later fee changes never affect it.
@@ -113,7 +113,7 @@ class OrderService(
             )
         } catch (e: DuplicateKeyException) {
             // Last safety net behind the lock: uq__ec_order__customerid_idempotencykey never allows a duplicate.
-            throw ConflictException("This Idempotency-Key was already used for another order")
+            throw DuplicateTransactionException("This Idempotency-Key was already used for another order")
         }
 
         // Snapshot of each product as it is now, so later product edits never change the order.
@@ -161,7 +161,7 @@ class OrderService(
 
     /** One of the customer's own orders; another customer's order is "not found" too. */
     fun get(customerId: Long, orderId: Long): OrderResponse =
-        toResponse(orderRepository.findById(orderId, customerId) ?: throw NotFoundException("Order not found"))
+        toResponse(orderRepository.findById(orderId, customerId) ?: throw UnableToLocateRecordException("Order not found"))
 
     /**
      * The customer cancels one of their own unpaid PENDING orders. If a payment page is open, the provider is
@@ -169,13 +169,13 @@ class OrderService(
      * order (409 here) instead of leaving a paid, cancelled order. If the provider cannot be reached, nothing changes (502).
      */
     fun cancel(customerId: Long, orderId: Long, request: CancelOrderRequest?): OrderResponse {
-        val order = orderRepository.findById(orderId, customerId) ?: throw NotFoundException("Order not found")
+        val order = orderRepository.findById(orderId, customerId) ?: throw UnableToLocateRecordException("Order not found")
         if (order.orderStatus != OrderStatus.PENDING || order.orderPaymentStatus != OrderPaymentStatus.UNPAID) {
             throw OrderCancellation.notCancellable()
         }
 
         if (orderCancellation.settleOpenPayment(orderId)) {
-            throw ConflictException("This order has already been paid and can no longer be cancelled")
+            throw BadRequestException("This order has already been paid and can no longer be cancelled")
         }
 
         orderCancellation.cancelByCustomer(customerId, orderId, request?.reason?.trim()?.ifEmpty { null })

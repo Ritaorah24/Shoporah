@@ -1,14 +1,14 @@
 package com.rita.ecommerceplatform.service
 
+import com.rita.ecommerceplatform.exception.AccessNotAllowedException
+import com.rita.ecommerceplatform.exception.BadRequestException
+import com.rita.ecommerceplatform.exception.IncorrectPasswordException
+import com.rita.ecommerceplatform.exception.RecordAlreadyExistException
 import com.rita.ecommerceplatform.model.request.ChangePasswordRequest
 import com.rita.ecommerceplatform.model.request.LoginRequest
 import com.rita.ecommerceplatform.model.request.RegisterRequest
 import com.rita.ecommerceplatform.model.response.CustomerProfileResponse
 import com.rita.ecommerceplatform.model.response.TokenResponse
-import com.rita.ecommerceplatform.exception.AccountNotActiveException
-import com.rita.ecommerceplatform.exception.BadRequestException
-import com.rita.ecommerceplatform.exception.ConflictException
-import com.rita.ecommerceplatform.exception.InvalidCredentialsException
 import com.rita.ecommerceplatform.model.entity.Admin
 import com.rita.ecommerceplatform.model.entity.AdminAuthStatus
 import com.rita.ecommerceplatform.model.entity.AdminStatus
@@ -53,7 +53,7 @@ class AuthService(
 
         // Friendly early check. The unique constraint below is the real guarantee.
         if (customerRepository.existsByEmail(email)) {
-            throw ConflictException("Email is already registered")
+            throw RecordAlreadyExistException("Email is already registered")
         }
 
         val customerId = try {
@@ -65,7 +65,7 @@ class AuthService(
             )
         } catch (e: DuplicateKeyException) {
             // Two registrations with the same email at the same moment: uq__ec_customer__email stops the second.
-            throw ConflictException("Email is already registered")
+            throw RecordAlreadyExistException("Email is already registered")
         }
 
         customerAuthRepository.insert(customerId, passwordEncoder.encode(request.password!!)!!)
@@ -84,14 +84,14 @@ class AuthService(
         val auth = customer?.let { customerAuthRepository.findByCustomerId(it.customerId!!) }
         if (customer == null || auth == null) {
             passwordEncoder.matches(password, dummyHash)
-            throw InvalidCredentialsException()
+            throw IncorrectPasswordException("Invalid email or password")
         }
         if (!passwordEncoder.matches(password, auth.customerAuthPasswordHash)) {
-            throw InvalidCredentialsException()
+            throw IncorrectPasswordException("Invalid email or password")
         }
         // Status is checked only after the password, so strangers cannot probe which accounts are suspended.
         if (customer.customerStatus != CustomerStatus.ACTIVE || auth.customerAuthStatus != CustomerAuthStatus.ACTIVE) {
-            throw AccountNotActiveException()
+            throw AccessNotAllowedException("Account is not active")
         }
 
         customerAuthRepository.updateLastLoginAt(customer.customerId!!)
@@ -111,14 +111,14 @@ class AuthService(
         val currentPassword = request.currentPassword!!
         val newPassword = request.newPassword!!
 
-        val customer = customerRepository.findById(customerId) ?: throw InvalidCredentialsException("Customer account not found")
+        val customer = customerRepository.findById(customerId) ?: throw IncorrectPasswordException("Customer account not found")
         val auth = customerAuthRepository.findByCustomerId(customerId)
         if (auth == null || !passwordEncoder.matches(currentPassword, auth.customerAuthPasswordHash)) {
-            throw InvalidCredentialsException("Current password is incorrect")
+            throw IncorrectPasswordException("Current password is incorrect")
         }
         // Same order as login: status is only revealed after a correct password.
         if (customer.customerStatus != CustomerStatus.ACTIVE || auth.customerAuthStatus != CustomerAuthStatus.ACTIVE) {
-            throw AccountNotActiveException()
+            throw AccessNotAllowedException("Account is not active")
         }
         if (passwordEncoder.matches(newPassword, auth.customerAuthPasswordHash)) {
             throw BadRequestException("New password must be different from the current password")
@@ -138,13 +138,13 @@ class AuthService(
         val hash = auth?.adminAuthPasswordHash
         if (admin == null || hash == null) {
             passwordEncoder.matches(password, dummyHash)
-            throw InvalidCredentialsException()
+            throw IncorrectPasswordException("Invalid email or password")
         }
         if (!passwordEncoder.matches(password, hash)) {
-            throw InvalidCredentialsException()
+            throw IncorrectPasswordException("Invalid email or password")
         }
         if (admin.adminStatus != AdminStatus.ACTIVE || auth.adminAuthStatus != AdminAuthStatus.ACTIVE) {
-            throw AccountNotActiveException()
+            throw AccessNotAllowedException("Account is not active")
         }
 
         adminAuthRepository.updateLastLoginAt(admin.adminId!!)
@@ -159,14 +159,14 @@ class AuthService(
         val currentPassword = request.currentPassword!!
         val newPassword = request.newPassword!!
 
-        val admin = adminRepository.findById(adminId) ?: throw InvalidCredentialsException("Admin account not found")
+        val admin = adminRepository.findById(adminId) ?: throw IncorrectPasswordException("Admin account not found")
         val auth = adminAuthRepository.findByAdminId(adminId)
         val hash = auth?.adminAuthPasswordHash
         if (hash == null || !passwordEncoder.matches(currentPassword, hash)) {
-            throw InvalidCredentialsException("Current password is incorrect")
+            throw IncorrectPasswordException("Current password is incorrect")
         }
         if (admin.adminStatus != AdminStatus.ACTIVE || auth.adminAuthStatus != AdminAuthStatus.ACTIVE) {
-            throw AccountNotActiveException()
+            throw AccessNotAllowedException("Account is not active")
         }
         // Otherwise MUST_CHANGE could be cleared by "changing" the temporary password to itself.
         if (passwordEncoder.matches(newPassword, hash)) {

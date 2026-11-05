@@ -1,6 +1,6 @@
 package com.rita.ecommerceplatform.controller
 
-import com.rita.ecommerceplatform.model.response.DeliveryMethodResponse
+import com.rita.ecommerceplatform.model.response.BaseDataResponse
 import com.rita.ecommerceplatform.service.DeliveryMethodService
 import io.swagger.v3.oas.annotations.tags.Tag
 import org.springframework.web.bind.annotation.GetMapping
@@ -14,5 +14,7 @@ import org.springframework.web.bind.annotation.RestController
 class DeliveryMethodController(private val deliveryMethodService: DeliveryMethodService) {
 
     @GetMapping
-    fun list(): List<DeliveryMethodResponse> = deliveryMethodService.listActive()
+    fun list(): BaseDataResponse {
+        return BaseDataResponse("00", "Successful", deliveryMethodService.listActive())
+    }
 }

@@ -1,7 +1,6 @@
 package com.rita.ecommerceplatform.support
 
-import com.rita.ecommerceplatform.exception.BadGatewayException
-import com.rita.ecommerceplatform.exception.ServiceUnavailableException
+import com.rita.ecommerceplatform.exception.ApiErrorException
 import com.rita.ecommerceplatform.repository.api.ImageStorage
 import com.rita.ecommerceplatform.repository.api.StoredImage
 import com.rita.ecommerceplatform.repository.api.cloudinary.CloudinaryImageStorage
@@ -39,7 +38,7 @@ class FakeImageStorage : ImageStorage {
 
     override fun delete(storageKey: String) {
         failIfUnavailable()
-        if (deleteFails) throw BadGatewayException(CloudinaryImageStorage.STORAGE_ERROR)
+        if (deleteFails) throw ApiErrorException(CloudinaryImageStorage.STORAGE_ERROR)
         stored.remove(storageKey)
     }
 
@@ -50,7 +49,7 @@ class FakeImageStorage : ImageStorage {
     fun countIn(folder: String): Int = stored.keys.count { it.startsWith("$folder/") }
 
     private fun failIfUnavailable() {
-        if (notConfigured) throw ServiceUnavailableException(CloudinaryImageStorage.NOT_CONFIGURED)
-        if (down) throw BadGatewayException(CloudinaryImageStorage.STORAGE_ERROR)
+        if (notConfigured) throw ApiErrorException(CloudinaryImageStorage.NOT_CONFIGURED)
+        if (down) throw ApiErrorException(CloudinaryImageStorage.STORAGE_ERROR)
     }
 }

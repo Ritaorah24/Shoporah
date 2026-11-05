@@ -1,7 +1,7 @@
 package com.rita.ecommerceplatform.service
 
-import com.rita.ecommerceplatform.exception.ConflictException
-import com.rita.ecommerceplatform.exception.ForbiddenException
+import com.rita.ecommerceplatform.exception.AccessNotAllowedException
+import com.rita.ecommerceplatform.exception.BadRequestException
 import com.rita.ecommerceplatform.model.entity.OrderStatus
 import com.rita.ecommerceplatform.model.entity.OrderStatus.CANCELLED
 import com.rita.ecommerceplatform.model.entity.OrderStatus.CONFIRMED
@@ -39,8 +39,8 @@ object OrderStatusRules {
      * or 403 if it is but this actor may not make it.
      */
     fun ensureCanChange(from: OrderStatus, to: OrderStatus, actor: OrderStatusActor) {
-        val actors = allowed[from to to] ?: throw ConflictException("Order status cannot change from $from to $to")
-        if (actor !in actors) throw ForbiddenException("$actor cannot change an order from $from to $to")
+        val actors = allowed[from to to] ?: throw BadRequestException("Order status cannot change from $from to $to")
+        if (actor !in actors) throw AccessNotAllowedException("$actor cannot change an order from $from to $to")
     }
 
     /** The statuses this actor may move the order to next, in lifecycle order (empty for final statuses). */
