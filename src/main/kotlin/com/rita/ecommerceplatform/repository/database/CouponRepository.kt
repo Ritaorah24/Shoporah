@@ -55,7 +55,7 @@ interface CouponRepository {
 
     /**
      * Inserts an ACTIVE coupon and returns its id. Throws DuplicateKeyException if the code is taken
-     * (uq__ec_coupon__code, case-insensitive): the service turns that into 409.
+     * (uq__ec_coupon__code, case-insensitive): the service turns that into code 117.
      */
     fun insert(code: String, terms: CouponTerms, createdByAdminId: Int): Int
 

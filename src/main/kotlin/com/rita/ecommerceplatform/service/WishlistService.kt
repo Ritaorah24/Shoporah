@@ -65,7 +65,7 @@ class WishlistService(
     /**
      * Adds the product to the cart with the cart's own rules (CartService.addItem: visible product, quantity added
      * to what is in the cart, never above the stock), then takes it off the wishlist. One transaction: if the cart
-     * refuses (404 / 409), nothing changes and the item stays on the wishlist.
+     * refuses (code 25 / code 106), nothing changes and the item stays on the wishlist.
      */
     @Transactional
     fun moveToCart(customerId: Long, productId: Long, request: MoveToCartRequest?): WishlistResponse {

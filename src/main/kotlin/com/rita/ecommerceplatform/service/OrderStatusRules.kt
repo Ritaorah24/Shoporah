@@ -35,8 +35,8 @@ object OrderStatusRules {
     )
 
     /**
-     * Throws 409 if the change is not in the table (including "changing" to the same status),
-     * or 403 if it is but this actor may not make it.
+     * Throws code 106 if the change is not in the table (including "changing" to the same status),
+     * or code 107 if it is but this actor may not make it.
      */
     fun ensureCanChange(from: OrderStatus, to: OrderStatus, actor: OrderStatusActor) {
         val actors = allowed[from to to] ?: throw BadRequestException("Order status cannot change from $from to $to")

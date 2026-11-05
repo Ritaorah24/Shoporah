@@ -67,7 +67,7 @@ class AdminOrderController(
 
     /**
      * CONFIRMED → PROCESSING → SHIPPED → DELIVERED, one step at a time. A skipped, backward or repeated step
-     * is 409; a status other than these three is 400 (cancel and refund come in V2).
+     * is code 106; a status other than these three is code 106 (cancel and refund come in V2).
      */
     @PatchMapping("/{orderId}/status")
     fun updateStatus(
@@ -81,7 +81,7 @@ class AdminOrderController(
 
     /**
      * Cancels an order that has not shipped, with a required reason. A paid order's stock goes back and the order
-     * stays PAID (refund needed). Shipped or delivered orders are 409: they are refunded instead.
+     * stays PAID (refund needed). Shipped or delivered orders are code 106: they are refunded instead.
      */
     @PostMapping("/{orderId}/cancel")
     fun cancel(
@@ -95,7 +95,7 @@ class AdminOrderController(
 
     /**
      * Refunds the whole order total to the customer through Paystack: a paid order that is CANCELLED, or DELIVERED
-     * (optionally putting the returned items back in stock). 202: the refund is started, Paystack finishes it later;
+     * (optionally putting the returned items back in stock). The refund is started; Paystack finishes it later;
      * see refunds[] on the order, and POST /{stage}/admin/refunds/{refundId}/refresh to check on it.
      */
     @PostMapping("/{orderId}/refund")

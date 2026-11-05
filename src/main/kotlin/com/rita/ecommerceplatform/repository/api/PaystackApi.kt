@@ -23,7 +23,7 @@ private val logger = KotlinLogging.logger {}
 /**
  * PaymentGateway backed by Paystack's REST API (https://paystack.com/docs/api/transaction/).
  * Paystack answers { "status": true|false, "message": ..., "data": {...} }.
- * Every failure (network, timeout, 4xx, 5xx, unreadable body) is logged and becomes a 502;
+ * Every failure (network, timeout, 4xx, 5xx, unreadable body) is logged and becomes a code 22;
  * the secret key itself is never logged.
  */
 @Repository
@@ -168,7 +168,7 @@ class PaystackApi(
     }
 
     // A clear refusal: Paystack answered 4xx with its own message, so no refund was created. 401/403 (our key)
-    // and 408/429 (try later) are not about this refund, so they stay 502s.
+    // and 408/429 (try later) are not about this refund, so they stay code 22.
     private fun rejectionOf(status: Int, body: String): String? {
         if (status !in 400..499 || status in setOf(401, 403, 408, 429)) return null
         val json = runCatching { jsonMapper.readTree(body) }.getOrNull() ?: return null
@@ -185,7 +185,7 @@ class PaystackApi(
             .apply { segment?.let { addPathSegment(it) } }
             .build().toString()
 
-    /** Network problems become a 502. */
+    /** Network problems become a code 22. */
     private fun <T> send(what: String, request: () -> T): T =
         try {
             request()
@@ -194,7 +194,7 @@ class PaystackApi(
             throw ApiErrorException(PROVIDER_ERROR)
         }
 
-    /** The "data" object (or array, for lists) of a successful answer. Anything else is logged and becomes a 502. */
+    /** The "data" object (or array, for lists) of a successful answer. Anything else is logged and becomes a code 22. */
     private fun dataOf(body: String, what: String, expectArray: Boolean = false): JsonNode {
         val json = parse(body, what)
         val data = json?.get("data")

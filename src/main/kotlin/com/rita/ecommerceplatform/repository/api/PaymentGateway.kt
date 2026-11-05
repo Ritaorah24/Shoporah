@@ -6,7 +6,7 @@ import java.time.OffsetDateTime
 /**
  * The payment provider, seen from our side (checkpoint 1.4, P1). PaystackApi is the real one;
  * tests replace it with a fake, so no test ever calls Paystack. Amounts are in kobo (P8).
- * Any failure to talk to the provider is thrown as ApiErrorException (502).
+ * Any failure to talk to the provider is thrown as ApiErrorException (code 22).
  */
 interface PaymentGateway {
 
@@ -18,7 +18,7 @@ interface PaymentGateway {
 
     /**
      * Asks the provider to give a successful payment back (checkpoint 2.2). A clear "no" from the provider is
-     * Rejected (nothing was sent). A 502 means we do not know whether the provider created the refund:
+     * Rejected (nothing was sent). A code 22 means we do not know whether the provider created the refund:
      * findRefunds tells us later, so a refund is never sent twice blindly.
      */
     fun refund(request: GatewayRefundRequest): GatewayRefundStart

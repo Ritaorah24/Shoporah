@@ -23,7 +23,7 @@ data class RefundProviderDetails(
 interface RefundRepository {
     /**
      * Inserts a PENDING refund and returns the generated refundid. Throws DuplicateKeyException if the payment
-     * already has a PENDING or PROCESSED refund (uq__ec_refund__payment_active): the service turns it into 409.
+     * already has a PENDING or PROCESSED refund (uq__ec_refund__payment_active): the service turns it into code 106.
      */
     fun insert(
         orderId: Long,

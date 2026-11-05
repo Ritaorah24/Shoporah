@@ -52,7 +52,7 @@ class WishlistController(private val wishlistService: WishlistService) {
     }
 
     /**
-     * Adds the product to the cart (quantity 1 unless sent; never above the stock, 409) and takes it off the
+     * Adds the product to the cart (quantity 1 unless sent; never above the stock, code 106) and takes it off the
      * wishlist. If the cart refuses, the item stays on the wishlist. Returns the updated wishlist.
      */
     @PostMapping("/items/{productId}/move-to-cart")

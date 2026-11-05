@@ -10,7 +10,7 @@ import org.springframework.context.annotation.Configuration
 /**
  * Swagger UI title plus the "Authorize" button. The bearer scheme is not applied globally:
  * only protected endpoints declare @SecurityRequirement, so Swagger never sends a stale
- * token to the login and register endpoints (an invalid token there would cause a 401).
+ * token to the login and register endpoints (an invalid token there would cause a code 115).
  */
 @Configuration
 class SwaggerConfig {

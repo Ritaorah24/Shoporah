@@ -12,7 +12,7 @@ import java.time.format.DateTimeFormatter
 
 /**
  * The rules for using a coupon (checkpoint 3.1, Step 2), shared by the preview and checkout so they never disagree.
- * Every refusal is a 400 with a clear reason, also sent as a couponCode field error.
+ * Every refusal is a code 106 with a clear reason, also sent as a couponCode field error.
  */
 object CouponCheck {
 
@@ -21,7 +21,7 @@ object CouponCheck {
     private val START_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
 
     /**
-     * The discount `coupon` gives on `subtotal` at `now` (platform time), or a 400 saying why it cannot be used.
+     * The discount `coupon` gives on `subtotal` at `now` (platform time), or a code 106 saying why it cannot be used.
      * `typedCode` is what the customer sent, for the messages; null coupon = no such code.
      */
     fun discountFor(coupon: Coupon?, typedCode: String, subtotal: BigDecimal, now: LocalDateTime): BigDecimal {

@@ -27,7 +27,7 @@ import java.util.UUID
 
 private val logger = KotlinLogging.logger {}
 
-/** The payment and whether this request started it (201) or found an attempt already open for the order (200). */
+/** The payment and whether this request started it ("Payment started") or found an attempt already open for the order ("Successful"). */
 data class PaymentInitResult(val payment: PaymentInitResponse, val created: Boolean)
 
 @Service

@@ -30,7 +30,7 @@ class AdminProductImageController(private val productImageService: ProductImageS
     /**
      * multipart/form-data with `file` (JPEG, PNG or WebP, at most 5 MB; the type is read from the file itself)
      * and optional `altText` (≤ 200, read by screen readers). At most 8 images per product; the first is primary.
-     * 503 if image storage is not configured.
+     * code 22 if image storage is not configured.
      */
     @PostMapping(consumes = [MediaType.MULTIPART_FORM_DATA_VALUE])
     fun upload(
@@ -44,7 +44,7 @@ class AdminProductImageController(private val productImageService: ProductImageS
 
     /**
      * Any of altText (≤ 200; "" clears it), sortOrder (0-999, lower first) and primary: true (the old primary loses it).
-     * Returns the product's images in their new order. primary: false is 400: make another image primary instead.
+     * Returns the product's images in their new order. primary: false is code 106: make another image primary instead.
      */
     @PatchMapping("/{imageId}")
     fun update(

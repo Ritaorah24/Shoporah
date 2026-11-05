@@ -67,7 +67,7 @@ class OrderController(private val orderService: OrderService) {
     }
 
     /**
-     * Cancels one of the customer's own orders while it is PENDING and UNPAID (409 otherwise, e.g. once paid).
+     * Cancels one of the customer's own orders while it is PENDING and UNPAID (code 106 otherwise, e.g. once paid).
      * The body is optional: {"reason": "..."}.
      */
     @PostMapping("/{orderId}/cancel")

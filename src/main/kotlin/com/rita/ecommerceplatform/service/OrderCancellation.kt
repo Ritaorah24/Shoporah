@@ -42,7 +42,7 @@ class OrderCancellation(
     /**
      * Call outside any transaction, before cancelling an unpaid order. If the order has an open payment page, asks
      * the provider about it and settles it (like verify). Returns true if it was paid: the order is then CONFIRMED.
-     * Throws 502 if the provider cannot be reached, so nothing is cancelled blindly.
+     * Throws code 22 if the provider cannot be reached, so nothing is cancelled blindly.
      */
     fun settleOpenPayment(orderId: Long): Boolean {
         val open = paymentRepository.findOpenAttempt(orderId)?.takeIf { it.paymentAuthorizationUrl != null } ?: return false

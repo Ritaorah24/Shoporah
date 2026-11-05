@@ -25,7 +25,7 @@ interface DeliveryMethodRepository {
 
     /**
      * Inserts an ACTIVE method and returns its id. Throws DuplicateKeyException if the code is taken
-     * (uq__ec_deliverymethod__code, case-insensitive): the service turns that into 409.
+     * (uq__ec_deliverymethod__code, case-insensitive): the service turns that into code 117.
      */
     fun insert(
         code: String,

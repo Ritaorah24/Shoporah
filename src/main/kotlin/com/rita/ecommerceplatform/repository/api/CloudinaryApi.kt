@@ -25,7 +25,7 @@ private val logger = KotlinLogging.logger {}
 /**
  * ImageStorage backed by Cloudinary's REST upload API (https://cloudinary.com/documentation/image_upload_api_reference).
  * Every call is signed: SHA-1 of the sorted parameters followed by the API secret. The secret itself is never
- * sent or logged. Failures (network, timeout, 4xx, 5xx, unreadable answer) are logged and become a 502.
+ * sent or logged. Failures (network, timeout, 4xx, 5xx, unreadable answer) are logged and become a code 22.
  */
 @Repository
 class CloudinaryApi(
@@ -96,7 +96,7 @@ class CloudinaryApi(
 
     private fun endpoint(action: String) = "${cloudinaryProps.baseUrl}/v1_1/$cloudName/image/$action"
 
-    /** Network problems become a 502. */
+    /** Network problems become a code 22. */
     private fun <T> send(what: String, request: () -> T): T =
         try {
             request()

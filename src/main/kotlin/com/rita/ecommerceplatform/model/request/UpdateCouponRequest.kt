@@ -40,7 +40,7 @@ data class UpdateCouponRequest(
     @field:Digits(integer = 10, fraction = 2)
     val minimumOrderValue: BigDecimal? = null,
 
-    // Cannot go below the number of times the coupon has already been used (409).
+    // Cannot go below the number of times the coupon has already been used (code 106).
     @field:Min(1)
     val usageLimit: Int? = null,
 

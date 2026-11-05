@@ -27,7 +27,7 @@ data class UpdateProfileRequest(
     val phoneNumber: String? = null,
 ) {
     // Spring Boot ignores unknown JSON fields by default, so {"email": "..."} would "succeed"
-    // silently. Collecting them here lets validation reject them with a clear 400 instead.
+    // silently. Collecting them here lets validation reject them with a clear code 106 instead.
     @JsonIgnore
     private val unknownFields = mutableMapOf<String, Any?>()
 

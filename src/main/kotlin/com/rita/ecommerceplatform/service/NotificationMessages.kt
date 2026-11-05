@@ -114,6 +114,6 @@ object NotificationMessages {
         """.trimIndent(),
     )
 
-    // e.g. ₦2,400.00 (Locale.US for the comma grouping, whatever the server's locale is).
+    // e.g. ₦2,code 106.00 (Locale.US for the comma grouping, whatever the server's locale is).
     fun naira(amount: BigDecimal): String = "₦" + String.format(Locale.US, "%,.2f", amount)
 }

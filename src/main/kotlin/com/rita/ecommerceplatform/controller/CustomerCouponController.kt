@@ -25,7 +25,7 @@ import org.springframework.web.bind.annotation.RestController
 class CustomerCouponController(private val couponService: CouponService) {
 
     /**
-     * What the coupon would save on the current cart (400 with the reason if it cannot be used). Counts no use:
+     * What the coupon would save on the current cart (code 106 with the reason if it cannot be used). Counts no use:
      * send the code as couponCode at checkout to apply it.
      */
     @PostMapping("/validate")

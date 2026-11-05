@@ -14,7 +14,7 @@ private val logger = KotlinLogging.logger {}
 
 /**
  * Plain-text email over SMTP (spring.mail.* settings; Mailtrap's sandbox in development).
- * Email is not essential to the store, so the app starts without MAIL_HOST: queued emails then
+ * Email is not essential to the store, so the app starts without spring.mail.host: queued emails then
  * fail with a clear reason instead of stopping startup.
  */
 @Component
@@ -25,7 +25,7 @@ class SmtpEmailChannel(
 ) : NotificationChannel {
 
     init {
-        if (host.isBlank()) logger.warn { "MAIL_HOST is not set: emails will not be sent" }
+        if (host.isBlank()) logger.warn { "spring.mail.host is not set: emails will not be sent" }
     }
 
     override val type = NotificationChannelType.EMAIL
@@ -43,6 +43,6 @@ class SmtpEmailChannel(
     }
 
     companion object {
-        const val NOT_CONFIGURED = "Email is not configured (MAIL_HOST is not set)"
+        const val NOT_CONFIGURED = "Email is not configured (spring.mail.host is not set)"
     }
 }

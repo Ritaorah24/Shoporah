@@ -8,7 +8,7 @@ import tools.jackson.databind.annotation.JsonDeserialize
 
 /**
  * Body of POST /{stage}/auth/register.
- * Fields are nullable so a missing field reaches validation (clear 400 message)
+ * Fields are nullable so a missing field reaches validation (clear code 106 message)
  * instead of failing earlier in JSON parsing.
  */
 data class RegisterRequest(

@@ -95,7 +95,7 @@ class AdminProductController(private val productService: ProductService) {
 
     /**
      * Adds or removes stock with a reason: change is +N (delivery, found) or -N (damaged, lost), never the new total,
-     * so a sale made meanwhile is kept. Stock never goes below 0 (409). Preferred over editing stockQuantity.
+     * so a sale made meanwhile is kept. Stock never goes below 0 (code 106). Preferred over editing stockQuantity.
      */
     @PostMapping("/{productId}/stock-adjustments")
     fun adjustStock(

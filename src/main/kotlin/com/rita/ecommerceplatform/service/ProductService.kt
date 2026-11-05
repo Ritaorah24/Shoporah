@@ -69,7 +69,7 @@ class ProductService(
         )
     }
 
-    /** Public details. A hidden product is 404, not 403, so the public cannot tell that it exists. */
+    /** Public details. A hidden product is code 25, not code 107, so the public cannot tell that it exists. */
     fun getPublic(productId: Long): ProductResponse {
         val product = productRepository.findPublicById(productId) ?: throw productNotFound()
         return ProductResponse.from(product, productImageRepository.findByProduct(productId))
@@ -128,7 +128,7 @@ class ProductService(
         return getForAdmin(productId)
     }
 
-    /** The product's stock history, newest first. Deleted products are 404, like their details. */
+    /** The product's stock history, newest first. Deleted products are code 25, like their details. */
     fun stockMovements(productId: Long, page: Int, size: Int): PageResponse<StockMovementResponse> {
         findNotDeleted(productId)
         val safePage = Paging.page(page)
@@ -287,7 +287,7 @@ class ProductService(
     }
 
     /**
-     * The category in the request body must exist and not be deleted. 400 rather than 404:
+     * The category in the request body must exist and not be deleted. code 106 rather than code 25:
      * the URL is fine, the data refers to something missing. Inactive categories are allowed,
      * so products can be prepared before a category goes live.
      */

@@ -47,7 +47,7 @@ class SecurityConfig(
                 authorize("/v3/api-docs/**", permitAll)
                 authorize("/swagger-ui/**", permitAll)
                 authorize("/swagger-ui.html", permitAll)
-                // Spring forwards errors (400, 409, ...) to /error; it must be open or every error turns into 401.
+                // Spring forwards unhandled errors to /error; it must be open or they would all answer as a bad token.
                 authorize("/error", permitAll)
                 // Public catalogue browsing: GET only, so writes to these URLs still need a token.
                 authorize(HttpMethod.GET, "/*/categories/**", permitAll)

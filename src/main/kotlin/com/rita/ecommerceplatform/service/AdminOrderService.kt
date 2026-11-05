@@ -78,7 +78,7 @@ class AdminOrderService(
 
     /**
      * Moves the order to the next fulfilment status. The order row is locked first, so two admins changing
-     * the same order take turns: the second sees the new status and is rejected by OrderStatusRules (409).
+     * the same order take turns: the second sees the new status and is rejected by OrderStatusRules (code 106).
      */
     @Transactional
     fun updateStatus(adminId: Int, orderId: Long, request: UpdateOrderStatusRequest): AdminOrderResponse {
@@ -103,7 +103,7 @@ class AdminOrderService(
 
     /**
      * Cancels an order that has not shipped (OrderCancellation.cancelByAdmin). For an unpaid order with an open
-     * payment page, the provider is asked first: if it was just paid, the admin gets 409 and sees the order as it
+     * payment page, the provider is asked first: if it was just paid, the admin gets code 106 and sees the order as it
      * is now (CONFIRMED, stock taken) before deciding again, instead of an unexpected refund case.
      */
     fun cancel(adminId: Int, orderId: Long, request: AdminCancelOrderRequest): AdminOrderResponse {
@@ -149,7 +149,7 @@ class AdminOrderService(
         )
     }
 
-    // Blank text filters are ignored; a bad status or an inverted date range is 400.
+    // Blank text filters are ignored; a bad status or an inverted date range is code 106.
     private fun toSearch(filters: AdminOrderFilters): AdminOrderSearch {
         if (filters.from != null && filters.to != null && filters.from > filters.to) {
             throw BadRequestException("from must not be after to")

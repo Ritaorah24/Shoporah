@@ -28,7 +28,7 @@ import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
 import java.util.UUID
 
-/** The order and whether this request created it (201) or found it from an earlier attempt with the same key (200). */
+/** The order and whether this request created it ("Order created") or found it from an earlier attempt with the same key ("Successful"). */
 data class CheckoutResult(val order: OrderResponse, val created: Boolean)
 
 @Service
@@ -166,7 +166,7 @@ class OrderService(
     /**
      * The customer cancels one of their own unpaid PENDING orders. If a payment page is open, the provider is
      * asked first (outside any transaction, like verify): a payment made just before the cancel then confirms the
-     * order (409 here) instead of leaving a paid, cancelled order. If the provider cannot be reached, nothing changes (502).
+     * order (code 106 here) instead of leaving a paid, cancelled order. If the provider cannot be reached, nothing changes (code 22).
      */
     fun cancel(customerId: Long, orderId: Long, request: CancelOrderRequest?): OrderResponse {
         val order = orderRepository.findById(orderId, customerId) ?: throw UnableToLocateRecordException("Order not found")
