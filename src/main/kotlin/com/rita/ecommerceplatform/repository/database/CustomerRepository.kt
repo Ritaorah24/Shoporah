@@ -1,16 +1,46 @@
 package com.rita.ecommerceplatform.repository.database
 
-import com.rita.ecommerceplatform.utility.SQL_NOW
+import com.rita.ecommerceplatform.repository.database.query.CustomerQuery
+import org.jdbi.v3.core.Jdbi
+import org.jdbi.v3.core.kotlin.mapTo
+import com.rita.ecommerceplatform.utility.constant.PrefixConstant
 import com.rita.ecommerceplatform.utility.containsPattern
 import com.rita.ecommerceplatform.model.entity.Customer
 import com.rita.ecommerceplatform.model.entity.CustomerStatus
-import org.springframework.jdbc.core.RowMapper
-import org.springframework.jdbc.core.simple.JdbcClient
+import org.jdbi.v3.core.mapper.RowMapper
 import org.springframework.stereotype.Repository
 import java.time.LocalDateTime
 
+interface CustomerRepository {
+    fun existsByEmail(email: String): Boolean
+
+    /** Inserts a customer and returns the generated customerid. Status and timestamps come from column defaults. */
+    fun insert(firstName: String, lastName: String, email: String, phoneNumber: String?): Long
+
+    fun findById(customerId: Long): Customer?
+
+    /**
+     * Locks the customer row until the transaction ends, so changes to one customer's data
+     * (e.g. their addresses) run one at a time. Must be called inside @Transactional.
+     */
+    fun lockById(customerId: Long)
+
+    fun findByEmail(email: String): Customer?
+
+    /**
+     * One page of customers for admins, newest first: only `status` when given, and only those whose email,
+     * full name or phone number contains `contains` (any case). Reads ec_customer only, never the auth table.
+     */
+    fun search(status: CustomerStatus?, contains: String?, limit: Int, offset: Long): List<Customer>
+
+    fun count(status: CustomerStatus?, contains: String?): Long
+
+    /** Updates the editable profile fields (not email). Returns the number of rows updated (0 or 1). */
+    fun updateProfile(customerId: Long, firstName: String, lastName: String, phoneNumber: String?): Int
+}
+
 @Repository
-class CustomerRepository(private val jdbcClient: JdbcClient) {
+class CustomerRepositoryImpl(private val jdbi: Jdbi) : CustomerRepository {
 
     // Maps one ec_customer row (database column names) to a Customer (Kotlin names).
     private val rowMapper = RowMapper { rs, _ ->
@@ -26,78 +56,75 @@ class CustomerRepository(private val jdbcClient: JdbcClient) {
         )
     }
 
-    fun existsByEmail(email: String): Boolean =
-        jdbcClient.sql("SELECT EXISTS (SELECT 1 FROM public.ec_customer WHERE customeremail = :email)")
-            .param("email", email)
-            .query(Boolean::class.javaObjectType)
-            .single()
+    override fun existsByEmail(email: String): Boolean =
+        jdbi.withHandle<Boolean, Exception> { handle ->
+            handle.createQuery(CustomerQuery.EXISTS_BY_EMAIL)
+                .bind("email", email)
+                .mapTo<Boolean>()
+                .one()
+        }
 
-    /** Inserts a customer and returns the generated customerid. Status and timestamps come from column defaults. */
-    fun insert(firstName: String, lastName: String, email: String, phoneNumber: String?): Long =
-        jdbcClient.sql(
-            """
-            INSERT INTO public.ec_customer (customerfirstname, customerlastname, customeremail, customerphonenumber)
-            VALUES (:firstName, :lastName, :email, :phoneNumber)
-            RETURNING customerid
-            """
-        )
-            .param("firstName", firstName)
-            .param("lastName", lastName)
-            .param("email", email)
-            .param("phoneNumber", phoneNumber)
-            .query(Long::class.javaObjectType)
-            .single()
+    override fun insert(firstName: String, lastName: String, email: String, phoneNumber: String?): Long =
+        jdbi.withHandle<Long, Exception> { handle ->
+            handle.createQuery(CustomerQuery.INSERT)
+                .bind("firstName", firstName)
+                .bind("lastName", lastName)
+                .bind("email", email)
+                .bind("phoneNumber", phoneNumber)
+                .mapTo<Long>()
+                .one()
+        }
 
-    fun findById(customerId: Long): Customer? =
-        jdbcClient.sql("SELECT * FROM public.ec_customer WHERE customerid = :customerId")
-            .param("customerId", customerId)
-            .query(rowMapper)
-            .optional()
-            .orElse(null)
+    override fun findById(customerId: Long): Customer? =
+        jdbi.withHandle<Customer?, Exception> { handle ->
+            handle.createQuery(CustomerQuery.FIND_BY_ID)
+                .bind("customerId", customerId)
+                .map(rowMapper)
+                .findOne()
+                .orElse(null)
+        }
 
-    /**
-     * Locks the customer row until the transaction ends, so changes to one customer's data
-     * (e.g. their addresses) run one at a time. Must be called inside @Transactional.
-     */
-    fun lockById(customerId: Long) {
-        jdbcClient.sql("SELECT customerid FROM public.ec_customer WHERE customerid = :customerId FOR UPDATE")
-            .param("customerId", customerId)
-            .query(Long::class.javaObjectType)
-            .optional()
+    override fun lockById(customerId: Long) {
+        jdbi.withHandle<Any, Exception> { handle ->
+            handle.createQuery(CustomerQuery.LOCK_BY_ID)
+                .bind("customerId", customerId)
+                .mapTo<Long>()
+                .findOne()
+        }
     }
 
-    fun findByEmail(email: String): Customer? =
-        jdbcClient.sql("SELECT * FROM public.ec_customer WHERE customeremail = :email")
-            .param("email", email)
-            .query(rowMapper)
-            .optional()
-            .orElse(null)
+    override fun findByEmail(email: String): Customer? =
+        jdbi.withHandle<Customer?, Exception> { handle ->
+            handle.createQuery(CustomerQuery.FIND_BY_EMAIL)
+                .bind("email", email)
+                .map(rowMapper)
+                .findOne()
+                .orElse(null)
+        }
 
-    /**
-     * One page of customers for admins, newest first: only `status` when given, and only those whose email,
-     * full name or phone number contains `contains` (any case). Reads ec_customer only, never the auth table.
-     */
-    fun search(status: CustomerStatus?, contains: String?, limit: Int, offset: Long): List<Customer> {
+    override fun search(status: CustomerStatus?, contains: String?, limit: Int, offset: Long): List<Customer> {
         val (where, params) = searchWhere(status, contains)
-        return jdbcClient.sql(
-            """
-            SELECT * FROM public.ec_customer
+        return jdbi.withHandle<List<Customer>, Exception> { handle ->
+            handle.createQuery("""
+            SELECT * FROM ${PrefixConstant.ENTITY}CUSTOMER
             $where
             ORDER BY customercreatedat DESC, customerid DESC
             LIMIT :limit OFFSET :offset
-            """
-        )
-            .params(params + mapOf("limit" to limit, "offset" to offset))
-            .query(rowMapper)
-            .list()
+            """)
+                .bindMap(params + mapOf("limit" to limit, "offset" to offset))
+                .map(rowMapper)
+                .list()
+        }
     }
 
-    fun count(status: CustomerStatus?, contains: String?): Long {
+    override fun count(status: CustomerStatus?, contains: String?): Long {
         val (where, params) = searchWhere(status, contains)
-        return jdbcClient.sql("SELECT COUNT(*) FROM public.ec_customer $where")
-            .params(params)
-            .query(Long::class.javaObjectType)
-            .single()
+        return jdbi.withHandle<Long, Exception> { handle ->
+            handle.createQuery("SELECT COUNT(*) FROM ${PrefixConstant.ENTITY}CUSTOMER $where")
+                .bindMap(params)
+                .mapTo<Long>()
+                .one()
+        }
     }
 
     // Fixed SQL fragments only; the values are named parameters.
@@ -110,30 +137,22 @@ class CustomerRepository(private val jdbcClient: JdbcClient) {
         }
         contains?.let {
             conditions += """
-                ((customeremail::TEXT) ILIKE :pattern ESCAPE '\'
-                 OR (customerfirstname::TEXT || ' ' || customerlastname::TEXT) ILIKE :pattern ESCAPE '\'
-                 OR (customerphonenumber::TEXT) ILIKE :pattern ESCAPE '\')
+                ((customeremail::TEXT) ILIKE :pattern ESCAPE '!'
+                 OR (customerfirstname::TEXT || ' ' || customerlastname::TEXT) ILIKE :pattern ESCAPE '!'
+                 OR (customerphonenumber::TEXT) ILIKE :pattern ESCAPE '!')
             """.trimIndent()
             params["pattern"] = containsPattern(it)
         }
         return (if (conditions.isEmpty()) "" else "WHERE " + conditions.joinToString(" AND ")) to params
     }
 
-    /** Updates the editable profile fields (not email). Returns the number of rows updated (0 or 1). */
-    fun updateProfile(customerId: Long, firstName: String, lastName: String, phoneNumber: String?): Int =
-        jdbcClient.sql(
-            """
-            UPDATE public.ec_customer
-            SET customerfirstname = :firstName,
-                customerlastname = :lastName,
-                customerphonenumber = :phoneNumber,
-                customerupdatedat = $SQL_NOW
-            WHERE customerid = :customerId
-            """
-        )
-            .param("firstName", firstName)
-            .param("lastName", lastName)
-            .param("phoneNumber", phoneNumber)
-            .param("customerId", customerId)
-            .update()
+    override fun updateProfile(customerId: Long, firstName: String, lastName: String, phoneNumber: String?): Int =
+        jdbi.withHandle<Int, Exception> { handle ->
+            handle.createUpdate(CustomerQuery.UPDATE_PROFILE)
+                .bind("firstName", firstName)
+                .bind("lastName", lastName)
+                .bind("phoneNumber", phoneNumber)
+                .bind("customerId", customerId)
+                .execute()
+        }
 }

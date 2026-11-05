@@ -1,10 +1,11 @@
 package com.rita.ecommerceplatform.repository.database
 
-import com.rita.ecommerceplatform.utility.SQL_NOW
+import com.rita.ecommerceplatform.repository.database.query.CustomerAddressQuery
+import org.jdbi.v3.core.Jdbi
+import org.jdbi.v3.core.kotlin.mapTo
 import com.rita.ecommerceplatform.model.entity.AddressDetails
 import com.rita.ecommerceplatform.model.entity.CustomerAddress
-import org.springframework.jdbc.core.RowMapper
-import org.springframework.jdbc.core.simple.JdbcClient
+import org.jdbi.v3.core.mapper.RowMapper
 import org.springframework.stereotype.Repository
 import java.time.LocalDateTime
 
@@ -12,8 +13,37 @@ import java.time.LocalDateTime
  * Every query is scoped to the owning customer (customerId in the WHERE clause), so one customer
  * can never read or change another customer's address, even with a guessed addressId.
  */
+interface CustomerAddressRepository {
+    /** The customer's addresses, default first, then newest first. */
+    fun findByCustomer(customerId: Long): List<CustomerAddress>
+
+    fun findById(addressId: Long, customerId: Long): CustomerAddress?
+
+    fun findDefault(customerId: Long): CustomerAddress?
+
+    fun countByCustomer(customerId: Long): Long
+
+    /** Inserts an address and returns the generated customeraddressid. */
+    fun insert(customerId: Long, details: AddressDetails, isDefault: Boolean): Long
+
+    /** Replaces the delivery details (the service merges a partial PATCH first). Returns rows updated (0 or 1). */
+    fun update(addressId: Long, customerId: Long, details: AddressDetails): Int
+
+    /**
+     * Removes the default flag from the customer's current default, if any. Must run before
+     * markDefault in the same transaction: uq__ec_customeraddress__default allows only one default.
+     */
+    fun clearDefault(customerId: Long): Int
+
+    /** Makes this address the default. Returns rows updated (0 or 1). */
+    fun markDefault(addressId: Long, customerId: Long): Int
+
+    /** Hard delete. Orders keep their own copy of the address, and ordercustomeraddressid becomes NULL. Returns rows deleted. */
+    fun delete(addressId: Long, customerId: Long): Int
+}
+
 @Repository
-class CustomerAddressRepository(private val jdbcClient: JdbcClient) {
+class CustomerAddressRepositoryImpl(private val jdbi: Jdbi) : CustomerAddressRepository {
 
     private val rowMapper = RowMapper { rs, _ ->
         CustomerAddress(
@@ -35,127 +65,82 @@ class CustomerAddressRepository(private val jdbcClient: JdbcClient) {
         )
     }
 
-    /** The customer's addresses, default first, then newest first. */
-    fun findByCustomer(customerId: Long): List<CustomerAddress> =
-        jdbcClient.sql(
-            """
-            SELECT * FROM public.ec_customer_address
-            WHERE customeraddresscustomerid = :customerId
-            ORDER BY customeraddressisdefault DESC, customeraddresscreatedat DESC, customeraddressid DESC
-            """
-        )
-            .param("customerId", customerId)
-            .query(rowMapper)
-            .list()
+    override fun findByCustomer(customerId: Long): List<CustomerAddress> =
+        jdbi.withHandle<List<CustomerAddress>, Exception> { handle ->
+            handle.createQuery(CustomerAddressQuery.FIND_BY_CUSTOMER)
+                .bind("customerId", customerId)
+                .map(rowMapper)
+                .list()
+        }
 
-    fun findById(addressId: Long, customerId: Long): CustomerAddress? =
-        jdbcClient.sql(
-            "SELECT * FROM public.ec_customer_address WHERE customeraddressid = :addressId AND customeraddresscustomerid = :customerId"
-        )
-            .param("addressId", addressId)
-            .param("customerId", customerId)
-            .query(rowMapper)
-            .optional()
-            .orElse(null)
+    override fun findById(addressId: Long, customerId: Long): CustomerAddress? =
+        jdbi.withHandle<CustomerAddress?, Exception> { handle ->
+            handle.createQuery(CustomerAddressQuery.FIND_BY_ID)
+                .bind("addressId", addressId)
+                .bind("customerId", customerId)
+                .map(rowMapper)
+                .findOne()
+                .orElse(null)
+        }
 
-    fun findDefault(customerId: Long): CustomerAddress? =
-        jdbcClient.sql(
-            "SELECT * FROM public.ec_customer_address WHERE customeraddresscustomerid = :customerId AND customeraddressisdefault"
-        )
-            .param("customerId", customerId)
-            .query(rowMapper)
-            .optional()
-            .orElse(null)
+    override fun findDefault(customerId: Long): CustomerAddress? =
+        jdbi.withHandle<CustomerAddress?, Exception> { handle ->
+            handle.createQuery(CustomerAddressQuery.FIND_DEFAULT)
+                .bind("customerId", customerId)
+                .map(rowMapper)
+                .findOne()
+                .orElse(null)
+        }
 
-    fun countByCustomer(customerId: Long): Long =
-        jdbcClient.sql("SELECT COUNT(*) FROM public.ec_customer_address WHERE customeraddresscustomerid = :customerId")
-            .param("customerId", customerId)
-            .query(Long::class.javaObjectType)
-            .single()
+    override fun countByCustomer(customerId: Long): Long =
+        jdbi.withHandle<Long, Exception> { handle ->
+            handle.createQuery(CustomerAddressQuery.COUNT_BY_CUSTOMER)
+                .bind("customerId", customerId)
+                .mapTo<Long>()
+                .one()
+        }
 
-    /** Inserts an address and returns the generated customeraddressid. */
-    fun insert(customerId: Long, details: AddressDetails, isDefault: Boolean): Long =
-        jdbcClient.sql(
-            """
-            INSERT INTO public.ec_customer_address (
-                customeraddresscustomerid, customeraddressrecipientname, customeraddressrecipientphonenumber,
-                customeraddressline1, customeraddressline2, customeraddresscity, customeraddressstate,
-                customeraddresscountry, customeraddresspostalcode, customeraddressisdefault
-            )
-            VALUES (
-                :customerId, :recipientName, :recipientPhoneNumber,
-                :addressLine1, :addressLine2, :city, :state,
-                :country, :postalCode, :isDefault
-            )
-            RETURNING customeraddressid
-            """
-        )
-            .param("customerId", customerId)
-            .params(detailParams(details))
-            .param("isDefault", isDefault)
-            .query(Long::class.javaObjectType)
-            .single()
+    override fun insert(customerId: Long, details: AddressDetails, isDefault: Boolean): Long =
+        jdbi.withHandle<Long, Exception> { handle ->
+            handle.createQuery(CustomerAddressQuery.INSERT)
+                .bind("customerId", customerId)
+                .bindMap(detailParams(details))
+                .bind("isDefault", isDefault)
+                .mapTo<Long>()
+                .one()
+        }
 
-    /** Replaces the delivery details (the service merges a partial PATCH first). Returns rows updated (0 or 1). */
-    fun update(addressId: Long, customerId: Long, details: AddressDetails): Int =
-        jdbcClient.sql(
-            """
-            UPDATE public.ec_customer_address
-            SET customeraddressrecipientname = :recipientName,
-                customeraddressrecipientphonenumber = :recipientPhoneNumber,
-                customeraddressline1 = :addressLine1,
-                customeraddressline2 = :addressLine2,
-                customeraddresscity = :city,
-                customeraddressstate = :state,
-                customeraddresscountry = :country,
-                customeraddresspostalcode = :postalCode,
-                customeraddressupdatedat = $SQL_NOW
-            WHERE customeraddressid = :addressId AND customeraddresscustomerid = :customerId
-            """
-        )
-            .params(detailParams(details))
-            .param("addressId", addressId)
-            .param("customerId", customerId)
-            .update()
+    override fun update(addressId: Long, customerId: Long, details: AddressDetails): Int =
+        jdbi.withHandle<Int, Exception> { handle ->
+            handle.createUpdate(CustomerAddressQuery.UPDATE)
+                .bindMap(detailParams(details))
+                .bind("addressId", addressId)
+                .bind("customerId", customerId)
+                .execute()
+        }
 
-    /**
-     * Removes the default flag from the customer's current default, if any. Must run before
-     * markDefault in the same transaction: uq__ec_customeraddress__default allows only one default.
-     */
-    fun clearDefault(customerId: Long): Int =
-        jdbcClient.sql(
-            """
-            UPDATE public.ec_customer_address
-            SET customeraddressisdefault = FALSE,
-                customeraddressupdatedat = $SQL_NOW
-            WHERE customeraddresscustomerid = :customerId AND customeraddressisdefault
-            """
-        )
-            .param("customerId", customerId)
-            .update()
+    override fun clearDefault(customerId: Long): Int =
+        jdbi.withHandle<Int, Exception> { handle ->
+            handle.createUpdate(CustomerAddressQuery.CLEAR_DEFAULT)
+                .bind("customerId", customerId)
+                .execute()
+        }
 
-    /** Makes this address the default. Returns rows updated (0 or 1). */
-    fun markDefault(addressId: Long, customerId: Long): Int =
-        jdbcClient.sql(
-            """
-            UPDATE public.ec_customer_address
-            SET customeraddressisdefault = TRUE,
-                customeraddressupdatedat = $SQL_NOW
-            WHERE customeraddressid = :addressId AND customeraddresscustomerid = :customerId
-            """
-        )
-            .param("addressId", addressId)
-            .param("customerId", customerId)
-            .update()
+    override fun markDefault(addressId: Long, customerId: Long): Int =
+        jdbi.withHandle<Int, Exception> { handle ->
+            handle.createUpdate(CustomerAddressQuery.MARK_DEFAULT)
+                .bind("addressId", addressId)
+                .bind("customerId", customerId)
+                .execute()
+        }
 
-    /** Hard delete. Orders keep their own copy of the address, and ordercustomeraddressid becomes NULL. Returns rows deleted. */
-    fun delete(addressId: Long, customerId: Long): Int =
-        jdbcClient.sql(
-            "DELETE FROM public.ec_customer_address WHERE customeraddressid = :addressId AND customeraddresscustomerid = :customerId"
-        )
-            .param("addressId", addressId)
-            .param("customerId", customerId)
-            .update()
+    override fun delete(addressId: Long, customerId: Long): Int =
+        jdbi.withHandle<Int, Exception> { handle ->
+            handle.createUpdate(CustomerAddressQuery.DELETE)
+                .bind("addressId", addressId)
+                .bind("customerId", customerId)
+                .execute()
+        }
 
     private fun detailParams(details: AddressDetails): Map<String, Any?> = mapOf(
         "recipientName" to details.recipientName,

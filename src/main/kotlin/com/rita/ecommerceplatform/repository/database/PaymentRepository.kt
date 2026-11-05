@@ -1,10 +1,11 @@
 package com.rita.ecommerceplatform.repository.database
 
-import com.rita.ecommerceplatform.utility.SQL_NOW
+import com.rita.ecommerceplatform.repository.database.query.PaymentQuery
+import org.jdbi.v3.core.Jdbi
+import org.jdbi.v3.core.kotlin.mapTo
 import com.rita.ecommerceplatform.model.entity.Payment
 import com.rita.ecommerceplatform.model.entity.PaymentStatus
-import org.springframework.jdbc.core.RowMapper
-import org.springframework.jdbc.core.simple.JdbcClient
+import org.jdbi.v3.core.mapper.RowMapper
 import org.springframework.stereotype.Repository
 import java.math.BigDecimal
 import java.time.LocalDateTime
@@ -18,8 +19,57 @@ data class VerifiedDetails(
 )
 
 /** Payment attempts (ec_payment). An order can have several; at most one ever succeeds (uq__ec_payment__order_success). */
+interface PaymentRepository {
+    /** Inserts a PENDING attempt (status and timestamps come from column defaults) and returns the generated paymentid. */
+    fun insert(orderId: Long, reference: String, provider: String, amount: BigDecimal, currency: String): Long
+
+    fun findById(paymentId: Long): Payment?
+
+    /** The payment with this reference, only if its order belongs to this customer (case-insensitive: CITEXT). */
+    fun findByReferenceForCustomer(reference: String, customerId: Long): Payment?
+
+    /** The payment with this reference, whoever's order it is (for the provider's webhook). Case-insensitive: CITEXT. */
+    fun findByReference(reference: String): Payment?
+
+    /** Locks the payment row until the transaction ends (after its order's row). Must be called inside a transaction. */
+    fun lockById(paymentId: Long): Payment?
+
+    /** The order's SUCCESS payment, if any (at most one: uq__ec_payment__order_success). */
+    fun findSuccessfulForOrder(orderId: Long): Payment?
+
+    /** Every payment attempt for the order, oldest first (uses ix__ec_payment__orderid). */
+    fun findByOrder(orderId: Long): List<Payment>
+
+    /** The order's newest PENDING attempt, if any (uses ix__ec_payment__orderid). */
+    fun findOpenAttempt(orderId: Long): Payment?
+
+    /**
+     * Marks FAILED the order's PENDING attempts that never got a payment page and are older than
+     * `olderThanSeconds`: the request that started them must have crashed. Returns how many were marked.
+     */
+    fun failStaleStarts(orderId: Long, olderThanSeconds: Int, reason: String): Int
+
+    /** Saves the payment page the provider gave us. Returns the number of rows updated (0 or 1). */
+    fun saveAuthorizationUrl(paymentId: Long, authorizationUrl: String): Int
+
+    /**
+     * Records a verified successful payment with the provider's details and its whole answer (JSONB).
+     * Returns the number of rows updated (0 if it was no longer PENDING).
+     */
+    fun markSucceeded(paymentId: Long, details: VerifiedDetails, paidAt: LocalDateTime): Int
+
+    /**
+     * Records a verified unsuccessful outcome (FAILED or ABANDONED). `note` replaces the provider's message
+     * when we reject a payment ourselves (e.g. a wrong amount). Returns rows updated (0 if no longer PENDING).
+     */
+    fun markUnsuccessful(paymentId: Long, status: PaymentStatus, details: VerifiedDetails, note: String? = null): Int
+
+    /** Marks a PENDING attempt FAILED. Returns the number of rows updated (0 if it was no longer PENDING). */
+    fun markFailed(paymentId: Long, reason: String): Int
+}
+
 @Repository
-class PaymentRepository(private val jdbcClient: JdbcClient) {
+class PaymentRepositoryImpl(private val jdbi: Jdbi) : PaymentRepository {
 
     private val rowMapper = RowMapper { rs, _ ->
         Payment(
@@ -41,180 +91,129 @@ class PaymentRepository(private val jdbcClient: JdbcClient) {
         )
     }
 
-    /** Inserts a PENDING attempt (status and timestamps come from column defaults) and returns the generated paymentid. */
-    fun insert(orderId: Long, reference: String, provider: String, amount: BigDecimal, currency: String): Long =
-        jdbcClient.sql(
-            """
-            INSERT INTO public.ec_payment (paymentorderid, paymentreference, paymentprovider, paymentamount, paymentcurrency)
-            VALUES (:orderId, :reference, :provider, :amount, :currency)
-            RETURNING paymentid
-            """
-        )
-            .param("orderId", orderId)
-            .param("reference", reference)
-            .param("provider", provider)
-            .param("amount", amount)
-            .param("currency", currency)
-            .query(Long::class.javaObjectType)
-            .single()
+    override fun insert(orderId: Long, reference: String, provider: String, amount: BigDecimal, currency: String): Long =
+        jdbi.withHandle<Long, Exception> { handle ->
+            handle.createQuery(PaymentQuery.INSERT)
+                .bind("orderId", orderId)
+                .bind("reference", reference)
+                .bind("provider", provider)
+                .bind("amount", amount)
+                .bind("currency", currency)
+                .mapTo<Long>()
+                .one()
+        }
 
-    fun findById(paymentId: Long): Payment? =
-        jdbcClient.sql("SELECT * FROM public.ec_payment WHERE paymentid = :paymentId")
-            .param("paymentId", paymentId)
-            .query(rowMapper)
-            .optional()
-            .orElse(null)
+    override fun findById(paymentId: Long): Payment? =
+        jdbi.withHandle<Payment?, Exception> { handle ->
+            handle.createQuery(PaymentQuery.FIND_BY_ID)
+                .bind("paymentId", paymentId)
+                .map(rowMapper)
+                .findOne()
+                .orElse(null)
+        }
 
-    /** The payment with this reference, only if its order belongs to this customer (case-insensitive: CITEXT). */
-    fun findByReferenceForCustomer(reference: String, customerId: Long): Payment? =
-        jdbcClient.sql(
-            """
-            SELECT p.* FROM public.ec_payment p
-            JOIN public.ec_order o ON o.orderid = p.paymentorderid
-            WHERE p.paymentreference = :reference AND o.ordercustomerid = :customerId
-            """
-        )
-            .param("reference", reference)
-            .param("customerId", customerId)
-            .query(rowMapper)
-            .optional()
-            .orElse(null)
+    override fun findByReferenceForCustomer(reference: String, customerId: Long): Payment? =
+        jdbi.withHandle<Payment?, Exception> { handle ->
+            handle.createQuery(PaymentQuery.FIND_BY_REFERENCE_FOR_CUSTOMER)
+                .bind("reference", reference)
+                .bind("customerId", customerId)
+                .map(rowMapper)
+                .findOne()
+                .orElse(null)
+        }
 
-    /** The payment with this reference, whoever's order it is (for the provider's webhook). Case-insensitive: CITEXT. */
-    fun findByReference(reference: String): Payment? =
-        jdbcClient.sql("SELECT * FROM public.ec_payment WHERE paymentreference = :reference")
-            .param("reference", reference)
-            .query(rowMapper)
-            .optional()
-            .orElse(null)
+    override fun findByReference(reference: String): Payment? =
+        jdbi.withHandle<Payment?, Exception> { handle ->
+            handle.createQuery(PaymentQuery.FIND_BY_REFERENCE)
+                .bind("reference", reference)
+                .map(rowMapper)
+                .findOne()
+                .orElse(null)
+        }
 
-    /** Locks the payment row until the transaction ends (after its order's row). Must be called inside a transaction. */
-    fun lockById(paymentId: Long): Payment? =
-        jdbcClient.sql("SELECT * FROM public.ec_payment WHERE paymentid = :paymentId FOR UPDATE")
-            .param("paymentId", paymentId)
-            .query(rowMapper)
-            .optional()
-            .orElse(null)
+    override fun lockById(paymentId: Long): Payment? =
+        jdbi.withHandle<Payment?, Exception> { handle ->
+            handle.createQuery(PaymentQuery.LOCK_BY_ID)
+                .bind("paymentId", paymentId)
+                .map(rowMapper)
+                .findOne()
+                .orElse(null)
+        }
 
-    /** The order's SUCCESS payment, if any (at most one: uq__ec_payment__order_success). */
-    fun findSuccessfulForOrder(orderId: Long): Payment? =
-        jdbcClient.sql("SELECT * FROM public.ec_payment WHERE paymentorderid = :orderId AND paymentstatus = 'SUCCESS'")
-            .param("orderId", orderId)
-            .query(rowMapper)
-            .optional()
-            .orElse(null)
+    override fun findSuccessfulForOrder(orderId: Long): Payment? =
+        jdbi.withHandle<Payment?, Exception> { handle ->
+            handle.createQuery(PaymentQuery.FIND_SUCCESSFUL_FOR_ORDER)
+                .bind("orderId", orderId)
+                .map(rowMapper)
+                .findOne()
+                .orElse(null)
+        }
 
-    /** Every payment attempt for the order, oldest first (uses ix__ec_payment__orderid). */
-    fun findByOrder(orderId: Long): List<Payment> =
-        jdbcClient.sql("SELECT * FROM public.ec_payment WHERE paymentorderid = :orderId ORDER BY paymentcreatedat, paymentid")
-            .param("orderId", orderId)
-            .query(rowMapper)
-            .list()
+    override fun findByOrder(orderId: Long): List<Payment> =
+        jdbi.withHandle<List<Payment>, Exception> { handle ->
+            handle.createQuery(PaymentQuery.FIND_BY_ORDER)
+                .bind("orderId", orderId)
+                .map(rowMapper)
+                .list()
+        }
 
-    /** The order's newest PENDING attempt, if any (uses ix__ec_payment__orderid). */
-    fun findOpenAttempt(orderId: Long): Payment? =
-        jdbcClient.sql(
-            """
-            SELECT * FROM public.ec_payment
-            WHERE paymentorderid = :orderId AND paymentstatus = 'PENDING'
-            ORDER BY paymentcreatedat DESC, paymentid DESC
-            LIMIT 1
-            """
-        )
-            .param("orderId", orderId)
-            .query(rowMapper)
-            .optional()
-            .orElse(null)
+    override fun findOpenAttempt(orderId: Long): Payment? =
+        jdbi.withHandle<Payment?, Exception> { handle ->
+            handle.createQuery(PaymentQuery.FIND_OPEN_ATTEMPT)
+                .bind("orderId", orderId)
+                .map(rowMapper)
+                .findOne()
+                .orElse(null)
+        }
 
-    /**
-     * Marks FAILED the order's PENDING attempts that never got a payment page and are older than
-     * `olderThanSeconds`: the request that started them must have crashed. Returns how many were marked.
-     */
-    fun failStaleStarts(orderId: Long, olderThanSeconds: Int, reason: String): Int =
-        jdbcClient.sql(
-            """
-            UPDATE public.ec_payment
-            SET paymentstatus = 'FAILED', paymentgatewayresponse = :reason, paymentupdatedat = $SQL_NOW
-            WHERE paymentorderid = :orderId
-              AND paymentstatus = 'PENDING'
-              AND paymentauthorizationurl IS NULL
-              AND paymentcreatedat < $SQL_NOW - make_interval(secs => :olderThanSeconds)
-            """
-        )
-            .param("orderId", orderId)
-            .param("olderThanSeconds", olderThanSeconds)
-            .param("reason", reason)
-            .update()
+    override fun failStaleStarts(orderId: Long, olderThanSeconds: Int, reason: String): Int =
+        jdbi.withHandle<Int, Exception> { handle ->
+            handle.createUpdate(PaymentQuery.FAIL_STALE_STARTS)
+                .bind("orderId", orderId)
+                .bind("olderThanSeconds", olderThanSeconds)
+                .bind("reason", reason)
+                .execute()
+        }
 
-    /** Saves the payment page the provider gave us. Returns the number of rows updated (0 or 1). */
-    fun saveAuthorizationUrl(paymentId: Long, authorizationUrl: String): Int =
-        jdbcClient.sql(
-            """
-            UPDATE public.ec_payment
-            SET paymentauthorizationurl = :authorizationUrl, paymentupdatedat = $SQL_NOW
-            WHERE paymentid = :paymentId
-            """
-        )
-            .param("paymentId", paymentId)
-            .param("authorizationUrl", authorizationUrl)
-            .update()
+    override fun saveAuthorizationUrl(paymentId: Long, authorizationUrl: String): Int =
+        jdbi.withHandle<Int, Exception> { handle ->
+            handle.createUpdate(PaymentQuery.SAVE_AUTHORIZATION_URL)
+                .bind("paymentId", paymentId)
+                .bind("authorizationUrl", authorizationUrl)
+                .execute()
+        }
 
-    /**
-     * Records a verified successful payment with the provider's details and its whole answer (JSONB).
-     * Returns the number of rows updated (0 if it was no longer PENDING).
-     */
-    fun markSucceeded(paymentId: Long, details: VerifiedDetails, paidAt: LocalDateTime): Int =
-        jdbcClient.sql(
-            """
-            UPDATE public.ec_payment
-            SET paymentstatus = 'SUCCESS', paymentprovidertransactionid = :transactionId, paymentchannel = :channel,
-                paymentgatewayresponse = :gatewayResponse, paymentproviderresponse = CAST(:rawResponse AS jsonb),
-                paymentpaidat = :paidAt, paymentverifiedat = $SQL_NOW, paymentupdatedat = $SQL_NOW
-            WHERE paymentid = :paymentId AND paymentstatus = 'PENDING'
-            """
-        )
-            .param("paymentId", paymentId)
-            .param("transactionId", details.transactionId)
-            .param("channel", details.channel)
-            .param("gatewayResponse", details.gatewayResponse)
-            .param("rawResponse", details.rawResponse)
-            .param("paidAt", paidAt)
-            .update()
+    override fun markSucceeded(paymentId: Long, details: VerifiedDetails, paidAt: LocalDateTime): Int =
+        jdbi.withHandle<Int, Exception> { handle ->
+            handle.createUpdate(PaymentQuery.MARK_SUCCEEDED)
+                .bind("paymentId", paymentId)
+                .bind("transactionId", details.transactionId)
+                .bind("channel", details.channel)
+                .bind("gatewayResponse", details.gatewayResponse)
+                .bind("rawResponse", details.rawResponse)
+                .bind("paidAt", paidAt)
+                .execute()
+        }
 
-    /**
-     * Records a verified unsuccessful outcome (FAILED or ABANDONED). `note` replaces the provider's message
-     * when we reject a payment ourselves (e.g. a wrong amount). Returns rows updated (0 if no longer PENDING).
-     */
-    fun markUnsuccessful(paymentId: Long, status: PaymentStatus, details: VerifiedDetails, note: String? = null): Int {
+    override fun markUnsuccessful(paymentId: Long, status: PaymentStatus, details: VerifiedDetails, note: String?): Int {
         require(status == PaymentStatus.FAILED || status == PaymentStatus.ABANDONED) { "Not an unsuccessful status: $status" }
-        return jdbcClient.sql(
-            """
-            UPDATE public.ec_payment
-            SET paymentstatus = :status, paymentprovidertransactionid = :transactionId, paymentchannel = :channel,
-                paymentgatewayresponse = :gatewayResponse, paymentproviderresponse = CAST(:rawResponse AS jsonb),
-                paymentverifiedat = $SQL_NOW, paymentupdatedat = $SQL_NOW
-            WHERE paymentid = :paymentId AND paymentstatus = 'PENDING'
-            """
-        )
-            .param("paymentId", paymentId)
-            .param("status", status.name)
-            .param("transactionId", details.transactionId)
-            .param("channel", details.channel)
-            .param("gatewayResponse", note ?: details.gatewayResponse)
-            .param("rawResponse", details.rawResponse)
-            .update()
+        return jdbi.withHandle<Int, Exception> { handle ->
+            handle.createUpdate(PaymentQuery.MARK_UNSUCCESSFUL)
+                .bind("paymentId", paymentId)
+                .bind("status", status.name)
+                .bind("transactionId", details.transactionId)
+                .bind("channel", details.channel)
+                .bind("gatewayResponse", note ?: details.gatewayResponse)
+                .bind("rawResponse", details.rawResponse)
+                .execute()
+        }
     }
 
-    /** Marks a PENDING attempt FAILED. Returns the number of rows updated (0 if it was no longer PENDING). */
-    fun markFailed(paymentId: Long, reason: String): Int =
-        jdbcClient.sql(
-            """
-            UPDATE public.ec_payment
-            SET paymentstatus = 'FAILED', paymentgatewayresponse = :reason, paymentupdatedat = $SQL_NOW
-            WHERE paymentid = :paymentId AND paymentstatus = 'PENDING'
-            """
-        )
-            .param("paymentId", paymentId)
-            .param("reason", reason)
-            .update()
+    override fun markFailed(paymentId: Long, reason: String): Int =
+        jdbi.withHandle<Int, Exception> { handle ->
+            handle.createUpdate(PaymentQuery.MARK_FAILED)
+                .bind("paymentId", paymentId)
+                .bind("reason", reason)
+                .execute()
+        }
 }

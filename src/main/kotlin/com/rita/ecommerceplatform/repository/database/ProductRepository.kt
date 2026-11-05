@@ -1,11 +1,13 @@
 package com.rita.ecommerceplatform.repository.database
 
-import com.rita.ecommerceplatform.utility.SQL_NOW
+import com.rita.ecommerceplatform.repository.database.query.ProductQuery
+import org.jdbi.v3.core.Jdbi
+import org.jdbi.v3.core.kotlin.mapTo
+import com.rita.ecommerceplatform.utility.constant.PrefixConstant
 import com.rita.ecommerceplatform.utility.containsPattern
 import com.rita.ecommerceplatform.model.entity.Product
 import com.rita.ecommerceplatform.model.entity.ProductStatus
-import org.springframework.jdbc.core.RowMapper
-import org.springframework.jdbc.core.simple.JdbcClient
+import org.jdbi.v3.core.mapper.RowMapper
 import org.springframework.stereotype.Repository
 import java.math.BigDecimal
 import java.time.LocalDateTime
@@ -50,15 +52,78 @@ enum class ProductSort(val param: String, val orderBy: String) {
     PRICE_DESC("price_desc", "p.productsellingprice DESC, p.productid DESC"),
 }
 
-@Repository
-class ProductRepository(private val jdbcClient: JdbcClient) {
+interface ProductRepository {
+    /** True if any product, including a soft-deleted one, already uses this SKU (case-insensitive: CITEXT). */
+    fun existsBySku(sku: String, excludingProductId: Long? = null): Boolean
 
-    // Every product query joins ec_category so the Product carries its category name.
-    private val selectWithCategory = """
-        SELECT p.*, c.categoryname
-        FROM public.ec_product p
-        JOIN public.ec_category c ON c.categoryid = p.productcategoryid
-    """
+    /** Inserts a product and returns the generated productid. Status, sellingprice and timestamps come from the database. */
+    fun insert(
+        categoryId: Int,
+        createdByAdminId: Int,
+        name: String,
+        description: String?,
+        sku: String,
+        price: BigDecimal,
+        discountPrice: BigDecimal?,
+        stockQuantity: Int,
+        lowStockThreshold: Int?,
+    ): Long
+
+    fun findById(productId: Long): Product?
+
+    /** The product only if the public may see it: product ACTIVE and its category ACTIVE (same rule as public listings). */
+    fun findPublicById(productId: Long): Product?
+
+    /**
+     * Same as findById, but locks the product row until the transaction ends, so a stock edit
+     * cannot overwrite a concurrent stock change (e.g. a paid order). Must be called inside @Transactional.
+     */
+    fun findByIdForUpdate(productId: Long): Product?
+
+    /**
+     * Takes `quantity` from stock only if there is enough, and returns the stock left; null if there was not enough
+     * (the conditional update from the 1.3 decision; ck__ec_product__stockquantity is the last guard).
+     */
+    fun decreaseStock(productId: Long, quantity: Int): Int?
+
+    /** Puts `quantity` back into stock (e.g. a cancelled order) and returns the stock after; null if the product does not exist. */
+    fun increaseStock(productId: Long, quantity: Int): Int?
+
+    /**
+     * Adds `change` (negative to remove) to the stock of a product that is not deleted, only if the stock stays 0 or
+     * more, and returns the stock after. Null if it would go below 0 or the product is missing or deleted.
+     * Relative, so a sale between the admin loading the page and saving is never overwritten.
+     */
+    fun adjustStock(productId: Long, change: Int): Int?
+
+    /**
+     * Updates the editable fields of a product that is not deleted. The service merges a partial
+     * PATCH with the current row first, so every field is passed. Returns rows updated (0 or 1).
+     */
+    fun update(
+        productId: Long,
+        categoryId: Int,
+        name: String,
+        description: String?,
+        sku: String,
+        price: BigDecimal,
+        discountPrice: BigDecimal?,
+        stockQuantity: Int,
+        lowStockThreshold: Int?,
+    ): Int
+
+    /** Changes the status of a product that is not deleted (deleting is final, D3). Returns rows updated (0 or 1). */
+    fun updateStatus(productId: Long, status: ProductStatus): Int
+
+    /** One page of products matching the criteria, in the criteria's sort order. */
+    fun search(criteria: ProductSearchCriteria, limit: Int, offset: Long): List<Product>
+
+    /** Total number of products matching the criteria (for totalElements / totalPages). */
+    fun count(criteria: ProductSearchCriteria): Long
+}
+
+@Repository
+class ProductRepositoryImpl(private val jdbi: Jdbi) : ProductRepository {
 
     private val rowMapper = RowMapper { rs, _ ->
         Product(
@@ -80,24 +145,16 @@ class ProductRepository(private val jdbcClient: JdbcClient) {
         )
     }
 
-    /** True if any product, including a soft-deleted one, already uses this SKU (case-insensitive: CITEXT). */
-    fun existsBySku(sku: String, excludingProductId: Long? = null): Boolean =
-        jdbcClient.sql(
-            """
-            SELECT EXISTS (
-                SELECT 1 FROM public.ec_product
-                WHERE productsku = :sku
-                  AND (CAST(:excludingId AS BIGINT) IS NULL OR productid <> :excludingId)
-            )
-            """
-        )
-            .param("sku", sku)
-            .param("excludingId", excludingProductId)
-            .query(Boolean::class.javaObjectType)
-            .single()
+    override fun existsBySku(sku: String, excludingProductId: Long?): Boolean =
+        jdbi.withHandle<Boolean, Exception> { handle ->
+            handle.createQuery(ProductQuery.EXISTS_BY_SKU)
+                .bind("sku", sku)
+                .bind("excludingId", excludingProductId)
+                .mapTo<Boolean>()
+                .one()
+        }
 
-    /** Inserts a product and returns the generated productid. Status, sellingprice and timestamps come from the database. */
-    fun insert(
+    override fun insert(
         categoryId: Int,
         createdByAdminId: Int,
         name: String,
@@ -108,119 +165,79 @@ class ProductRepository(private val jdbcClient: JdbcClient) {
         stockQuantity: Int,
         lowStockThreshold: Int?,
     ): Long =
-        jdbcClient.sql(
-            """
-            INSERT INTO public.ec_product (
-                productcategoryid, productcreatedbyadminid, productname, productdescription, productsku,
-                productprice, productdiscountprice, productstockquantity, productlowstockthreshold
-            )
-            VALUES (
-                :categoryId, :adminId, :name, :description, :sku,
-                :price, :discountPrice, :stockQuantity, :lowStockThreshold
-            )
-            RETURNING productid
-            """
-        )
-            .param("categoryId", categoryId)
-            .param("adminId", createdByAdminId)
-            .param("name", name)
-            .param("description", description)
-            .param("sku", sku)
-            .param("price", price)
-            .param("discountPrice", discountPrice)
-            .param("stockQuantity", stockQuantity)
-            .param("lowStockThreshold", lowStockThreshold)
-            .query(Long::class.javaObjectType)
-            .single()
+        jdbi.withHandle<Long, Exception> { handle ->
+            handle.createQuery(ProductQuery.INSERT)
+                .bind("categoryId", categoryId)
+                .bind("adminId", createdByAdminId)
+                .bind("name", name)
+                .bind("description", description)
+                .bind("sku", sku)
+                .bind("price", price)
+                .bind("discountPrice", discountPrice)
+                .bind("stockQuantity", stockQuantity)
+                .bind("lowStockThreshold", lowStockThreshold)
+                .mapTo<Long>()
+                .one()
+        }
 
-    fun findById(productId: Long): Product? =
-        jdbcClient.sql("$selectWithCategory WHERE p.productid = :productId")
-            .param("productId", productId)
-            .query(rowMapper)
-            .optional()
-            .orElse(null)
+    override fun findById(productId: Long): Product? =
+        jdbi.withHandle<Product?, Exception> { handle ->
+            handle.createQuery(ProductQuery.FIND_BY_ID)
+                .bind("productId", productId)
+                .map(rowMapper)
+                .findOne()
+                .orElse(null)
+        }
 
-    /** The product only if the public may see it: product ACTIVE and its category ACTIVE (same rule as public listings). */
-    fun findPublicById(productId: Long): Product? =
-        jdbcClient.sql(
-            "$selectWithCategory WHERE p.productid = :productId AND p.productstatus = 'ACTIVE' AND c.categorystatus = 'ACTIVE'"
-        )
-            .param("productId", productId)
-            .query(rowMapper)
-            .optional()
-            .orElse(null)
+    override fun findPublicById(productId: Long): Product? =
+        jdbi.withHandle<Product?, Exception> { handle ->
+            handle.createQuery(ProductQuery.FIND_PUBLIC_BY_ID)
+                .bind("productId", productId)
+                .map(rowMapper)
+                .findOne()
+                .orElse(null)
+        }
 
-    /**
-     * Same as findById, but locks the product row until the transaction ends, so a stock edit
-     * cannot overwrite a concurrent stock change (e.g. a paid order). Must be called inside @Transactional.
-     */
-    fun findByIdForUpdate(productId: Long): Product? =
-        jdbcClient.sql("$selectWithCategory WHERE p.productid = :productId FOR UPDATE OF p")
-            .param("productId", productId)
-            .query(rowMapper)
-            .optional()
-            .orElse(null)
+    override fun findByIdForUpdate(productId: Long): Product? =
+        jdbi.withHandle<Product?, Exception> { handle ->
+            handle.createQuery(ProductQuery.FIND_BY_ID_FOR_UPDATE)
+                .bind("productId", productId)
+                .map(rowMapper)
+                .findOne()
+                .orElse(null)
+        }
 
-    /**
-     * Takes `quantity` from stock only if there is enough, and returns the stock left; null if there was not enough
-     * (the conditional update from the 1.3 decision; ck__ec_product__stockquantity is the last guard).
-     */
-    fun decreaseStock(productId: Long, quantity: Int): Int? =
-        jdbcClient.sql(
-            """
-            UPDATE public.ec_product
-            SET productstockquantity = productstockquantity - :quantity, productupdatedat = $SQL_NOW
-            WHERE productid = :productId AND productstockquantity >= :quantity
-            RETURNING productstockquantity
-            """
-        )
-            .param("productId", productId)
-            .param("quantity", quantity)
-            .query(Int::class.javaObjectType)
-            .optional()
-            .orElse(null)
+    override fun decreaseStock(productId: Long, quantity: Int): Int? =
+        jdbi.withHandle<Int?, Exception> { handle ->
+            handle.createQuery(ProductQuery.DECREASE_STOCK)
+                .bind("productId", productId)
+                .bind("quantity", quantity)
+                .mapTo<Int>()
+                .findOne()
+                .orElse(null)
+        }
 
-    /** Puts `quantity` back into stock (e.g. a cancelled order) and returns the stock after; null if the product does not exist. */
-    fun increaseStock(productId: Long, quantity: Int): Int? =
-        jdbcClient.sql(
-            """
-            UPDATE public.ec_product
-            SET productstockquantity = productstockquantity + :quantity, productupdatedat = $SQL_NOW
-            WHERE productid = :productId
-            RETURNING productstockquantity
-            """
-        )
-            .param("productId", productId)
-            .param("quantity", quantity)
-            .query(Int::class.javaObjectType)
-            .optional()
-            .orElse(null)
+    override fun increaseStock(productId: Long, quantity: Int): Int? =
+        jdbi.withHandle<Int?, Exception> { handle ->
+            handle.createQuery(ProductQuery.INCREASE_STOCK)
+                .bind("productId", productId)
+                .bind("quantity", quantity)
+                .mapTo<Int>()
+                .findOne()
+                .orElse(null)
+        }
 
-    /**
-     * Adds `change` (negative to remove) to the stock of a product that is not deleted, only if the stock stays 0 or
-     * more, and returns the stock after. Null if it would go below 0 or the product is missing or deleted.
-     * Relative, so a sale between the admin loading the page and saving is never overwritten.
-     */
-    fun adjustStock(productId: Long, change: Int): Int? =
-        jdbcClient.sql(
-            """
-            UPDATE public.ec_product
-            SET productstockquantity = productstockquantity + :change, productupdatedat = $SQL_NOW
-            WHERE productid = :productId AND productstatus <> 'DELETED' AND productstockquantity + :change >= 0
-            RETURNING productstockquantity
-            """
-        )
-            .param("productId", productId)
-            .param("change", change)
-            .query(Int::class.javaObjectType)
-            .optional()
-            .orElse(null)
+    override fun adjustStock(productId: Long, change: Int): Int? =
+        jdbi.withHandle<Int?, Exception> { handle ->
+            handle.createQuery(ProductQuery.ADJUST_STOCK)
+                .bind("productId", productId)
+                .bind("change", change)
+                .mapTo<Int>()
+                .findOne()
+                .orElse(null)
+        }
 
-    /**
-     * Updates the editable fields of a product that is not deleted. The service merges a partial
-     * PATCH with the current row first, so every field is passed. Returns rows updated (0 or 1).
-     */
-    fun update(
+    override fun update(
         productId: Long,
         categoryId: Int,
         name: String,
@@ -231,71 +248,53 @@ class ProductRepository(private val jdbcClient: JdbcClient) {
         stockQuantity: Int,
         lowStockThreshold: Int?,
     ): Int =
-        jdbcClient.sql(
-            """
-            UPDATE public.ec_product
-            SET productcategoryid = :categoryId,
-                productname = :name,
-                productdescription = :description,
-                productsku = :sku,
-                productprice = :price,
-                productdiscountprice = :discountPrice,
-                productstockquantity = :stockQuantity,
-                productlowstockthreshold = :lowStockThreshold,
-                productupdatedat = $SQL_NOW
-            WHERE productid = :productId AND productstatus <> 'DELETED'
-            """
-        )
-            .param("categoryId", categoryId)
-            .param("name", name)
-            .param("description", description)
-            .param("sku", sku)
-            .param("price", price)
-            .param("discountPrice", discountPrice)
-            .param("stockQuantity", stockQuantity)
-            .param("lowStockThreshold", lowStockThreshold)
-            .param("productId", productId)
-            .update()
+        jdbi.withHandle<Int, Exception> { handle ->
+            handle.createUpdate(ProductQuery.UPDATE)
+                .bind("categoryId", categoryId)
+                .bind("name", name)
+                .bind("description", description)
+                .bind("sku", sku)
+                .bind("price", price)
+                .bind("discountPrice", discountPrice)
+                .bind("stockQuantity", stockQuantity)
+                .bind("lowStockThreshold", lowStockThreshold)
+                .bind("productId", productId)
+                .execute()
+        }
 
-    /** Changes the status of a product that is not deleted (deleting is final, D3). Returns rows updated (0 or 1). */
-    fun updateStatus(productId: Long, status: ProductStatus): Int =
-        jdbcClient.sql(
-            """
-            UPDATE public.ec_product
-            SET productstatus = :status,
-                productupdatedat = $SQL_NOW
-            WHERE productid = :productId AND productstatus <> 'DELETED'
-            """
-        )
-            .param("status", status.name)
-            .param("productId", productId)
-            .update()
+    override fun updateStatus(productId: Long, status: ProductStatus): Int =
+        jdbi.withHandle<Int, Exception> { handle ->
+            handle.createUpdate(ProductQuery.UPDATE_STATUS)
+                .bind("status", status.name)
+                .bind("productId", productId)
+                .execute()
+        }
 
-    /** One page of products matching the criteria, in the criteria's sort order. */
-    fun search(criteria: ProductSearchCriteria, limit: Int, offset: Long): List<Product> {
+    override fun search(criteria: ProductSearchCriteria, limit: Int, offset: Long): List<Product> {
         val (where, params) = whereClause(criteria)
-        return jdbcClient.sql(
-            "$selectWithCategory $where ORDER BY ${criteria.sort.orderBy} LIMIT :limit OFFSET :offset"
-        )
-            .params(params + mapOf("limit" to limit, "offset" to offset))
-            .query(rowMapper)
-            .list()
+        return jdbi.withHandle<List<Product>, Exception> { handle ->
+            handle.createQuery("${ProductQuery.SELECT_WITH_CATEGORY} $where ORDER BY ${criteria.sort.orderBy} LIMIT :limit OFFSET :offset")
+                .bindList("statuses", criteria.statuses.map { it.name })
+                .bindMap(params + mapOf("limit" to limit, "offset" to offset))
+                .map(rowMapper)
+                .list()
+        }
     }
 
-    /** Total number of products matching the criteria (for totalElements / totalPages). */
-    fun count(criteria: ProductSearchCriteria): Long {
+    override fun count(criteria: ProductSearchCriteria): Long {
         val (where, params) = whereClause(criteria)
-        return jdbcClient.sql(
-            """
+        return jdbi.withHandle<Long, Exception> { handle ->
+            handle.createQuery("""
             SELECT COUNT(*)
-            FROM public.ec_product p
-            JOIN public.ec_category c ON c.categoryid = p.productcategoryid
+            FROM ${PrefixConstant.ENTITY}PRODUCT p
+            JOIN ${PrefixConstant.ENTITY}CATEGORY c ON c.categoryid = p.productcategoryid
             $where
-            """
-        )
-            .params(params)
-            .query(Long::class.javaObjectType)
-            .single()
+            """)
+                .bindList("statuses", criteria.statuses.map { it.name })
+                .bindMap(params)
+                .mapTo<Long>()
+                .one()
+        }
     }
 
     /**
@@ -303,8 +302,8 @@ class ProductRepository(private val jdbcClient: JdbcClient) {
      * so search terms can never change the SQL.
      */
     private fun whereClause(criteria: ProductSearchCriteria): Pair<String, Map<String, Any>> {
-        val conditions = mutableListOf("p.productstatus IN (:statuses)")
-        val params = mutableMapOf<String, Any>("statuses" to criteria.statuses.map { it.name })
+        val conditions = mutableListOf("p.productstatus IN (<statuses>)")
+        val params = mutableMapOf<String, Any>()
 
         if (criteria.activeCategoryOnly) {
             conditions += "c.categorystatus = 'ACTIVE'"
@@ -315,7 +314,7 @@ class ProductRepository(private val jdbcClient: JdbcClient) {
         }
         criteria.nameContains?.let {
             // Partial, case-insensitive name match (D5); uses the ix__ec_product__name_trgm index.
-            conditions += "(p.productname::TEXT) ILIKE :namePattern ESCAPE '\\'"
+            conditions += "(p.productname::TEXT) ILIKE :namePattern ESCAPE '!'"
             params["namePattern"] = containsPattern(it)
         }
         criteria.minPrice?.let {

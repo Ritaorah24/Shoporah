@@ -1,12 +1,14 @@
 package com.rita.ecommerceplatform.repository.database
 
-import com.rita.ecommerceplatform.utility.SQL_NOW
+import com.rita.ecommerceplatform.repository.database.query.CouponQuery
+import org.jdbi.v3.core.Jdbi
+import org.jdbi.v3.core.kotlin.mapTo
+import com.rita.ecommerceplatform.utility.constant.PrefixConstant
 import com.rita.ecommerceplatform.utility.startsWithPattern
 import com.rita.ecommerceplatform.model.entity.Coupon
 import com.rita.ecommerceplatform.model.entity.CouponDiscountType
 import com.rita.ecommerceplatform.model.entity.CouponStatus
-import org.springframework.jdbc.core.RowMapper
-import org.springframework.jdbc.core.simple.JdbcClient
+import org.jdbi.v3.core.mapper.RowMapper
 import org.springframework.stereotype.Repository
 import java.math.BigDecimal
 import java.time.LocalDateTime
@@ -23,8 +25,49 @@ data class CouponTerms(
     val expiresAt: LocalDateTime?,
 )
 
+interface CouponRepository {
+    fun findById(couponId: Int): Coupon?
+
+    /** Locks the row until the transaction ends, so an edit of the usage limit cannot race a redemption. */
+    fun lockById(couponId: Int): Coupon?
+
+    /** By code, any status, case-insensitive (CITEXT). The checkout preview reads it without a lock. */
+    fun findByCode(code: String): Coupon?
+
+    /** Like findByCode, but locks the row until the transaction ends, so two checkouts cannot both take the last use. */
+    fun lockByCode(code: String): Coupon?
+
+    /**
+     * Counts one use, only while the coupon is ACTIVE and below its limit. Returns the rows updated (0 or 1);
+     * the caller holds the row lock and checks for 1. ck__ec_coupon__usagecount is the last guard.
+     */
+    fun redeem(couponId: Int): Int
+
+    /** Gives one use back (an unpaid order was cancelled). Any status: a deleted coupon's count is corrected too. */
+    fun release(couponId: Int): Int
+
+    /** Any status, DELETED included: a deleted coupon's code stays taken (uq__ec_coupon__code, case-insensitive). */
+    fun existsByCode(code: String): Boolean
+
+    /** Admin list, newest first. Never DELETED; `statuses` narrows it further. */
+    fun search(statuses: List<CouponStatus>, codeStartsWith: String?, limit: Int, offset: Long): List<Coupon>
+
+    fun count(statuses: List<CouponStatus>, codeStartsWith: String?): Long
+
+    /**
+     * Inserts an ACTIVE coupon and returns its id. Throws DuplicateKeyException if the code is taken
+     * (uq__ec_coupon__code, case-insensitive): the service turns that into 409.
+     */
+    fun insert(code: String, terms: CouponTerms, createdByAdminId: Int): Int
+
+    /** Sets every editable field (the service merges what was sent with the current values). The code never changes. */
+    fun update(couponId: Int, terms: CouponTerms): Int
+
+    fun updateStatus(couponId: Int, status: CouponStatus): Int
+}
+
 @Repository
-class CouponRepository(private val jdbcClient: JdbcClient) {
+class CouponRepositoryImpl(private val jdbi: Jdbi) : CouponRepository {
 
     private val rowMapper = RowMapper { rs, _ ->
         Coupon(
@@ -46,167 +89,127 @@ class CouponRepository(private val jdbcClient: JdbcClient) {
         )
     }
 
-    fun findById(couponId: Int): Coupon? =
-        jdbcClient.sql("SELECT * FROM public.ec_coupon WHERE couponid = :id")
-            .param("id", couponId)
-            .query(rowMapper)
-            .optional()
-            .orElse(null)
+    override fun findById(couponId: Int): Coupon? =
+        jdbi.withHandle<Coupon?, Exception> { handle ->
+            handle.createQuery(CouponQuery.FIND_BY_ID)
+                .bind("id", couponId)
+                .map(rowMapper)
+                .findOne()
+                .orElse(null)
+        }
 
-    /** Locks the row until the transaction ends, so an edit of the usage limit cannot race a redemption. */
-    fun lockById(couponId: Int): Coupon? =
-        jdbcClient.sql("SELECT * FROM public.ec_coupon WHERE couponid = :id FOR UPDATE")
-            .param("id", couponId)
-            .query(rowMapper)
-            .optional()
-            .orElse(null)
+    override fun lockById(couponId: Int): Coupon? =
+        jdbi.withHandle<Coupon?, Exception> { handle ->
+            handle.createQuery(CouponQuery.LOCK_BY_ID)
+                .bind("id", couponId)
+                .map(rowMapper)
+                .findOne()
+                .orElse(null)
+        }
 
-    /** By code, any status, case-insensitive (CITEXT). The checkout preview reads it without a lock. */
-    fun findByCode(code: String): Coupon? =
-        jdbcClient.sql("SELECT * FROM public.ec_coupon WHERE couponcode = :code")
-            .param("code", code)
-            .query(rowMapper)
-            .optional()
-            .orElse(null)
+    override fun findByCode(code: String): Coupon? =
+        jdbi.withHandle<Coupon?, Exception> { handle ->
+            handle.createQuery(CouponQuery.FIND_BY_CODE)
+                .bind("code", code)
+                .map(rowMapper)
+                .findOne()
+                .orElse(null)
+        }
 
-    /** Like findByCode, but locks the row until the transaction ends, so two checkouts cannot both take the last use. */
-    fun lockByCode(code: String): Coupon? =
-        jdbcClient.sql("SELECT * FROM public.ec_coupon WHERE couponcode = :code FOR UPDATE")
-            .param("code", code)
-            .query(rowMapper)
-            .optional()
-            .orElse(null)
+    override fun lockByCode(code: String): Coupon? =
+        jdbi.withHandle<Coupon?, Exception> { handle ->
+            handle.createQuery(CouponQuery.LOCK_BY_CODE)
+                .bind("code", code)
+                .map(rowMapper)
+                .findOne()
+                .orElse(null)
+        }
 
-    /**
-     * Counts one use, only while the coupon is ACTIVE and below its limit. Returns the rows updated (0 or 1);
-     * the caller holds the row lock and checks for 1. ck__ec_coupon__usagecount is the last guard.
-     */
-    fun redeem(couponId: Int): Int =
-        jdbcClient.sql(
-            """
-            UPDATE public.ec_coupon
-            SET couponusagecount = couponusagecount + 1,
-                couponupdatedat = $SQL_NOW
-            WHERE couponid = :id
-              AND couponstatus = 'ACTIVE'
-              AND (couponusagelimit IS NULL OR couponusagecount < couponusagelimit)
-            """
-        )
-            .param("id", couponId)
-            .update()
+    override fun redeem(couponId: Int): Int =
+        jdbi.withHandle<Int, Exception> { handle ->
+            handle.createUpdate(CouponQuery.REDEEM)
+                .bind("id", couponId)
+                .execute()
+        }
 
-    /** Gives one use back (an unpaid order was cancelled). Any status: a deleted coupon's count is corrected too. */
-    fun release(couponId: Int): Int =
-        jdbcClient.sql(
-            """
-            UPDATE public.ec_coupon
-            SET couponusagecount = couponusagecount - 1,
-                couponupdatedat = $SQL_NOW
-            WHERE couponid = :id AND couponusagecount > 0
-            """
-        )
-            .param("id", couponId)
-            .update()
+    override fun release(couponId: Int): Int =
+        jdbi.withHandle<Int, Exception> { handle ->
+            handle.createUpdate(CouponQuery.RELEASE)
+                .bind("id", couponId)
+                .execute()
+        }
 
-    /** Any status, DELETED included: a deleted coupon's code stays taken (uq__ec_coupon__code, case-insensitive). */
-    fun existsByCode(code: String): Boolean =
-        jdbcClient.sql("SELECT EXISTS (SELECT 1 FROM public.ec_coupon WHERE couponcode = :code)")
-            .param("code", code)
-            .query(Boolean::class.javaObjectType)
-            .single()
+    override fun existsByCode(code: String): Boolean =
+        jdbi.withHandle<Boolean, Exception> { handle ->
+            handle.createQuery(CouponQuery.EXISTS_BY_CODE)
+                .bind("code", code)
+                .mapTo<Boolean>()
+                .one()
+        }
 
-    /** Admin list, newest first. Never DELETED; `statuses` narrows it further. */
-    fun search(statuses: List<CouponStatus>, codeStartsWith: String?, limit: Int, offset: Long): List<Coupon> {
+    override fun search(statuses: List<CouponStatus>, codeStartsWith: String?, limit: Int, offset: Long): List<Coupon> {
         val (where, params) = searchWhere(statuses, codeStartsWith)
-        return jdbcClient.sql(
-            """
-            SELECT * FROM public.ec_coupon
+        return jdbi.withHandle<List<Coupon>, Exception> { handle ->
+            handle.createQuery("""
+            SELECT * FROM ${PrefixConstant.ENTITY}COUPON
             $where
             ORDER BY couponcreatedat DESC, couponid DESC
             LIMIT :limit OFFSET :offset
-            """
-        )
-            .params(params + mapOf("limit" to limit, "offset" to offset))
-            .query(rowMapper)
-            .list()
+            """)
+                .bindList("statuses", statuses.map { it.name })
+                .bindMap(params + mapOf("limit" to limit, "offset" to offset))
+                .map(rowMapper)
+                .list()
+        }
     }
 
-    fun count(statuses: List<CouponStatus>, codeStartsWith: String?): Long {
+    override fun count(statuses: List<CouponStatus>, codeStartsWith: String?): Long {
         val (where, params) = searchWhere(statuses, codeStartsWith)
-        return jdbcClient.sql("SELECT COUNT(*) FROM public.ec_coupon $where")
-            .params(params)
-            .query(Long::class.javaObjectType)
-            .single()
+        return jdbi.withHandle<Long, Exception> { handle ->
+            handle.createQuery("SELECT COUNT(*) FROM ${PrefixConstant.ENTITY}COUPON $where")
+                .bindList("statuses", statuses.map { it.name })
+                .bindMap(params)
+                .mapTo<Long>()
+                .one()
+        }
     }
 
     // Fixed SQL fragments only; the values are named parameters.
     private fun searchWhere(statuses: List<CouponStatus>, codeStartsWith: String?): Pair<String, Map<String, Any>> {
-        val conditions = mutableListOf("couponstatus IN (:statuses)")
-        val params = mutableMapOf<String, Any>("statuses" to statuses.map { it.name })
+        val conditions = mutableListOf("couponstatus IN (<statuses>)")
+        val params = mutableMapOf<String, Any>()
         codeStartsWith?.let {
-            conditions += "(couponcode::TEXT) ILIKE :pattern ESCAPE '\\'"
+            conditions += "(couponcode::TEXT) ILIKE :pattern ESCAPE '!'"
             params["pattern"] = startsWithPattern(it)
         }
         return "WHERE " + conditions.joinToString(" AND ") to params
     }
 
-    /**
-     * Inserts an ACTIVE coupon and returns its id. Throws DuplicateKeyException if the code is taken
-     * (uq__ec_coupon__code, case-insensitive): the service turns that into 409.
-     */
-    fun insert(code: String, terms: CouponTerms, createdByAdminId: Int): Int =
-        jdbcClient.sql(
-            """
-            INSERT INTO public.ec_coupon (
-                couponcode, coupondescription, coupondiscounttype, coupondiscountvalue, couponmaxdiscountamount,
-                couponminimumordervalue, couponusagelimit, couponstartsat, couponexpiresat, couponcreatedbyadminid
-            )
-            VALUES (
-                :code, :description, :discountType, :discountValue, :maxDiscountAmount,
-                :minimumOrderValue, :usageLimit, :startsAt, :expiresAt, :adminId
-            )
-            RETURNING couponid
-            """
-        )
-            .param("code", code)
-            .params(termParams(terms))
-            .param("adminId", createdByAdminId)
-            .query(Int::class.javaObjectType)
-            .single()
+    override fun insert(code: String, terms: CouponTerms, createdByAdminId: Int): Int =
+        jdbi.withHandle<Int, Exception> { handle ->
+            handle.createQuery(CouponQuery.INSERT)
+                .bind("code", code)
+                .bindMap(termParams(terms))
+                .bind("adminId", createdByAdminId)
+                .mapTo<Int>()
+                .one()
+        }
 
-    /** Sets every editable field (the service merges what was sent with the current values). The code never changes. */
-    fun update(couponId: Int, terms: CouponTerms): Int =
-        jdbcClient.sql(
-            """
-            UPDATE public.ec_coupon
-            SET coupondescription = :description,
-                coupondiscounttype = :discountType,
-                coupondiscountvalue = :discountValue,
-                couponmaxdiscountamount = :maxDiscountAmount,
-                couponminimumordervalue = :minimumOrderValue,
-                couponusagelimit = :usageLimit,
-                couponstartsat = :startsAt,
-                couponexpiresat = :expiresAt,
-                couponupdatedat = $SQL_NOW
-            WHERE couponid = :id AND couponstatus <> 'DELETED'
-            """
-        )
-            .params(termParams(terms))
-            .param("id", couponId)
-            .update()
+    override fun update(couponId: Int, terms: CouponTerms): Int =
+        jdbi.withHandle<Int, Exception> { handle ->
+            handle.createUpdate(CouponQuery.UPDATE)
+                .bindMap(termParams(terms))
+                .bind("id", couponId)
+                .execute()
+        }
 
-    fun updateStatus(couponId: Int, status: CouponStatus): Int =
-        jdbcClient.sql(
-            """
-            UPDATE public.ec_coupon
-            SET couponstatus = :status,
-                couponupdatedat = $SQL_NOW
-            WHERE couponid = :id AND couponstatus <> 'DELETED'
-            """
-        )
-            .param("status", status.name)
-            .param("id", couponId)
-            .update()
+    override fun updateStatus(couponId: Int, status: CouponStatus): Int =
+        jdbi.withHandle<Int, Exception> { handle ->
+            handle.createUpdate(CouponQuery.UPDATE_STATUS)
+                .bind("status", status.name)
+                .bind("id", couponId)
+                .execute()
+        }
 
     private fun termParams(terms: CouponTerms): Map<String, Any?> = mapOf(
         "description" to terms.description,

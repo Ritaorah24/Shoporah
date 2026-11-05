@@ -1,15 +1,49 @@
 package com.rita.ecommerceplatform.repository.database
 
-import com.rita.ecommerceplatform.utility.SQL_NOW
+import com.rita.ecommerceplatform.repository.database.query.ProductImageQuery
+import org.jdbi.v3.core.Jdbi
+import org.jdbi.v3.core.kotlin.mapTo
 import com.rita.ecommerceplatform.model.entity.ProductImage
-import org.springframework.jdbc.core.RowMapper
-import org.springframework.jdbc.core.simple.JdbcClient
+import org.jdbi.v3.core.mapper.RowMapper
 import org.springframework.stereotype.Repository
 import java.time.LocalDateTime
 
 /** Product images (ec_product_image). Changes run with the product row locked, so the image limit and primary flag hold. */
+interface ProductImageRepository {
+    /** Inserts an image and returns the generated productimageid. */
+    fun insert(productId: Long, url: String, storageKey: String, altText: String?, sortOrder: Int, isPrimary: Boolean): Long
+
+    /** The product's images: the primary first, then by sort order (uses ix__ec_productimage__productid_sortorder). */
+    fun findByProduct(productId: Long): List<ProductImage>
+
+    /** The images of several products (a page of a list) in one query, each product's in the same order as findByProduct. */
+    fun findByProductIds(productIds: Collection<Long>): Map<Long, List<ProductImage>>
+
+    /** Changes an image's alt text and sort order (the service passes both, merged with the current row). Returns rows updated. */
+    fun update(imageId: Long, altText: String?, sortOrder: Int): Int
+
+    /**
+     * Makes this image the product's only primary one: the old flag is cleared first, because
+     * uq__ec_productimage__primary allows one primary at any moment. Call with the product row locked.
+     */
+    fun makePrimary(productId: Long, imageId: Long)
+
+    /** One of the product's images; null if it does not exist or belongs to another product. */
+    fun findById(productId: Long, imageId: Long): ProductImage?
+
+    fun countByProduct(productId: Long): Int
+
+    /** The sort order for a new image: after every existing one. */
+    fun nextSortOrder(productId: Long): Int
+
+    fun delete(imageId: Long): Int
+
+    /** Makes the product's first image by sort order primary, if it has images and none is primary. Returns rows updated. */
+    fun promoteFirstIfNoPrimary(productId: Long): Int
+}
+
 @Repository
-class ProductImageRepository(private val jdbcClient: JdbcClient) {
+class ProductImageRepositoryImpl(private val jdbi: Jdbi) : ProductImageRepository {
 
     private val rowMapper = RowMapper { rs, _ ->
         ProductImage(
@@ -25,140 +59,98 @@ class ProductImageRepository(private val jdbcClient: JdbcClient) {
         )
     }
 
-    /** Inserts an image and returns the generated productimageid. */
-    fun insert(productId: Long, url: String, storageKey: String, altText: String?, sortOrder: Int, isPrimary: Boolean): Long =
-        jdbcClient.sql(
-            """
-            INSERT INTO public.ec_product_image (
-                productimageproductid, productimageurl, productimagestoragekey, productimagealttext,
-                productimagesortorder, productimageisprimary
-            )
-            VALUES (:productId, :url, :storageKey, :altText, :sortOrder, :isPrimary)
-            RETURNING productimageid
-            """
-        )
-            .param("productId", productId)
-            .param("url", url)
-            .param("storageKey", storageKey)
-            .param("altText", altText)
-            .param("sortOrder", sortOrder)
-            .param("isPrimary", isPrimary)
-            .query(Long::class.javaObjectType)
-            .single()
+    override fun insert(productId: Long, url: String, storageKey: String, altText: String?, sortOrder: Int, isPrimary: Boolean): Long =
+        jdbi.withHandle<Long, Exception> { handle ->
+            handle.createQuery(ProductImageQuery.INSERT)
+                .bind("productId", productId)
+                .bind("url", url)
+                .bind("storageKey", storageKey)
+                .bind("altText", altText)
+                .bind("sortOrder", sortOrder)
+                .bind("isPrimary", isPrimary)
+                .mapTo<Long>()
+                .one()
+        }
 
-    /** The product's images: the primary first, then by sort order (uses ix__ec_productimage__productid_sortorder). */
-    fun findByProduct(productId: Long): List<ProductImage> =
-        jdbcClient.sql(
-            """
-            SELECT * FROM public.ec_product_image
-            WHERE productimageproductid = :productId
-            ORDER BY productimageisprimary DESC, productimagesortorder, productimageid
-            """
-        )
-            .param("productId", productId)
-            .query(rowMapper)
-            .list()
+    override fun findByProduct(productId: Long): List<ProductImage> =
+        jdbi.withHandle<List<ProductImage>, Exception> { handle ->
+            handle.createQuery(ProductImageQuery.FIND_BY_PRODUCT)
+                .bind("productId", productId)
+                .map(rowMapper)
+                .list()
+        }
 
-    /** The images of several products (a page of a list) in one query, each product's in the same order as findByProduct. */
-    fun findByProductIds(productIds: Collection<Long>): Map<Long, List<ProductImage>> {
+    override fun findByProductIds(productIds: Collection<Long>): Map<Long, List<ProductImage>> {
         if (productIds.isEmpty()) return emptyMap()
-        return jdbcClient.sql(
-            """
-            SELECT * FROM public.ec_product_image
-            WHERE productimageproductid IN (:productIds)
-            ORDER BY productimageproductid, productimageisprimary DESC, productimagesortorder, productimageid
-            """
-        )
-            .param("productIds", productIds)
-            .query(rowMapper)
-            .list()
+        return jdbi.withHandle<List<ProductImage>, Exception> { handle ->
+            handle.createQuery(ProductImageQuery.FIND_BY_PRODUCT_IDS)
+                .bindList("productIds", productIds)
+                .map(rowMapper)
+                .list()
+        }
             .groupBy { it.productId }
     }
 
-    /** Changes an image's alt text and sort order (the service passes both, merged with the current row). Returns rows updated. */
-    fun update(imageId: Long, altText: String?, sortOrder: Int): Int =
-        jdbcClient.sql(
-            """
-            UPDATE public.ec_product_image
-            SET productimagealttext = :altText, productimagesortorder = :sortOrder, productimageupdatedat = $SQL_NOW
-            WHERE productimageid = :imageId
-            """
-        )
-            .param("imageId", imageId)
-            .param("altText", altText)
-            .param("sortOrder", sortOrder)
-            .update()
+    override fun update(imageId: Long, altText: String?, sortOrder: Int): Int =
+        jdbi.withHandle<Int, Exception> { handle ->
+            handle.createUpdate(ProductImageQuery.UPDATE)
+                .bind("imageId", imageId)
+                .bind("altText", altText)
+                .bind("sortOrder", sortOrder)
+                .execute()
+        }
 
-    /**
-     * Makes this image the product's only primary one: the old flag is cleared first, because
-     * uq__ec_productimage__primary allows one primary at any moment. Call with the product row locked.
-     */
-    fun makePrimary(productId: Long, imageId: Long) {
-        jdbcClient.sql(
-            """
-            UPDATE public.ec_product_image
-            SET productimageisprimary = FALSE, productimageupdatedat = $SQL_NOW
-            WHERE productimageproductid = :productId AND productimageisprimary AND productimageid <> :imageId
-            """
-        )
-            .param("productId", productId)
-            .param("imageId", imageId)
-            .update()
-        jdbcClient.sql(
-            """
-            UPDATE public.ec_product_image
-            SET productimageisprimary = TRUE, productimageupdatedat = $SQL_NOW
-            WHERE productimageid = :imageId AND NOT productimageisprimary
-            """
-        )
-            .param("imageId", imageId)
-            .update()
+    override fun makePrimary(productId: Long, imageId: Long) {
+        jdbi.withHandle<Int, Exception> { handle ->
+            handle.createUpdate(ProductImageQuery.MAKE_PRIMARY)
+                .bind("productId", productId)
+                .bind("imageId", imageId)
+                .execute()
+        }
+        jdbi.withHandle<Int, Exception> { handle ->
+            handle.createUpdate(ProductImageQuery.MAKE_PRIMARY_2)
+                .bind("imageId", imageId)
+                .execute()
+        }
     }
 
-    /** One of the product's images; null if it does not exist or belongs to another product. */
-    fun findById(productId: Long, imageId: Long): ProductImage? =
-        jdbcClient.sql("SELECT * FROM public.ec_product_image WHERE productimageid = :imageId AND productimageproductid = :productId")
-            .param("imageId", imageId)
-            .param("productId", productId)
-            .query(rowMapper)
-            .optional()
-            .orElse(null)
+    override fun findById(productId: Long, imageId: Long): ProductImage? =
+        jdbi.withHandle<ProductImage?, Exception> { handle ->
+            handle.createQuery(ProductImageQuery.FIND_BY_ID)
+                .bind("imageId", imageId)
+                .bind("productId", productId)
+                .map(rowMapper)
+                .findOne()
+                .orElse(null)
+        }
 
-    fun countByProduct(productId: Long): Int =
-        jdbcClient.sql("SELECT COUNT(*) FROM public.ec_product_image WHERE productimageproductid = :productId")
-            .param("productId", productId)
-            .query(Int::class.javaObjectType)
-            .single()
+    override fun countByProduct(productId: Long): Int =
+        jdbi.withHandle<Int, Exception> { handle ->
+            handle.createQuery(ProductImageQuery.COUNT_BY_PRODUCT)
+                .bind("productId", productId)
+                .mapTo<Int>()
+                .one()
+        }
 
-    /** The sort order for a new image: after every existing one. */
-    fun nextSortOrder(productId: Long): Int =
-        jdbcClient.sql("SELECT COALESCE(MAX(productimagesortorder) + 1, 0) FROM public.ec_product_image WHERE productimageproductid = :productId")
-            .param("productId", productId)
-            .query(Int::class.javaObjectType)
-            .single()
+    override fun nextSortOrder(productId: Long): Int =
+        jdbi.withHandle<Int, Exception> { handle ->
+            handle.createQuery(ProductImageQuery.NEXT_SORT_ORDER)
+                .bind("productId", productId)
+                .mapTo<Int>()
+                .one()
+        }
 
-    fun delete(imageId: Long): Int =
-        jdbcClient.sql("DELETE FROM public.ec_product_image WHERE productimageid = :imageId")
-            .param("imageId", imageId)
-            .update()
+    override fun delete(imageId: Long): Int =
+        jdbi.withHandle<Int, Exception> { handle ->
+            handle.createUpdate(ProductImageQuery.DELETE)
+                .bind("imageId", imageId)
+                .execute()
+        }
 
-    /** Makes the product's first image by sort order primary, if it has images and none is primary. Returns rows updated. */
-    fun promoteFirstIfNoPrimary(productId: Long): Int =
-        jdbcClient.sql(
-            """
-            UPDATE public.ec_product_image
-            SET productimageisprimary = TRUE, productimageupdatedat = $SQL_NOW
-            WHERE productimageid = (
-                SELECT productimageid FROM public.ec_product_image
-                WHERE productimageproductid = :productId
-                ORDER BY productimagesortorder, productimageid
-                LIMIT 1
-            )
-            AND NOT EXISTS (
-                SELECT 1 FROM public.ec_product_image WHERE productimageproductid = :productId AND productimageisprimary
-            )
-            """
-        )
-            .param("productId", productId)
-            .update()
+    override fun promoteFirstIfNoPrimary(productId: Long): Int =
+        jdbi.withHandle<Int, Exception> { handle ->
+            handle.createUpdate(ProductImageQuery.PROMOTE_FIRST_IF_NO_PRIMARY)
+                .bind("productId", productId)
+                .execute()
+        }
 }

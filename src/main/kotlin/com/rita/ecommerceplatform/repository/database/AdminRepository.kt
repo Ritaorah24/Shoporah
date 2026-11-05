@@ -1,21 +1,21 @@
 package com.rita.ecommerceplatform.repository.database
 
+import com.rita.ecommerceplatform.repository.database.query.AdminQuery
+import org.jdbi.v3.core.Jdbi
 import com.rita.ecommerceplatform.model.entity.Admin
 import com.rita.ecommerceplatform.model.entity.AdminStatus
-import org.springframework.jdbc.core.RowMapper
-import org.springframework.jdbc.core.simple.JdbcClient
+import org.jdbi.v3.core.mapper.RowMapper
 import org.springframework.stereotype.Repository
 import java.time.LocalDateTime
 
-@Repository
-class AdminRepository(private val jdbcClient: JdbcClient) {
+interface AdminRepository {
+    fun findByEmail(email: String): Admin?
 
-    // Every admin query joins ec_role so the Admin carries its role name (needed for the JWT).
-    private val selectWithRole = """
-        SELECT a.*, r.rolename
-        FROM public.ec_admin a
-        JOIN public.ec_role r ON r.roleid = a.adminroleid
-    """
+    fun findById(adminId: Int): Admin?
+}
+
+@Repository
+class AdminRepositoryImpl(private val jdbi: Jdbi) : AdminRepository {
 
     private val rowMapper = RowMapper { rs, _ ->
         Admin(
@@ -32,17 +32,21 @@ class AdminRepository(private val jdbcClient: JdbcClient) {
         )
     }
 
-    fun findByEmail(email: String): Admin? =
-        jdbcClient.sql("$selectWithRole WHERE a.adminemail = :email")
-            .param("email", email)
-            .query(rowMapper)
-            .optional()
-            .orElse(null)
+    override fun findByEmail(email: String): Admin? =
+        jdbi.withHandle<Admin?, Exception> { handle ->
+            handle.createQuery(AdminQuery.FIND_BY_EMAIL)
+                .bind("email", email)
+                .map(rowMapper)
+                .findOne()
+                .orElse(null)
+        }
 
-    fun findById(adminId: Int): Admin? =
-        jdbcClient.sql("$selectWithRole WHERE a.adminid = :adminId")
-            .param("adminId", adminId)
-            .query(rowMapper)
-            .optional()
-            .orElse(null)
+    override fun findById(adminId: Int): Admin? =
+        jdbi.withHandle<Admin?, Exception> { handle ->
+            handle.createQuery(AdminQuery.FIND_BY_ID)
+                .bind("adminId", adminId)
+                .map(rowMapper)
+                .findOne()
+                .orElse(null)
+        }
 }

@@ -1,14 +1,16 @@
 package com.rita.ecommerceplatform.repository.database
 
-import com.rita.ecommerceplatform.utility.SQL_NOW
+import com.rita.ecommerceplatform.repository.database.query.OrderQuery
+import org.jdbi.v3.core.Jdbi
+import org.jdbi.v3.core.kotlin.mapTo
+import com.rita.ecommerceplatform.utility.constant.PrefixConstant
 import com.rita.ecommerceplatform.utility.containsPattern
 import com.rita.ecommerceplatform.utility.startsWithPattern
 import com.rita.ecommerceplatform.model.entity.AddressDetails
 import com.rita.ecommerceplatform.model.entity.Order
 import com.rita.ecommerceplatform.model.entity.OrderPaymentStatus
 import com.rita.ecommerceplatform.model.entity.OrderStatus
-import org.springframework.jdbc.core.RowMapper
-import org.springframework.jdbc.core.simple.JdbcClient
+import org.jdbi.v3.core.mapper.RowMapper
 import org.springframework.stereotype.Repository
 import java.math.BigDecimal
 import java.time.LocalDateTime
@@ -58,8 +60,70 @@ data class CustomerOrderTotals(val orderCount: Long, val paidOrderCount: Long, v
  * Customer queries are scoped by customerId, so a customer only ever sees their own orders.
  * Admin queries (findAllWithCustomer, findByIdWithCustomer, countAll, updateStatus) are not scoped.
  */
+interface OrderRepository {
+    /**
+     * Inserts an order and returns the generated orderid. Throws DuplicateKeyException if the
+     * reference is taken (uq__ec_order__reference) or this customer already used the idempotency
+     * key (uq__ec_order__customerid_idempotencykey): the service handles both.
+     */
+    fun insert(order: NewOrder): Long
+
+    /** True if any order already uses this reference (case-insensitive: CITEXT). */
+    fun existsByReference(reference: String): Boolean
+
+    fun findById(orderId: Long, customerId: Long): Order?
+
+    /**
+     * The customer's order by reference, locked until the transaction ends, so two payment starts
+     * for one order run one at a time. Must be called inside a transaction.
+     */
+    fun lockByReference(reference: String, customerId: Long): Order?
+
+    /** Locks the order row until the transaction ends (settle: order → payment → products). Must be called inside a transaction. */
+    fun lockById(orderId: Long): Order?
+
+    /**
+     * Marks a PENDING, UNPAID order PAID and moves it to `status` (CONFIRMED, or CANCELLED when stock ran out).
+     * Returns rows updated: 0 means it was no longer PENDING + UNPAID, so it was never paid twice.
+     */
+    fun markPaid(orderId: Long, status: OrderStatus, paidAt: LocalDateTime): Int
+
+    /**
+     * Marks a PAID order REFUNDED and moves it from `from` to `to` (a cancelled order stays CANCELLED).
+     * Returns rows updated: 0 means it was no longer `from` + PAID, so it is never refunded twice.
+     */
+    fun markRefunded(orderId: Long, from: OrderStatus, to: OrderStatus): Int
+
+    /** The order this customer already created with this idempotency key, if any (a retried checkout). */
+    fun findByIdempotencyKey(customerId: Long, idempotencyKey: UUID): Order?
+
+    /** One page of the customer's orders, newest first (uses ix__ec_order__customerid_createdat). */
+    fun findByCustomer(customerId: Long, limit: Int, offset: Long): List<Order>
+
+    fun countByCustomer(customerId: Long): Long
+
+    /** One page of every customer's orders matching the search, newest first. */
+    fun findAllWithCustomer(search: AdminOrderSearch, limit: Int, offset: Long): List<OrderWithCustomer>
+
+    fun countAll(search: AdminOrderSearch): Long
+
+    /** How many orders each of these customers has placed (one grouped query for a whole page of customers). */
+    fun countByCustomerIds(customerIds: Collection<Long>): Map<Long, Long>
+
+    /**
+     * One customer's order totals for the admin view. Spent counts orders whose payment status is PAID: a refunded
+     * order is REFUNDED, so it no longer counts; a cancelled order still waiting for its refund still does.
+     */
+    fun customerTotals(customerId: Long): CustomerOrderTotals
+
+    fun findByIdWithCustomer(orderId: Long): OrderWithCustomer?
+
+    /** Moves the order from `from` to `to`. Returns rows updated: 0 means it was no longer `from`. */
+    fun updateStatus(orderId: Long, from: OrderStatus, to: OrderStatus): Int
+}
+
 @Repository
-class OrderRepository(private val jdbcClient: JdbcClient) {
+class OrderRepositoryImpl(private val jdbi: Jdbi) : OrderRepository {
 
     private val rowMapper = RowMapper { rs, _ ->
         Order(
@@ -92,229 +156,172 @@ class OrderRepository(private val jdbcClient: JdbcClient) {
         )
     }
 
-    /**
-     * Inserts an order and returns the generated orderid. Throws DuplicateKeyException if the
-     * reference is taken (uq__ec_order__reference) or this customer already used the idempotency
-     * key (uq__ec_order__customerid_idempotencykey): the service handles both.
-     */
-    fun insert(order: NewOrder): Long =
-        jdbcClient.sql(
-            """
-            INSERT INTO public.ec_order (
-                orderreference, orderidempotencykey, ordercustomerid, ordercustomeraddressid, orderdeliverymethodid, ordercouponid,
-                orderrecipientname, orderrecipientphonenumber, orderaddressline1, orderaddressline2,
-                ordercity, orderstate, ordercountry, orderpostalcode,
-                ordersubtotal, orderdeliveryfee, orderdiscountamount, ordertotal
-            )
-            VALUES (
-                :reference, :idempotencyKey, :customerId, :customerAddressId, :deliveryMethodId, :couponId,
-                :recipientName, :recipientPhoneNumber, :addressLine1, :addressLine2,
-                :city, :state, :country, :postalCode,
-                :subtotal, :deliveryFee, :discountAmount, :total
-            )
-            RETURNING orderid
-            """
-        )
-            .param("reference", order.reference)
-            .param("idempotencyKey", order.idempotencyKey)
-            .param("customerId", order.customerId)
-            .param("customerAddressId", order.customerAddressId)
-            .param("deliveryMethodId", order.deliveryMethodId)
-            .param("couponId", order.couponId)
-            .param("recipientName", order.deliveryAddress.recipientName)
-            .param("recipientPhoneNumber", order.deliveryAddress.recipientPhoneNumber)
-            .param("addressLine1", order.deliveryAddress.addressLine1)
-            .param("addressLine2", order.deliveryAddress.addressLine2)
-            .param("city", order.deliveryAddress.city)
-            .param("state", order.deliveryAddress.state)
-            .param("country", order.deliveryAddress.country)
-            .param("postalCode", order.deliveryAddress.postalCode)
-            .param("subtotal", order.subtotal)
-            .param("deliveryFee", order.deliveryFee)
-            .param("discountAmount", order.discountAmount)
-            .param("total", order.total)
-            .query(Long::class.javaObjectType)
-            .single()
+    override fun insert(order: NewOrder): Long =
+        jdbi.withHandle<Long, Exception> { handle ->
+            handle.createQuery(OrderQuery.INSERT)
+                .bind("reference", order.reference)
+                .bind("idempotencyKey", order.idempotencyKey)
+                .bind("customerId", order.customerId)
+                .bind("customerAddressId", order.customerAddressId)
+                .bind("deliveryMethodId", order.deliveryMethodId)
+                .bind("couponId", order.couponId)
+                .bind("recipientName", order.deliveryAddress.recipientName)
+                .bind("recipientPhoneNumber", order.deliveryAddress.recipientPhoneNumber)
+                .bind("addressLine1", order.deliveryAddress.addressLine1)
+                .bind("addressLine2", order.deliveryAddress.addressLine2)
+                .bind("city", order.deliveryAddress.city)
+                .bind("state", order.deliveryAddress.state)
+                .bind("country", order.deliveryAddress.country)
+                .bind("postalCode", order.deliveryAddress.postalCode)
+                .bind("subtotal", order.subtotal)
+                .bind("deliveryFee", order.deliveryFee)
+                .bind("discountAmount", order.discountAmount)
+                .bind("total", order.total)
+                .mapTo<Long>()
+                .one()
+        }
 
-    /** True if any order already uses this reference (case-insensitive: CITEXT). */
-    fun existsByReference(reference: String): Boolean =
-        jdbcClient.sql("SELECT EXISTS (SELECT 1 FROM public.ec_order WHERE orderreference = :reference)")
-            .param("reference", reference)
-            .query(Boolean::class.javaObjectType)
-            .single()
+    override fun existsByReference(reference: String): Boolean =
+        jdbi.withHandle<Boolean, Exception> { handle ->
+            handle.createQuery(OrderQuery.EXISTS_BY_REFERENCE)
+                .bind("reference", reference)
+                .mapTo<Boolean>()
+                .one()
+        }
 
-    fun findById(orderId: Long, customerId: Long): Order? =
-        jdbcClient.sql("SELECT * FROM public.ec_order WHERE orderid = :orderId AND ordercustomerid = :customerId")
-            .param("orderId", orderId)
-            .param("customerId", customerId)
-            .query(rowMapper)
-            .optional()
-            .orElse(null)
+    override fun findById(orderId: Long, customerId: Long): Order? =
+        jdbi.withHandle<Order?, Exception> { handle ->
+            handle.createQuery(OrderQuery.FIND_BY_ID)
+                .bind("orderId", orderId)
+                .bind("customerId", customerId)
+                .map(rowMapper)
+                .findOne()
+                .orElse(null)
+        }
 
-    /**
-     * The customer's order by reference, locked until the transaction ends, so two payment starts
-     * for one order run one at a time. Must be called inside a transaction.
-     */
-    fun lockByReference(reference: String, customerId: Long): Order? =
-        jdbcClient.sql(
-            "SELECT * FROM public.ec_order WHERE orderreference = :reference AND ordercustomerid = :customerId FOR UPDATE"
-        )
-            .param("reference", reference)
-            .param("customerId", customerId)
-            .query(rowMapper)
-            .optional()
-            .orElse(null)
+    override fun lockByReference(reference: String, customerId: Long): Order? =
+        jdbi.withHandle<Order?, Exception> { handle ->
+            handle.createQuery(OrderQuery.LOCK_BY_REFERENCE)
+                .bind("reference", reference)
+                .bind("customerId", customerId)
+                .map(rowMapper)
+                .findOne()
+                .orElse(null)
+        }
 
-    /** Locks the order row until the transaction ends (settle: order → payment → products). Must be called inside a transaction. */
-    fun lockById(orderId: Long): Order? =
-        jdbcClient.sql("SELECT * FROM public.ec_order WHERE orderid = :orderId FOR UPDATE")
-            .param("orderId", orderId)
-            .query(rowMapper)
-            .optional()
-            .orElse(null)
+    override fun lockById(orderId: Long): Order? =
+        jdbi.withHandle<Order?, Exception> { handle ->
+            handle.createQuery(OrderQuery.LOCK_BY_ID)
+                .bind("orderId", orderId)
+                .map(rowMapper)
+                .findOne()
+                .orElse(null)
+        }
 
-    /**
-     * Marks a PENDING, UNPAID order PAID and moves it to `status` (CONFIRMED, or CANCELLED when stock ran out).
-     * Returns rows updated: 0 means it was no longer PENDING + UNPAID, so it was never paid twice.
-     */
-    fun markPaid(orderId: Long, status: OrderStatus, paidAt: LocalDateTime): Int =
-        jdbcClient.sql(
-            """
-            UPDATE public.ec_order
-            SET orderstatus = :status, orderpaymentstatus = 'PAID', orderpaidat = :paidAt, orderupdatedat = $SQL_NOW
-            WHERE orderid = :orderId AND orderstatus = 'PENDING' AND orderpaymentstatus = 'UNPAID'
-            """
-        )
-            .param("orderId", orderId)
-            .param("status", status.name)
-            .param("paidAt", paidAt)
-            .update()
+    override fun markPaid(orderId: Long, status: OrderStatus, paidAt: LocalDateTime): Int =
+        jdbi.withHandle<Int, Exception> { handle ->
+            handle.createUpdate(OrderQuery.MARK_PAID)
+                .bind("orderId", orderId)
+                .bind("status", status.name)
+                .bind("paidAt", paidAt)
+                .execute()
+        }
 
-    /**
-     * Marks a PAID order REFUNDED and moves it from `from` to `to` (a cancelled order stays CANCELLED).
-     * Returns rows updated: 0 means it was no longer `from` + PAID, so it is never refunded twice.
-     */
-    fun markRefunded(orderId: Long, from: OrderStatus, to: OrderStatus): Int =
-        jdbcClient.sql(
-            """
-            UPDATE public.ec_order
-            SET orderstatus = :to, orderpaymentstatus = 'REFUNDED', orderupdatedat = $SQL_NOW
-            WHERE orderid = :orderId AND orderstatus = :from AND orderpaymentstatus = 'PAID'
-            """
-        )
-            .param("orderId", orderId)
-            .param("from", from.name)
-            .param("to", to.name)
-            .update()
+    override fun markRefunded(orderId: Long, from: OrderStatus, to: OrderStatus): Int =
+        jdbi.withHandle<Int, Exception> { handle ->
+            handle.createUpdate(OrderQuery.MARK_REFUNDED)
+                .bind("orderId", orderId)
+                .bind("from", from.name)
+                .bind("to", to.name)
+                .execute()
+        }
 
-    /** The order this customer already created with this idempotency key, if any (a retried checkout). */
-    fun findByIdempotencyKey(customerId: Long, idempotencyKey: UUID): Order? =
-        jdbcClient.sql(
-            "SELECT * FROM public.ec_order WHERE ordercustomerid = :customerId AND orderidempotencykey = :idempotencyKey"
-        )
-            .param("customerId", customerId)
-            .param("idempotencyKey", idempotencyKey)
-            .query(rowMapper)
-            .optional()
-            .orElse(null)
+    override fun findByIdempotencyKey(customerId: Long, idempotencyKey: UUID): Order? =
+        jdbi.withHandle<Order?, Exception> { handle ->
+            handle.createQuery(OrderQuery.FIND_BY_IDEMPOTENCY_KEY)
+                .bind("customerId", customerId)
+                .bind("idempotencyKey", idempotencyKey)
+                .map(rowMapper)
+                .findOne()
+                .orElse(null)
+        }
 
-    /** One page of the customer's orders, newest first (uses ix__ec_order__customerid_createdat). */
-    fun findByCustomer(customerId: Long, limit: Int, offset: Long): List<Order> =
-        jdbcClient.sql(
-            """
-            SELECT * FROM public.ec_order
-            WHERE ordercustomerid = :customerId
-            ORDER BY ordercreatedat DESC, orderid DESC
-            LIMIT :limit OFFSET :offset
-            """
-        )
-            .param("customerId", customerId)
-            .param("limit", limit)
-            .param("offset", offset)
-            .query(rowMapper)
-            .list()
+    override fun findByCustomer(customerId: Long, limit: Int, offset: Long): List<Order> =
+        jdbi.withHandle<List<Order>, Exception> { handle ->
+            handle.createQuery(OrderQuery.FIND_BY_CUSTOMER)
+                .bind("customerId", customerId)
+                .bind("limit", limit)
+                .bind("offset", offset)
+                .map(rowMapper)
+                .list()
+        }
 
-    fun countByCustomer(customerId: Long): Long =
-        jdbcClient.sql("SELECT COUNT(*) FROM public.ec_order WHERE ordercustomerid = :customerId")
-            .param("customerId", customerId)
-            .query(Long::class.javaObjectType)
-            .single()
+    override fun countByCustomer(customerId: Long): Long =
+        jdbi.withHandle<Long, Exception> { handle ->
+            handle.createQuery(OrderQuery.COUNT_BY_CUSTOMER)
+                .bind("customerId", customerId)
+                .mapTo<Long>()
+                .one()
+        }
 
-    private val withCustomerMapper = RowMapper { rs, rowNum ->
+    private val withCustomerMapper = RowMapper { rs, ctx ->
         OrderWithCustomer(
-            order = rowMapper.mapRow(rs, rowNum)!!,
+            order = rowMapper.map(rs, ctx),
             customerName = "${rs.getString("customerfirstname")} ${rs.getString("customerlastname")}",
             customerEmail = rs.getString("customeremail"),
         )
     }
 
-    /** One page of every customer's orders matching the search, newest first. */
-    fun findAllWithCustomer(search: AdminOrderSearch, limit: Int, offset: Long): List<OrderWithCustomer> {
+    override fun findAllWithCustomer(search: AdminOrderSearch, limit: Int, offset: Long): List<OrderWithCustomer> {
         val (where, params) = whereClause(search)
-        return jdbcClient.sql(
-            """
+        return jdbi.withHandle<List<OrderWithCustomer>, Exception> { handle ->
+            handle.createQuery("""
             SELECT o.*, c.customerfirstname, c.customerlastname, c.customeremail
-            FROM public.ec_order o
-            JOIN public.ec_customer c ON c.customerid = o.ordercustomerid
+            FROM ${PrefixConstant.ENTITY}ORDER o
+            JOIN ${PrefixConstant.ENTITY}CUSTOMER c ON c.customerid = o.ordercustomerid
             $where
             ORDER BY o.ordercreatedat DESC, o.orderid DESC
             LIMIT :limit OFFSET :offset
-            """
-        )
-            .params(params + mapOf("limit" to limit, "offset" to offset))
-            .query(withCustomerMapper)
-            .list()
+            """)
+                .bindMap(params + mapOf("limit" to limit, "offset" to offset))
+                .map(withCustomerMapper)
+                .list()
+        }
     }
 
-    fun countAll(search: AdminOrderSearch): Long {
+    override fun countAll(search: AdminOrderSearch): Long {
         val (where, params) = whereClause(search)
-        return jdbcClient.sql(
-            """
+        return jdbi.withHandle<Long, Exception> { handle ->
+            handle.createQuery("""
             SELECT COUNT(*)
-            FROM public.ec_order o
-            JOIN public.ec_customer c ON c.customerid = o.ordercustomerid
+            FROM ${PrefixConstant.ENTITY}ORDER o
+            JOIN ${PrefixConstant.ENTITY}CUSTOMER c ON c.customerid = o.ordercustomerid
             $where
-            """
-        )
-            .params(params)
-            .query(Long::class.javaObjectType)
-            .single()
+            """)
+                .bindMap(params)
+                .mapTo<Long>()
+                .one()
+        }
     }
 
-    /** How many orders each of these customers has placed (one grouped query for a whole page of customers). */
-    fun countByCustomerIds(customerIds: Collection<Long>): Map<Long, Long> {
+    override fun countByCustomerIds(customerIds: Collection<Long>): Map<Long, Long> {
         if (customerIds.isEmpty()) return emptyMap()
-        return jdbcClient.sql(
-            """
-            SELECT ordercustomerid, COUNT(*) AS ordercount
-            FROM public.ec_order
-            WHERE ordercustomerid IN (:customerIds)
-            GROUP BY ordercustomerid
-            """
-        )
-            .param("customerIds", customerIds)
-            .query { rs, _ -> rs.getLong("ordercustomerid") to rs.getLong("ordercount") }
+        return jdbi.withHandle<Map<Long, Long>, Exception> { handle ->
+            handle.createQuery(OrderQuery.COUNT_BY_CUSTOMER_IDS)
+                .bindList("customerIds", customerIds)
+            .map(RowMapper { rs, _ -> rs.getLong("ordercustomerid") to rs.getLong("ordercount") })
             .list()
             .toMap()
+        }
     }
 
-    /**
-     * One customer's order totals for the admin view. Spent counts orders whose payment status is PAID: a refunded
-     * order is REFUNDED, so it no longer counts; a cancelled order still waiting for its refund still does.
-     */
-    fun customerTotals(customerId: Long): CustomerOrderTotals =
-        jdbcClient.sql(
-            """
-            SELECT COUNT(*) AS ordercount,
-                   COUNT(*) FILTER (WHERE orderpaymentstatus = 'PAID') AS paidcount,
-                   COALESCE(SUM(ordertotal) FILTER (WHERE orderpaymentstatus = 'PAID'), 0) AS spent
-            FROM public.ec_order
-            WHERE ordercustomerid = :customerId
-            """
-        )
-            .param("customerId", customerId)
-            .query { rs, _ -> CustomerOrderTotals(rs.getLong("ordercount"), rs.getLong("paidcount"), rs.getBigDecimal("spent")) }
-            .single()
+    override fun customerTotals(customerId: Long): CustomerOrderTotals =
+        jdbi.withHandle<CustomerOrderTotals, Exception> { handle ->
+            handle.createQuery(OrderQuery.CUSTOMER_TOTALS)
+                .bind("customerId", customerId)
+            .map(RowMapper { rs, _ -> CustomerOrderTotals(rs.getLong("ordercount"), rs.getLong("paidcount"), rs.getBigDecimal("spent")) })
+            .one()
+        }
 
     /**
      * Builds the WHERE clause from fixed SQL fragments only; every user value is a named parameter,
@@ -333,7 +340,7 @@ class OrderRepository(private val jdbcClient: JdbcClient) {
             params["paymentStatus"] = it.name
         }
         search.referenceStartsWith?.let {
-            conditions += "(o.orderreference::TEXT) ILIKE :referencePattern ESCAPE '\\'"
+            conditions += "(o.orderreference::TEXT) ILIKE :referencePattern ESCAPE '!'"
             params["referencePattern"] = startsWithPattern(it)
         }
         search.customerId?.let {
@@ -343,8 +350,8 @@ class OrderRepository(private val jdbcClient: JdbcClient) {
         search.customerContains?.let {
             // Email, first name, last name or the full name ("Ada Obi").
             conditions += """
-                ((c.customeremail::TEXT) ILIKE :customerPattern ESCAPE '\'
-                 OR (c.customerfirstname::TEXT || ' ' || c.customerlastname::TEXT) ILIKE :customerPattern ESCAPE '\')
+                ((c.customeremail::TEXT) ILIKE :customerPattern ESCAPE '!'
+                 OR (c.customerfirstname::TEXT || ' ' || c.customerlastname::TEXT) ILIKE :customerPattern ESCAPE '!')
             """.trimIndent()
             params["customerPattern"] = containsPattern(it)
         }
@@ -359,31 +366,21 @@ class OrderRepository(private val jdbcClient: JdbcClient) {
         return (if (conditions.isEmpty()) "" else "WHERE " + conditions.joinToString(" AND ")) to params
     }
 
-    fun findByIdWithCustomer(orderId: Long): OrderWithCustomer? =
-        jdbcClient.sql(
-            """
-            SELECT o.*, c.customerfirstname, c.customerlastname, c.customeremail
-            FROM public.ec_order o
-            JOIN public.ec_customer c ON c.customerid = o.ordercustomerid
-            WHERE o.orderid = :orderId
-            """
-        )
-            .param("orderId", orderId)
-            .query(withCustomerMapper)
-            .optional()
-            .orElse(null)
+    override fun findByIdWithCustomer(orderId: Long): OrderWithCustomer? =
+        jdbi.withHandle<OrderWithCustomer?, Exception> { handle ->
+            handle.createQuery(OrderQuery.FIND_BY_ID_WITH_CUSTOMER)
+                .bind("orderId", orderId)
+                .map(withCustomerMapper)
+                .findOne()
+                .orElse(null)
+        }
 
-    /** Moves the order from `from` to `to`. Returns rows updated: 0 means it was no longer `from`. */
-    fun updateStatus(orderId: Long, from: OrderStatus, to: OrderStatus): Int =
-        jdbcClient.sql(
-            """
-            UPDATE public.ec_order
-            SET orderstatus = :to, orderupdatedat = $SQL_NOW
-            WHERE orderid = :orderId AND orderstatus = :from
-            """
-        )
-            .param("orderId", orderId)
-            .param("from", from.name)
-            .param("to", to.name)
-            .update()
+    override fun updateStatus(orderId: Long, from: OrderStatus, to: OrderStatus): Int =
+        jdbi.withHandle<Int, Exception> { handle ->
+            handle.createUpdate(OrderQuery.UPDATE_STATUS)
+                .bind("orderId", orderId)
+                .bind("from", from.name)
+                .bind("to", to.name)
+                .execute()
+        }
 }
