@@ -12,7 +12,7 @@ import java.util.UUID
 import kotlin.test.assertEquals
 
 /**
- * Order search filters on GET /api/admin/orders (checkpoint 2.2, Step 7b). Statuses are set directly in the
+ * Order search filters on GET /dev/admin/orders (checkpoint 2.2, Step 7b). Statuses are set directly in the
  * database where a test only needs an order in that state: the payment and cancel flows have their own tests.
  */
 class AdminOrderSearchTest : IntegrationTestBase() {
@@ -37,18 +37,18 @@ class AdminOrderSearchTest : IntegrationTestBase() {
     private fun unique(prefix: String) = "$prefix-${UUID.randomUUID().toString().take(8)}"
 
     private fun createCategory(): Int {
-        val result = mockMvc.post("/api/admin/categories") {
+        val result = mockMvc.post("/dev/admin/categories") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to unique("Cat"))
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["categoryId"].asInt()
     }
 
     private fun buyer(firstName: String): Buyer {
         val email = uniqueEmail()
         val customerId = readJson(
-            mockMvc.post("/api/auth/register") {
+            mockMvc.post("/dev/auth/register") {
                 contentType = MediaType.APPLICATION_JSON
                 content = json(
                     "firstName" to firstName,
@@ -57,10 +57,10 @@ class AdminOrderSearchTest : IntegrationTestBase() {
                     "phoneNumber" to "+2348012345678",
                     "password" to DEFAULT_PASSWORD,
                 )
-            }.andExpect { status { isCreated() } }.andReturn(),
+            }.andExpect { responseCode("00") }.andReturn(),
         )["customerId"].asLong()
         val token = loginCustomer(email)
-        mockMvc.post("/api/customer/addresses") {
+        mockMvc.post("/dev/customer/addresses") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json(
@@ -71,28 +71,28 @@ class AdminOrderSearchTest : IntegrationTestBase() {
                 "state" to "Lagos",
                 "country" to "Nigeria",
             )
-        }.andExpect { status { isCreated() } }
+        }.andExpect { responseCode("00") }
         return Buyer(customerId, email, token)
     }
 
     private fun placeOrder(buyer: Buyer): Placed {
         val productId = readJson(
-            mockMvc.post("/api/admin/products") {
+            mockMvc.post("/dev/admin/products") {
                 header("Authorization", "Bearer $adminToken")
                 contentType = MediaType.APPLICATION_JSON
                 content = json("name" to unique("Phone"), "sku" to unique("sku"), "categoryId" to categoryId, "price" to 1000, "stockQuantity" to 10)
-            }.andExpect { status { isCreated() } }.andReturn(),
+            }.andExpect { responseCode("00") }.andReturn(),
         )["productId"].asLong()
-        mockMvc.post("/api/customer/cart/items") {
+        mockMvc.post("/dev/customer/cart/items") {
             header("Authorization", "Bearer ${buyer.token}")
             contentType = MediaType.APPLICATION_JSON
             content = json("productId" to productId, "quantity" to 1)
-        }.andExpect { status { isOk() } }
+        }.andExpect { responseCode("00") }
         val order = readJson(
-            mockMvc.post("/api/customer/orders") {
+            mockMvc.post("/dev/customer/orders") {
                 header("Authorization", "Bearer ${buyer.token}")
                 header("Idempotency-Key", UUID.randomUUID().toString())
-            }.andExpect { status { isCreated() } }.andReturn(),
+            }.andExpect { responseCode("00") }.andReturn(),
         )
         return Placed(order["orderId"].asLong(), order["reference"].asString(), LocalDateTime.parse(order["createdAt"].asString()))
     }
@@ -103,10 +103,10 @@ class AdminOrderSearchTest : IntegrationTestBase() {
     }
 
     private fun search(vararg params: Pair<String, String>): JsonNode = readJson(
-        mockMvc.get("/api/admin/orders") {
+        mockMvc.get("/dev/admin/orders") {
             header("Authorization", "Bearer $adminToken")
             params.forEach { (name, value) -> param(name, value) }
-        }.andExpect { status { isOk() } }.andReturn(),
+        }.andExpect { responseCode("00") }.andReturn(),
     )
 
     private fun ids(vararg params: Pair<String, String>): List<Long> =
@@ -174,27 +174,27 @@ class AdminOrderSearchTest : IntegrationTestBase() {
             "from" to "29-10-2026",
             "customerId" to "abc",
         ).forEach { (name, value) ->
-            mockMvc.get("/api/admin/orders") {
+            mockMvc.get("/dev/admin/orders") {
                 header("Authorization", "Bearer $adminToken")
                 param(name, value)
-            }.andExpect { status { isBadRequest() } }
+            }.andExpect { responseCode("106") }
         }
-        mockMvc.get("/api/admin/orders") {
+        mockMvc.get("/dev/admin/orders") {
             header("Authorization", "Bearer $adminToken")
             param("from", "2026-10-29")
             param("to", "2026-10-28")
         }.andExpect {
-            status { isBadRequest() }
-            jsonPath("$.message") { value("from must not be after to") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("from must not be after to") }
         }
-        mockMvc.get("/api/admin/orders") {
+        mockMvc.get("/dev/admin/orders") {
             header("Authorization", "Bearer $adminToken")
             param("paymentStatus", "MAYBE")
-        }.andExpect { jsonPath("$.message") { value("paymentStatus must be one of UNPAID, PAID, REFUNDED") } }
+        }.andExpect { jsonPath("$.responseMessage") { value("paymentStatus must be one of UNPAID, PAID, REFUNDED") } }
 
-        mockMvc.get("/api/admin/orders") {
+        mockMvc.get("/dev/admin/orders") {
             header("Authorization", "Bearer ${newCustomerToken()}")
             param("customer", "a")
-        }.andExpect { status { isForbidden() } }
+        }.andExpect { responseCode("107") }
     }
 }

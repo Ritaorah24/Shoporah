@@ -1,7 +1,7 @@
 package com.rita.ecommerceplatform.service
 
+import com.rita.ecommerceplatform.config.JwtProps
 import com.rita.ecommerceplatform.security.UserType
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm
 import org.springframework.security.oauth2.jwt.JwsHeader
 import org.springframework.security.oauth2.jwt.JwtClaimsSet
@@ -13,11 +13,10 @@ import java.time.Instant
 @Service
 class JwtService(
     private val jwtEncoder: JwtEncoder,
-    @Value("\${app.jwt.issuer}") private val issuer: String,
-    @Value("\${app.jwt.expiry-minutes}") expiryMinutes: Long,
+    private val jwtProps: JwtProps,
 ) {
 
-    val expirySeconds: Long = expiryMinutes * 60
+    val expirySeconds: Long = jwtProps.expiryMinutes * 60
 
     /**
      * Signed access token. The payload is readable by anyone, so it holds IDs and roles only.
@@ -26,7 +25,7 @@ class JwtService(
     fun createToken(subjectId: Long, userType: UserType, roles: List<String>, mustChangePassword: Boolean? = null): String {
         val now = Instant.now()
         val claims = JwtClaimsSet.builder()
-            .issuer(issuer)
+            .issuer(jwtProps.issuer)
             .subject(subjectId.toString())
             .issuedAt(now)
             .expiresAt(now.plusSeconds(expirySeconds))

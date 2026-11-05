@@ -1,17 +1,17 @@
 package com.rita.ecommerceplatform.service
 
-import com.rita.ecommerceplatform.dto.request.AddCartItemRequest
-import com.rita.ecommerceplatform.dto.request.AddWishlistItemRequest
-import com.rita.ecommerceplatform.dto.request.MoveToCartRequest
-import com.rita.ecommerceplatform.dto.response.WishlistItemResponse
-import com.rita.ecommerceplatform.dto.response.WishlistResponse
-import com.rita.ecommerceplatform.exception.ConflictException
-import com.rita.ecommerceplatform.exception.NotFoundException
-import com.rita.ecommerceplatform.model.WishlistItem
-import com.rita.ecommerceplatform.repository.CustomerRepository
-import com.rita.ecommerceplatform.repository.ProductImageRepository
-import com.rita.ecommerceplatform.repository.ProductRepository
-import com.rita.ecommerceplatform.repository.WishlistRepository
+import com.rita.ecommerceplatform.exception.BadRequestException
+import com.rita.ecommerceplatform.exception.UnableToLocateRecordException
+import com.rita.ecommerceplatform.model.request.AddCartItemRequest
+import com.rita.ecommerceplatform.model.request.AddWishlistItemRequest
+import com.rita.ecommerceplatform.model.request.MoveToCartRequest
+import com.rita.ecommerceplatform.model.response.WishlistItemResponse
+import com.rita.ecommerceplatform.model.response.WishlistResponse
+import com.rita.ecommerceplatform.model.entity.WishlistItem
+import com.rita.ecommerceplatform.repository.database.CustomerRepository
+import com.rita.ecommerceplatform.repository.database.ProductImageRepository
+import com.rita.ecommerceplatform.repository.database.ProductRepository
+import com.rita.ecommerceplatform.repository.database.WishlistRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
@@ -41,14 +41,14 @@ class WishlistService(
     @Transactional
     fun addItem(customerId: Long, request: AddWishlistItemRequest): WishlistResponse {
         customerRepository.lockById(customerId)
-        val product = productRepository.findPublicById(request.productId!!) ?: throw NotFoundException("Product not found")
+        val product = productRepository.findPublicById(request.productId!!) ?: throw UnableToLocateRecordException("Product not found")
         val wishlistId = wishlistRepository.getOrCreateWishlistId(customerId)
 
-        if (!wishlistRepository.contains(wishlistId, product.productId)) {
+        if (!wishlistRepository.contains(wishlistId, product.productId!!)) {
             if (wishlistRepository.countItems(wishlistId) >= MAX_ITEMS) {
-                throw ConflictException("A wishlist can hold at most $MAX_ITEMS products")
+                throw BadRequestException("A wishlist can hold at most $MAX_ITEMS products")
             }
-            wishlistRepository.addItem(wishlistId, product.productId)
+            wishlistRepository.addItem(wishlistId, product.productId!!)
             wishlistRepository.touch(wishlistId)
         }
         return toResponse(wishlistRepository.findItems(wishlistId))
@@ -65,7 +65,7 @@ class WishlistService(
     /**
      * Adds the product to the cart with the cart's own rules (CartService.addItem: visible product, quantity added
      * to what is in the cart, never above the stock), then takes it off the wishlist. One transaction: if the cart
-     * refuses (404 / 409), nothing changes and the item stays on the wishlist.
+     * refuses (code 25 / code 106), nothing changes and the item stays on the wishlist.
      */
     @Transactional
     fun moveToCart(customerId: Long, productId: Long, request: MoveToCartRequest?): WishlistResponse {
@@ -82,26 +82,26 @@ class WishlistService(
 
     private fun toResponse(items: List<WishlistItem>): WishlistResponse {
         // Each product's primary image, from one query for the whole wishlist.
-        val images = productImageRepository.findByProductIds(items.map { it.productId })
+        val images = productImageRepository.findByProductIds(items.map { it.productId!! })
         return WishlistResponse(
             items = items.map { item ->
                 WishlistItemResponse(
-                    productId = item.productId,
-                    name = item.productName,
-                    imageUrl = images[item.productId]?.firstOrNull { it.isPrimary }?.url,
-                    price = item.price,
-                    discountPrice = item.discountPrice,
-                    sellingPrice = item.sellingPrice,
+                    productId = item.productId!!,
+                    name = item.productName!!,
+                    imageUrl = images[item.productId]?.firstOrNull { it.productImageIsPrimary!! }?.productImageUrl,
+                    price = item.productPrice!!,
+                    discountPrice = item.productDiscountPrice,
+                    sellingPrice = item.productSellingPrice!!,
                     availability = item.availability()?.name,
                     available = item.available,
-                    addedAt = item.addedAt,
+                    addedAt = item.wishlistItemCreatedAt!!,
                 )
             },
             itemCount = items.size,
         )
     }
 
-    private fun itemNotInWishlist() = NotFoundException("Item not in wishlist")
+    private fun itemNotInWishlist() = UnableToLocateRecordException("Item not in wishlist")
 
     companion object {
         const val MAX_ITEMS = 100

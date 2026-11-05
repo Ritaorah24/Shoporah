@@ -28,16 +28,16 @@ class OrderHistoryTest : IntegrationTestBase() {
     private fun unique(prefix: String) = "$prefix-${UUID.randomUUID().toString().take(8)}"
 
     private fun createCategory(): Int {
-        val result = mockMvc.post("/api/admin/categories") {
+        val result = mockMvc.post("/dev/admin/categories") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to unique("Cat"))
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["categoryId"].asInt()
     }
 
     private fun createProduct(price: Int): Long {
-        val result = mockMvc.post("/api/admin/products") {
+        val result = mockMvc.post("/dev/admin/products") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json(
@@ -47,12 +47,12 @@ class OrderHistoryTest : IntegrationTestBase() {
                 "price" to price,
                 "stockQuantity" to 10,
             )
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["productId"].asLong()
     }
 
     private fun createAddress(withToken: String) {
-        mockMvc.post("/api/customer/addresses") {
+        mockMvc.post("/dev/customer/addresses") {
             header("Authorization", "Bearer $withToken")
             contentType = MediaType.APPLICATION_JSON
             content = json(
@@ -63,25 +63,25 @@ class OrderHistoryTest : IntegrationTestBase() {
                 "state" to "Lagos",
                 "country" to "Nigeria",
             )
-        }.andExpect { status { isCreated() } }
+        }.andExpect { responseCode("00") }
     }
 
     /** Fills the cart with `quantity` of a new product and checks out; returns the checkout response. */
     private fun placeOrder(price: Int = 1000, quantity: Int = 1): JsonNode {
-        mockMvc.post("/api/customer/cart/items") {
+        mockMvc.post("/dev/customer/cart/items") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json("productId" to createProduct(price), "quantity" to quantity)
-        }.andExpect { status { isOk() } }
-        val result = mockMvc.post("/api/customer/orders") {
+        }.andExpect { responseCode("00") }
+        val result = mockMvc.post("/dev/customer/orders") {
             header("Authorization", "Bearer $token")
             header("Idempotency-Key", UUID.randomUUID().toString())
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)
     }
 
     private fun listOrders(vararg params: Pair<String, Any>, withToken: String = token) =
-        mockMvc.get("/api/customer/orders") {
+        mockMvc.get("/dev/customer/orders") {
             header("Authorization", "Bearer $withToken")
             params.forEach { (name, value) -> param(name, value.toString()) }
         }
@@ -89,9 +89,9 @@ class OrderHistoryTest : IntegrationTestBase() {
     @Test
     fun `a new customer has no orders`() {
         listOrders().andExpect {
-            status { isOk() }
-            jsonPath("$.content.length()") { value(0) }
-            jsonPath("$.totalElements") { value(0) }
+            responseCode("00")
+            jsonPath("$.data.content.length()") { value(0) }
+            jsonPath("$.data.totalElements") { value(0) }
         }
     }
 
@@ -101,17 +101,17 @@ class OrderHistoryTest : IntegrationTestBase() {
         val second = placeOrder(price = 300, quantity = 3)
 
         val result = listOrders().andExpect {
-            status { isOk() }
-            jsonPath("$.totalElements") { value(2) }
-            jsonPath("$.content[0].orderId") { value(second["orderId"].asLong()) }
-            jsonPath("$.content[0].reference") { value(second["reference"].asString()) }
-            jsonPath("$.content[0].status") { value("PENDING") }
-            jsonPath("$.content[0].paymentStatus") { value("UNPAID") }
-            jsonPath("$.content[0].total") { value(900.00) }
-            jsonPath("$.content[0].itemCount") { value(3) }
-            jsonPath("$.content[1].orderId") { value(first["orderId"].asLong()) }
-            jsonPath("$.content[1].total") { value(2000.00) }
-            jsonPath("$.content[1].itemCount") { value(2) }
+            responseCode("00")
+            jsonPath("$.data.totalElements") { value(2) }
+            jsonPath("$.data.content[0].orderId") { value(second["orderId"].asLong()) }
+            jsonPath("$.data.content[0].reference") { value(second["reference"].asString()) }
+            jsonPath("$.data.content[0].status") { value("PENDING") }
+            jsonPath("$.data.content[0].paymentStatus") { value("UNPAID") }
+            jsonPath("$.data.content[0].total") { value(900.00) }
+            jsonPath("$.data.content[0].itemCount") { value(3) }
+            jsonPath("$.data.content[1].orderId") { value(first["orderId"].asLong()) }
+            jsonPath("$.data.content[1].total") { value(2000.00) }
+            jsonPath("$.data.content[1].itemCount") { value(2) }
         }.andReturn()
 
         // Only the summary fields: items, address and history are in the details.
@@ -126,17 +126,17 @@ class OrderHistoryTest : IntegrationTestBase() {
         val orders = (1..3).map { placeOrder() }
 
         listOrders("size" to 2).andExpect {
-            jsonPath("$.size") { value(2) }
-            jsonPath("$.totalElements") { value(3) }
-            jsonPath("$.totalPages") { value(2) }
-            jsonPath("$.content[0].orderId") { value(orders[2]["orderId"].asLong()) }
-            jsonPath("$.content[1].orderId") { value(orders[1]["orderId"].asLong()) }
+            jsonPath("$.data.size") { value(2) }
+            jsonPath("$.data.totalElements") { value(3) }
+            jsonPath("$.data.totalPages") { value(2) }
+            jsonPath("$.data.content[0].orderId") { value(orders[2]["orderId"].asLong()) }
+            jsonPath("$.data.content[1].orderId") { value(orders[1]["orderId"].asLong()) }
         }
         listOrders("page" to 1, "size" to 2).andExpect {
-            jsonPath("$.content.length()") { value(1) }
-            jsonPath("$.content[0].orderId") { value(orders[0]["orderId"].asLong()) }
+            jsonPath("$.data.content.length()") { value(1) }
+            jsonPath("$.data.content[0].orderId") { value(orders[0]["orderId"].asLong()) }
         }
-        listOrders("size" to 1000).andExpect { jsonPath("$.size") { value(50) } }
+        listOrders("size" to 1000).andExpect { jsonPath("$.data.size") { value(50) } }
     }
 
     @Test
@@ -149,14 +149,14 @@ class OrderHistoryTest : IntegrationTestBase() {
         assertEquals("PENDING", placed["statusHistory"][0]["status"].asString())
         assertEquals("Order placed", placed["statusHistory"][0]["note"].asString())
 
-        val result = mockMvc.get("/api/customer/orders/$orderId") {
+        val result = mockMvc.get("/dev/customer/orders/$orderId") {
             header("Authorization", "Bearer $token")
         }.andExpect {
-            status { isOk() }
-            jsonPath("$.items[0].quantity") { value(2) }
-            jsonPath("$.total") { value(2000.00) }
-            jsonPath("$.deliveryAddress.city") { value("Ikeja") }
-            jsonPath("$.statusHistory[0].changedAt") { isString() }
+            responseCode("00")
+            jsonPath("$.data.items[0].quantity") { value(2) }
+            jsonPath("$.data.total") { value(2000.00) }
+            jsonPath("$.data.deliveryAddress.city") { value("Ikeja") }
+            jsonPath("$.data.statusHistory[0].changedAt") { isString() }
         }.andReturn()
 
         assertEquals(placed, readJson(result))
@@ -167,25 +167,25 @@ class OrderHistoryTest : IntegrationTestBase() {
         val orderId = placeOrder()["orderId"].asLong()
         val other = newCustomerToken()
 
-        mockMvc.get("/api/customer/orders/$orderId") {
+        mockMvc.get("/dev/customer/orders/$orderId") {
             header("Authorization", "Bearer $other")
         }.andExpect {
-            status { isNotFound() }
-            jsonPath("$.message") { value("Order not found") }
+            responseCode("25")
+            jsonPath("$.responseMessage") { value("Order not found") }
         }
-        listOrders(withToken = other).andExpect { jsonPath("$.totalElements") { value(0) } }
+        listOrders(withToken = other).andExpect { jsonPath("$.data.totalElements") { value(0) } }
     }
 
     @Test
     fun `an unknown order returns 404`() {
-        mockMvc.get("/api/customer/orders/999999") {
+        mockMvc.get("/dev/customer/orders/999999") {
             header("Authorization", "Bearer $token")
-        }.andExpect { status { isNotFound() } }
+        }.andExpect { responseCode("25") }
     }
 
     @Test
     fun `order history needs a customer token`() {
-        mockMvc.get("/api/customer/orders").andExpect { status { isUnauthorized() } }
-        listOrders(withToken = adminToken).andExpect { status { isForbidden() } }
+        mockMvc.get("/dev/customer/orders").andExpect { responseCode("115") }
+        listOrders(withToken = adminToken).andExpect { responseCode("107") }
     }
 }

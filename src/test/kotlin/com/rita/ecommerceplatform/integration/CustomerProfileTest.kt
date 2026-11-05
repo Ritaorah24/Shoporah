@@ -15,12 +15,12 @@ class CustomerProfileTest : IntegrationTestBase() {
         val customerId = registerCustomer(email)
         val token = loginCustomer(email)
 
-        mockMvc.get("/api/customer/me") {
+        mockMvc.get("/dev/customer/me") {
             header("Authorization", "Bearer $token")
         }.andExpect {
-            status { isOk() }
-            jsonPath("$.customerId") { value(customerId) }
-            jsonPath("$.email") { value(email) }
+            responseCode("00")
+            jsonPath("$.data.customerId") { value(customerId) }
+            jsonPath("$.data.email") { value(email) }
         }
     }
 
@@ -30,16 +30,16 @@ class CustomerProfileTest : IntegrationTestBase() {
         registerCustomer(email)
         val token = loginCustomer(email)
 
-        mockMvc.patch("/api/customer/me") {
+        mockMvc.patch("/dev/customer/me") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json("firstName" to "Ada")
         }.andExpect {
-            status { isOk() }
-            jsonPath("$.firstName") { value("Ada") }
-            jsonPath("$.lastName") { value("User") }
-            jsonPath("$.phoneNumber") { value("+2348012345678") }
-            jsonPath("$.email") { value(email) }
+            responseCode("00")
+            jsonPath("$.data.firstName") { value("Ada") }
+            jsonPath("$.data.lastName") { value("User") }
+            jsonPath("$.data.phoneNumber") { value("+2348012345678") }
+            jsonPath("$.data.email") { value(email) }
         }
     }
 
@@ -49,63 +49,63 @@ class CustomerProfileTest : IntegrationTestBase() {
         registerCustomer(email)
         val token = loginCustomer(email)
 
-        mockMvc.patch("/api/customer/me") {
+        mockMvc.patch("/dev/customer/me") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json("firstName" to "Ada", "email" to "other@example.com")
         }.andExpect {
-            status { isBadRequest() }
+            responseCode("106")
             content { string(containsString("email cannot be changed")) }
         }
 
-        mockMvc.get("/api/customer/me") {
+        mockMvc.get("/dev/customer/me") {
             header("Authorization", "Bearer $token")
         }.andExpect {
-            jsonPath("$.email") { value(email) }
-            jsonPath("$.firstName") { value("Test") }
+            jsonPath("$.data.email") { value(email) }
+            jsonPath("$.data.firstName") { value("Test") }
         }
     }
 
     @Test
     fun `PATCH me with nothing to update returns 400`() {
-        mockMvc.patch("/api/customer/me") {
+        mockMvc.patch("/dev/customer/me") {
             header("Authorization", "Bearer ${newCustomerToken()}")
             contentType = MediaType.APPLICATION_JSON
             content = "{}"
         }.andExpect {
-            status { isBadRequest() }
+            responseCode("106")
             content { string(containsString("send at least one of firstName, lastName, phoneNumber")) }
         }
     }
 
     @Test
     fun `PATCH me with a blank first name returns 400`() {
-        mockMvc.patch("/api/customer/me") {
+        mockMvc.patch("/dev/customer/me") {
             header("Authorization", "Bearer ${newCustomerToken()}")
             contentType = MediaType.APPLICATION_JSON
             content = json("firstName" to "   ")
         }.andExpect {
-            status { isBadRequest() }
-            jsonPath("$.fieldErrors[0].field") { value("firstName") }
+            responseCode("106")
+            jsonPath("$.data.fieldErrors[0].field") { value("firstName") }
         }
     }
 
     @Test
     fun `GET me without a token returns 401`() {
-        mockMvc.get("/api/customer/me").andExpect {
-            status { isUnauthorized() }
+        mockMvc.get("/dev/customer/me").andExpect {
+            responseCode("115")
             header { string("WWW-Authenticate", containsString("Bearer")) }
-            jsonPath("$.message") { value("Missing, invalid or expired access token") }
+            jsonPath("$.responseMessage") { value("Missing, invalid or expired access token") }
         }
     }
 
     @Test
     fun `GET me with an admin token returns 403`() {
-        mockMvc.get("/api/customer/me") {
+        mockMvc.get("/dev/customer/me") {
             header("Authorization", "Bearer ${loginSeedAdmin()}")
         }.andExpect {
-            status { isForbidden() }
-            jsonPath("$.message") { value("You do not have permission to access this resource") }
+            responseCode("107")
+            jsonPath("$.responseMessage") { value("You do not have permission to access this resource") }
         }
     }
 }

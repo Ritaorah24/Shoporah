@@ -1,9 +1,9 @@
 package com.rita.ecommerceplatform.integration
 
-import com.rita.ecommerceplatform.model.NotificationChannelType
-import com.rita.ecommerceplatform.model.NotificationStatus
-import com.rita.ecommerceplatform.model.NotificationType
-import com.rita.ecommerceplatform.repository.NotificationRepository
+import com.rita.ecommerceplatform.model.entity.NotificationChannelType
+import com.rita.ecommerceplatform.model.entity.NotificationStatus
+import com.rita.ecommerceplatform.model.entity.NotificationType
+import com.rita.ecommerceplatform.repository.database.NotificationRepository
 import com.rita.ecommerceplatform.service.NotificationService
 import com.rita.ecommerceplatform.support.IntegrationTestBase
 import org.junit.jupiter.api.Test
@@ -61,13 +61,13 @@ class NotificationSenderTest : IntegrationTestBase() {
 
         val notificationId = queueFor(email, customerId)
         val saved = row(notificationId)
-        assertEquals(NotificationStatus.PENDING, saved.status)
-        assertEquals(NotificationChannelType.EMAIL, saved.channel)
-        assertEquals(NotificationType.PASSWORD_CHANGED, saved.type)
-        assertEquals(email, saved.recipient)
-        assertEquals(SUBJECT, saved.subject)
-        assertEquals(customerId, saved.customerId)
-        assertEquals(0, saved.attemptCount)
+        assertEquals(NotificationStatus.PENDING, saved.notificationStatus)
+        assertEquals(NotificationChannelType.EMAIL, saved.notificationChannel)
+        assertEquals(NotificationType.PASSWORD_CHANGED, saved.notificationType)
+        assertEquals(email, saved.notificationRecipient)
+        assertEquals(SUBJECT, saved.notificationSubject)
+        assertEquals(customerId, saved.notificationCustomerId)
+        assertEquals(0, saved.notificationAttemptCount)
 
         val rolledBackId = transactionTemplate.execute { status ->
             notificationService.queue(NotificationType.PASSWORD_CHANGED, email, "Again", "Hello", customerId = customerId)
@@ -93,10 +93,10 @@ class NotificationSenderTest : IntegrationTestBase() {
         drainOutbox()
 
         val sent = row(notificationId)
-        assertEquals(NotificationStatus.SENT, sent.status)
-        assertEquals(1, sent.attemptCount)
-        assertNotNull(sent.sentAt)
-        assertNull(sent.failureReason)
+        assertEquals(NotificationStatus.SENT, sent.notificationStatus)
+        assertEquals(1, sent.notificationAttemptCount)
+        assertNotNull(sent.notificationSentAt)
+        assertNull(sent.notificationFailureReason)
         assertEquals(listOf(SUBJECT), testEmails(email).map { it.subject })
         assertEquals("Hello there", testEmails(email).single().body)
 
@@ -114,29 +114,29 @@ class NotificationSenderTest : IntegrationTestBase() {
 
             drainOutbox()
             row(notificationId).let {
-                assertEquals(NotificationStatus.PENDING, it.status)
-                assertEquals(1, it.attemptCount)
-                assertEquals("SMTP server unreachable", it.failureReason)
+                assertEquals(NotificationStatus.PENDING, it.notificationStatus)
+                assertEquals(1, it.notificationAttemptCount)
+                assertEquals("SMTP server unreachable", it.notificationFailureReason)
             }
 
             // Not due yet: the last attempt was just now.
             drainOutbox()
-            assertEquals(1, row(notificationId).attemptCount)
+            assertEquals(1, row(notificationId).notificationAttemptCount)
 
             repeat(4) {
                 backdate(notificationId)
                 drainOutbox()
             }
             row(notificationId).let {
-                assertEquals(NotificationStatus.FAILED, it.status)
-                assertEquals(5, it.attemptCount)
-                assertNull(it.sentAt)
+                assertEquals(NotificationStatus.FAILED, it.notificationStatus)
+                assertEquals(5, it.notificationAttemptCount)
+                assertNull(it.notificationSentAt)
             }
 
             // A FAILED row is never picked up again.
             backdate(notificationId)
             drainOutbox()
-            assertEquals(5, row(notificationId).attemptCount)
+            assertEquals(5, row(notificationId).notificationAttemptCount)
         } finally {
             emailChannel.failWith = null
         }
@@ -158,9 +158,9 @@ class NotificationSenderTest : IntegrationTestBase() {
         drainOutbox()
 
         row(notificationId).let {
-            assertEquals(NotificationStatus.SENT, it.status)
-            assertEquals(2, it.attemptCount)
-            assertNull(it.failureReason)
+            assertEquals(NotificationStatus.SENT, it.notificationStatus)
+            assertEquals(2, it.notificationAttemptCount)
+            assertNull(it.notificationFailureReason)
         }
         assertEquals(1, testEmails(email).size)
     }

@@ -1,6 +1,6 @@
 package com.rita.ecommerceplatform.support
 
-import com.rita.ecommerceplatform.model.NotificationChannelType
+import com.rita.ecommerceplatform.model.entity.NotificationChannelType
 import com.rita.ecommerceplatform.repository.api.NotificationChannel
 import org.springframework.boot.test.context.TestComponent
 import org.springframework.context.annotation.Primary

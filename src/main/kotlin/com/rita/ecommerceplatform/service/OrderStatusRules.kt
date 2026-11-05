@@ -1,15 +1,15 @@
 package com.rita.ecommerceplatform.service
 
-import com.rita.ecommerceplatform.exception.ConflictException
-import com.rita.ecommerceplatform.exception.ForbiddenException
-import com.rita.ecommerceplatform.model.OrderStatus
-import com.rita.ecommerceplatform.model.OrderStatus.CANCELLED
-import com.rita.ecommerceplatform.model.OrderStatus.CONFIRMED
-import com.rita.ecommerceplatform.model.OrderStatus.DELIVERED
-import com.rita.ecommerceplatform.model.OrderStatus.PENDING
-import com.rita.ecommerceplatform.model.OrderStatus.PROCESSING
-import com.rita.ecommerceplatform.model.OrderStatus.REFUNDED
-import com.rita.ecommerceplatform.model.OrderStatus.SHIPPED
+import com.rita.ecommerceplatform.exception.AccessNotAllowedException
+import com.rita.ecommerceplatform.exception.BadRequestException
+import com.rita.ecommerceplatform.model.entity.OrderStatus
+import com.rita.ecommerceplatform.model.entity.OrderStatus.CANCELLED
+import com.rita.ecommerceplatform.model.entity.OrderStatus.CONFIRMED
+import com.rita.ecommerceplatform.model.entity.OrderStatus.DELIVERED
+import com.rita.ecommerceplatform.model.entity.OrderStatus.PENDING
+import com.rita.ecommerceplatform.model.entity.OrderStatus.PROCESSING
+import com.rita.ecommerceplatform.model.entity.OrderStatus.REFUNDED
+import com.rita.ecommerceplatform.model.entity.OrderStatus.SHIPPED
 
 /** Who makes a status change. SYSTEM covers automatic changes, e.g. a verified payment. */
 enum class OrderStatusActor { CUSTOMER, ADMIN, SYSTEM }
@@ -35,12 +35,12 @@ object OrderStatusRules {
     )
 
     /**
-     * Throws 409 if the change is not in the table (including "changing" to the same status),
-     * or 403 if it is but this actor may not make it.
+     * Throws code 106 if the change is not in the table (including "changing" to the same status),
+     * or code 107 if it is but this actor may not make it.
      */
     fun ensureCanChange(from: OrderStatus, to: OrderStatus, actor: OrderStatusActor) {
-        val actors = allowed[from to to] ?: throw ConflictException("Order status cannot change from $from to $to")
-        if (actor !in actors) throw ForbiddenException("$actor cannot change an order from $from to $to")
+        val actors = allowed[from to to] ?: throw BadRequestException("Order status cannot change from $from to $to")
+        if (actor !in actors) throw AccessNotAllowedException("$actor cannot change an order from $from to $to")
     }
 
     /** The statuses this actor may move the order to next, in lifecycle order (empty for final statuses). */

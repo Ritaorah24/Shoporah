@@ -22,7 +22,7 @@ import kotlin.test.assertTrue
  */
 class RefundWebhookTest : IntegrationTestBase() {
 
-    @Value("\${app.paystack.secret-key}")
+    @Value("\${paystack.secret-key}")
     private lateinit var secretKey: String
 
     private lateinit var adminToken: String
@@ -45,16 +45,16 @@ class RefundWebhookTest : IntegrationTestBase() {
     private fun unique(prefix: String) = "$prefix-${UUID.randomUUID().toString().take(8)}"
 
     private fun createCategory(): Int {
-        val result = mockMvc.post("/api/admin/categories") {
+        val result = mockMvc.post("/dev/admin/categories") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to unique("Cat"))
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["categoryId"].asInt()
     }
 
     private fun createProduct(): Long {
-        val result = mockMvc.post("/api/admin/products") {
+        val result = mockMvc.post("/dev/admin/products") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json(
@@ -64,12 +64,12 @@ class RefundWebhookTest : IntegrationTestBase() {
                 "price" to 1000,
                 "stockQuantity" to 10,
             )
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["productId"].asLong()
     }
 
     private fun createAddress() {
-        mockMvc.post("/api/customer/addresses") {
+        mockMvc.post("/dev/customer/addresses") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json(
@@ -80,48 +80,48 @@ class RefundWebhookTest : IntegrationTestBase() {
                 "state" to "Lagos",
                 "country" to "Nigeria",
             )
-        }.andExpect { status { isCreated() } }
+        }.andExpect { responseCode("00") }
     }
 
     /** A paid order (2 of one product, ₦2,000.00), then cancelled by an admin: it is waiting for its refund. */
     private fun cancelledPaidOrder(): Paid {
         val productId = createProduct()
-        mockMvc.post("/api/customer/cart/items") {
+        mockMvc.post("/dev/customer/cart/items") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json("productId" to productId, "quantity" to 2)
-        }.andExpect { status { isOk() } }
+        }.andExpect { responseCode("00") }
         val order = readJson(
-            mockMvc.post("/api/customer/orders") {
+            mockMvc.post("/dev/customer/orders") {
                 header("Authorization", "Bearer $token")
                 header("Idempotency-Key", UUID.randomUUID().toString())
-            }.andExpect { status { isCreated() } }.andReturn(),
+            }.andExpect { responseCode("00") }.andReturn(),
         )
         val orderId = order["orderId"].asLong()
         val paymentReference = readJson(
-            mockMvc.post("/api/customer/payments/initialize") {
+            mockMvc.post("/dev/customer/payments/initialize") {
                 header("Authorization", "Bearer $token")
                 contentType = MediaType.APPLICATION_JSON
                 content = json("orderReference" to order["reference"].asString())
-            }.andExpect { status { isCreated() } }.andReturn(),
+            }.andExpect { responseCode("00") }.andReturn(),
         )["paymentReference"].asString()
         paymentGateway.pay(paymentReference)
-        mockMvc.get("/api/customer/payments/verify/$paymentReference") { header("Authorization", "Bearer $token") }
-            .andExpect { status { isOk() } }
-        mockMvc.post("/api/admin/orders/$orderId/cancel") {
+        mockMvc.get("/dev/customer/payments/verify/$paymentReference") { header("Authorization", "Bearer $token") }
+            .andExpect { responseCode("00") }
+        mockMvc.post("/dev/admin/orders/$orderId/cancel") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("reason" to "Item damaged")
-        }.andExpect { status { isOk() } }
+        }.andExpect { responseCode("00") }
         return Paid(orderId, order["reference"].asString(), paymentReference)
     }
 
     private fun startRefund(orderId: Long): JsonNode = readJson(
-        mockMvc.post("/api/admin/orders/$orderId/refund") {
+        mockMvc.post("/dev/admin/orders/$orderId/refund") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("reason" to "Item damaged")
-        }.andExpect { status { isAccepted() } }.andReturn(),
+        }.andExpect { responseCode("00") }.andReturn(),
     )["refunds"][0]
 
     /** A body shaped like Paystack's; the status and amount in it are never trusted by the app. */
@@ -135,15 +135,15 @@ class RefundWebhookTest : IntegrationTestBase() {
         )
 
     private fun webhook(body: String, signature: String? = sign(body)): ResultActionsDsl =
-        mockMvc.post("/api/webhooks/paystack") {
+        mockMvc.post("/webhook/paystack") {
             contentType = MediaType.APPLICATION_JSON
             content = body
             signature?.let { header("x-paystack-signature", it) }
         }
 
     private fun adminOrder(orderId: Long): JsonNode = readJson(
-        mockMvc.get("/api/admin/orders/$orderId") { header("Authorization", "Bearer $adminToken") }
-            .andExpect { status { isOk() } }.andReturn(),
+        mockMvc.get("/dev/admin/orders/$orderId") { header("Authorization", "Bearer $adminToken") }
+            .andExpect { responseCode("00") }.andReturn(),
     )
 
     private fun refundEmails(reference: String): Int {
@@ -175,8 +175,8 @@ class RefundWebhookTest : IntegrationTestBase() {
 
         webhook(body).andExpect { status { isOk() } }
         webhook(body).andExpect { status { isOk() } }
-        mockMvc.post("/api/admin/refunds/${refund["refundId"].asLong()}/refresh") { header("Authorization", "Bearer $adminToken") }
-            .andExpect { status { isOk() } }
+        mockMvc.post("/dev/admin/refunds/${refund["refundId"].asLong()}/refresh") { header("Authorization", "Bearer $adminToken") }
+            .andExpect { responseCode("00") }
 
         val order = adminOrder(paid.orderId)
         assertEquals("REFUNDED", order["paymentStatus"].asString())

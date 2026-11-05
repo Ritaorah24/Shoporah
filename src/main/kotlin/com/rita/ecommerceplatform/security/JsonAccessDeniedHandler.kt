@@ -1,26 +1,26 @@
 package com.rita.ecommerceplatform.security
 
+import com.rita.ecommerceplatform.config.AppProps
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
-import org.springframework.http.HttpStatus
 import org.springframework.security.access.AccessDeniedException
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.security.web.access.AccessDeniedHandler
 import org.springframework.stereotype.Component
 import tools.jackson.databind.json.JsonMapper
 
-/** 403: the token is valid, but it does not allow this URL. */
+/** 107: the token is valid, but it does not allow this URL. */
 @Component
-class JsonAccessDeniedHandler(private val jsonMapper: JsonMapper) : AccessDeniedHandler {
+class JsonAccessDeniedHandler(private val jsonMapper: JsonMapper, private val appProps: AppProps) : AccessDeniedHandler {
 
     override fun handle(request: HttpServletRequest, response: HttpServletResponse, accessDeniedException: AccessDeniedException) {
         val authorities = SecurityContextHolder.getContext().authentication?.authorities.orEmpty().map { it.authority }
-        // Only on admin URLs: elsewhere (e.g. /api/customer/**) the real reason is the wrong role.
-        val message = if (PASSWORD_CHANGE_REQUIRED in authorities && request.requestURI.startsWith("/api/admin/")) {
-            "Password change required: call PATCH /api/admin/auth/password first"
+        // Only on admin URLs: elsewhere (e.g. /{stage}/customer/**) the real reason is the wrong role.
+        val message = if (PASSWORD_CHANGE_REQUIRED in authorities && request.requestURI.startsWith("/${appProps.stage}/admin/")) {
+            "Password change required: call PATCH /${appProps.stage}/admin/auth/password first"
         } else {
             "You do not have permission to access this resource"
         }
-        writeApiError(jsonMapper, request, response, HttpStatus.FORBIDDEN, message)
+        writeResponse(jsonMapper, response, "107", message)
     }
 }

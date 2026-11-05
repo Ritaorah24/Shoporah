@@ -45,14 +45,14 @@ class CheckoutRollbackTest : IntegrationTestBase() {
         val token = loginCustomer(email)
 
         val categoryId = readJson(
-            mockMvc.post("/api/admin/categories") {
+            mockMvc.post("/dev/admin/categories") {
                 header("Authorization", "Bearer $adminToken")
                 contentType = MediaType.APPLICATION_JSON
                 content = json("name" to unique("Cat"))
-            }.andExpect { status { isCreated() } }.andReturn(),
+            }.andExpect { responseCode("00") }.andReturn(),
         )["categoryId"].asInt()
         val productId = readJson(
-            mockMvc.post("/api/admin/products") {
+            mockMvc.post("/dev/admin/products") {
                 header("Authorization", "Bearer $adminToken")
                 contentType = MediaType.APPLICATION_JSON
                 content = json(
@@ -62,9 +62,9 @@ class CheckoutRollbackTest : IntegrationTestBase() {
                     "price" to 1000,
                     "stockQuantity" to 10,
                 )
-            }.andExpect { status { isCreated() } }.andReturn(),
+            }.andExpect { responseCode("00") }.andReturn(),
         )["productId"].asLong()
-        mockMvc.post("/api/customer/addresses") {
+        mockMvc.post("/dev/customer/addresses") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json(
@@ -75,15 +75,15 @@ class CheckoutRollbackTest : IntegrationTestBase() {
                 "state" to "Lagos",
                 "country" to "Nigeria",
             )
-        }.andExpect { status { isCreated() } }
-        mockMvc.post("/api/customer/cart/items") {
+        }.andExpect { responseCode("00") }
+        mockMvc.post("/dev/customer/cart/items") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json("productId" to productId, "quantity" to 2)
-        }.andExpect { status { isOk() } }
+        }.andExpect { responseCode("00") }
 
         val key = UUID.randomUUID().toString()
-        fun checkout() = mockMvc.post("/api/customer/orders") {
+        fun checkout() = mockMvc.post("/dev/customer/orders") {
             header("Authorization", "Bearer $token")
             header("Idempotency-Key", key)
         }
@@ -93,24 +93,24 @@ class CheckoutRollbackTest : IntegrationTestBase() {
             .`when`(cartRepositorySpy).touch(anyLong())
 
         checkout().andExpect {
-            status { isInternalServerError() }
-            jsonPath("$.message") { value("An unexpected error occurred") }
+            responseCode("22")
+            jsonPath("$.responseMessage") { value("An unexpected error occurred") }
         }
 
         // Everything checkout had already written was rolled back.
         assertEquals(0, orders(customerId))
         assertEquals(0, orderItems(customerId))
         assertEquals(0, historyRows(customerId))
-        mockMvc.get("/api/customer/cart") {
+        mockMvc.get("/dev/customer/cart") {
             header("Authorization", "Bearer $token")
         }.andExpect {
-            jsonPath("$.items.length()") { value(1) }
-            jsonPath("$.items[0].quantity") { value(2) }
+            jsonPath("$.data.items.length()") { value(1) }
+            jsonPath("$.data.items[0].quantity") { value(2) }
         }
 
         // Back to normal: the same key was not used up by the failed attempt.
         Mockito.reset(cartRepositorySpy)
-        checkout().andExpect { status { isCreated() } }
+        checkout().andExpect { responseCode("00"); jsonPath("$.responseMessage") { value("Order created") } }
         assertEquals(1, orders(customerId))
         assertEquals(1, orderItems(customerId))
         assertEquals(1, historyRows(customerId))

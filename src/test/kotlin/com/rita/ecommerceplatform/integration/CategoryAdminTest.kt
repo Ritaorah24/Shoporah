@@ -30,59 +30,59 @@ class CategoryAdminTest : IntegrationTestBase() {
     private fun uniqueName(): String = "Cat-${UUID.randomUUID().toString().take(8)}"
 
     private fun createCategory(name: String = uniqueName(), description: String? = null): Int {
-        val result = mockMvc.post("/api/admin/categories") {
+        val result = mockMvc.post("/dev/admin/categories") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to name, "description" to description)
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["categoryId"].asInt()
     }
 
     private fun setStatus(categoryId: Int, status: String) {
-        mockMvc.patch("/api/admin/categories/$categoryId/status") {
+        mockMvc.patch("/dev/admin/categories/$categoryId/status") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("status" to status)
-        }.andExpect { status { isOk() } }
+        }.andExpect { responseCode("00") }
     }
 
     private fun publicCategoryIds(): List<Int> {
-        val result = mockMvc.get("/api/categories").andExpect { status { isOk() } }.andReturn()
+        val result = mockMvc.get("/dev/categories").andExpect { responseCode("00") }.andReturn()
         return readJson(result).toList().map { it["categoryId"].asInt() }
     }
 
     private fun adminCategoryIds(): List<Int> {
-        val result = mockMvc.get("/api/admin/categories") {
+        val result = mockMvc.get("/dev/admin/categories") {
             header("Authorization", "Bearer $adminToken")
-        }.andExpect { status { isOk() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result).toList().map { it["categoryId"].asInt() }
     }
 
     @Test
     fun `create trims the name, starts ACTIVE and records the creating admin`() {
         val name = uniqueName()
-        mockMvc.post("/api/admin/categories") {
+        mockMvc.post("/dev/admin/categories") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to "  $name  ", "description" to "Smartphones")
         }.andExpect {
-            status { isCreated() }
-            jsonPath("$.name") { value(name) }
-            jsonPath("$.description") { value("Smartphones") }
-            jsonPath("$.status") { value("ACTIVE") }
-            jsonPath("$.createdByAdminId") { value(seedAdminId()) }
+            responseCode("00")
+            jsonPath("$.data.name") { value(name) }
+            jsonPath("$.data.description") { value("Smartphones") }
+            jsonPath("$.data.status") { value("ACTIVE") }
+            jsonPath("$.data.createdByAdminId") { value(seedAdminId()) }
         }
     }
 
     @Test
     fun `create with a blank name returns 400`() {
-        mockMvc.post("/api/admin/categories") {
+        mockMvc.post("/dev/admin/categories") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to "   ")
         }.andExpect {
-            status { isBadRequest() }
-            jsonPath("$.fieldErrors[0].field") { value("name") }
+            responseCode("106")
+            jsonPath("$.data.fieldErrors[0].field") { value("name") }
         }
     }
 
@@ -91,20 +91,20 @@ class CategoryAdminTest : IntegrationTestBase() {
         val name = uniqueName()
         createCategory(name)
 
-        mockMvc.post("/api/admin/categories") {
+        mockMvc.post("/dev/admin/categories") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to name.uppercase())
         }.andExpect {
-            status { isConflict() }
-            jsonPath("$.message") { value("Category name is already in use") }
+            responseCode("117")
+            jsonPath("$.responseMessage") { value("Category name is already in use") }
         }
     }
 
     @Test
     fun `public list shows only id, name and description`() {
         val categoryId = createCategory(description = "Visible")
-        val result = mockMvc.get("/api/categories").andExpect { status { isOk() } }.andReturn()
+        val result = mockMvc.get("/dev/categories").andExpect { responseCode("00") }.andReturn()
         val category = readJson(result).first { it["categoryId"].asInt() == categoryId }
 
         assertEquals(setOf("categoryId", "name", "description"), category.propertyNames().asSequence().toSet())
@@ -115,14 +115,14 @@ class CategoryAdminTest : IntegrationTestBase() {
         val name = uniqueName()
         val categoryId = createCategory(name, description = "Old text")
 
-        mockMvc.patch("/api/admin/categories/$categoryId") {
+        mockMvc.patch("/dev/admin/categories/$categoryId") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("description" to "")
         }.andExpect {
-            status { isOk() }
-            jsonPath("$.name") { value(name) }
-            jsonPath("$.description") { value(null) }
+            responseCode("00")
+            jsonPath("$.data.name") { value(name) }
+            jsonPath("$.data.description") { value(null) }
         }
     }
 
@@ -133,38 +133,38 @@ class CategoryAdminTest : IntegrationTestBase() {
         val otherName = uniqueName()
         createCategory(otherName)
 
-        mockMvc.patch("/api/admin/categories/$categoryId") {
+        mockMvc.patch("/dev/admin/categories/$categoryId") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to name.lowercase())
-        }.andExpect { status { isOk() } }
+        }.andExpect { responseCode("00") }
 
-        mockMvc.patch("/api/admin/categories/$categoryId") {
+        mockMvc.patch("/dev/admin/categories/$categoryId") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to otherName)
-        }.andExpect { status { isConflict() } }
+        }.andExpect { responseCode("117") }
     }
 
     @Test
     fun `PATCH cannot change the status and needs at least one field`() {
         val categoryId = createCategory()
 
-        mockMvc.patch("/api/admin/categories/$categoryId") {
+        mockMvc.patch("/dev/admin/categories/$categoryId") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("status" to "INACTIVE")
         }.andExpect {
-            status { isBadRequest() }
+            responseCode("106")
             content { string(containsString("use PATCH .../status to change the status")) }
         }
 
-        mockMvc.patch("/api/admin/categories/$categoryId") {
+        mockMvc.patch("/dev/admin/categories/$categoryId") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = "{}"
         }.andExpect {
-            status { isBadRequest() }
+            responseCode("106")
             content { string(containsString("send at least one of name, description")) }
         }
     }
@@ -186,14 +186,14 @@ class CategoryAdminTest : IntegrationTestBase() {
     @Test
     fun `the status endpoint accepts only ACTIVE or INACTIVE`() {
         val categoryId = createCategory()
-        mockMvc.patch("/api/admin/categories/$categoryId/status") {
+        mockMvc.patch("/dev/admin/categories/$categoryId/status") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("status" to "DELETED")
         }.andExpect {
-            status { isBadRequest() }
-            jsonPath("$.fieldErrors[0].field") { value("status") }
-            jsonPath("$.fieldErrors[0].message") { value("must be ACTIVE or INACTIVE") }
+            responseCode("106")
+            jsonPath("$.data.fieldErrors[0].field") { value("status") }
+            jsonPath("$.data.fieldErrors[0].message") { value("must be ACTIVE or INACTIVE") }
         }
     }
 
@@ -202,33 +202,33 @@ class CategoryAdminTest : IntegrationTestBase() {
         val name = uniqueName()
         val categoryId = createCategory(name)
 
-        mockMvc.delete("/api/admin/categories/$categoryId") {
+        mockMvc.delete("/dev/admin/categories/$categoryId") {
             header("Authorization", "Bearer $adminToken")
-        }.andExpect { status { isNoContent() } }
+        }.andExpect { responseCode("00") }
 
-        mockMvc.get("/api/admin/categories/$categoryId") {
+        mockMvc.get("/dev/admin/categories/$categoryId") {
             header("Authorization", "Bearer $adminToken")
         }.andExpect {
-            status { isNotFound() }
-            jsonPath("$.message") { value("Category not found") }
+            responseCode("25")
+            jsonPath("$.responseMessage") { value("Category not found") }
         }
-        mockMvc.patch("/api/admin/categories/$categoryId/status") {
+        mockMvc.patch("/dev/admin/categories/$categoryId/status") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("status" to "ACTIVE")
-        }.andExpect { status { isNotFound() } }
-        mockMvc.delete("/api/admin/categories/$categoryId") {
+        }.andExpect { responseCode("25") }
+        mockMvc.delete("/dev/admin/categories/$categoryId") {
             header("Authorization", "Bearer $adminToken")
-        }.andExpect { status { isNotFound() } }
+        }.andExpect { responseCode("25") }
 
         assertFalse(categoryId in adminCategoryIds())
         assertFalse(categoryId in publicCategoryIds())
 
-        mockMvc.post("/api/admin/categories") {
+        mockMvc.post("/dev/admin/categories") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to name)
-        }.andExpect { status { isConflict() } }
+        }.andExpect { responseCode("117") }
 
         // Soft delete: the row is kept, marked DELETED.
         val status = jdbcClient.sql("SELECT categorystatus FROM public.ec_category WHERE categoryid = :id")
@@ -253,37 +253,37 @@ class CategoryAdminTest : IntegrationTestBase() {
             .param("sku", "SKU-${UUID.randomUUID().toString().take(8)}")
             .update()
 
-        mockMvc.delete("/api/admin/categories/$categoryId") {
+        mockMvc.delete("/dev/admin/categories/$categoryId") {
             header("Authorization", "Bearer $adminToken")
         }.andExpect {
-            status { isConflict() }
-            jsonPath("$.message") { value(containsString("Category still has products")) }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value(containsString("Category still has products")) }
         }
         assertTrue(categoryId in adminCategoryIds())
     }
 
     @Test
     fun `an unknown category returns 404`() {
-        mockMvc.get("/api/admin/categories/999999") {
+        mockMvc.get("/dev/admin/categories/999999") {
             header("Authorization", "Bearer $adminToken")
-        }.andExpect { status { isNotFound() } }
+        }.andExpect { responseCode("25") }
     }
 
     @Test
     fun `customers and anonymous callers cannot manage categories`() {
-        mockMvc.post("/api/admin/categories") {
+        mockMvc.post("/dev/admin/categories") {
             header("Authorization", "Bearer ${newCustomerToken()}")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to uniqueName())
-        }.andExpect { status { isForbidden() } }
+        }.andExpect { responseCode("107") }
 
-        mockMvc.get("/api/admin/categories").andExpect { status { isUnauthorized() } }
+        mockMvc.get("/dev/admin/categories").andExpect { responseCode("115") }
 
-        // Only GET is public on /api/categories.
-        mockMvc.post("/api/categories") {
+        // Only GET is public on /dev/categories.
+        mockMvc.post("/dev/categories") {
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to uniqueName())
-        }.andExpect { status { isUnauthorized() } }
+        }.andExpect { responseCode("115") }
     }
 
     // Acceptance check 1.2: customers cannot edit, deactivate or delete (not only create).
@@ -293,42 +293,42 @@ class CategoryAdminTest : IntegrationTestBase() {
         val categoryId = createCategory(name)
         val customerToken = newCustomerToken()
 
-        mockMvc.patch("/api/admin/categories/$categoryId") {
+        mockMvc.patch("/dev/admin/categories/$categoryId") {
             header("Authorization", "Bearer $customerToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to uniqueName())
-        }.andExpect { status { isForbidden() } }
-        mockMvc.patch("/api/admin/categories/$categoryId/status") {
+        }.andExpect { responseCode("107") }
+        mockMvc.patch("/dev/admin/categories/$categoryId/status") {
             header("Authorization", "Bearer $customerToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("status" to "INACTIVE")
-        }.andExpect { status { isForbidden() } }
-        mockMvc.delete("/api/admin/categories/$categoryId") {
+        }.andExpect { responseCode("107") }
+        mockMvc.delete("/dev/admin/categories/$categoryId") {
             header("Authorization", "Bearer $customerToken")
-        }.andExpect { status { isForbidden() } }
+        }.andExpect { responseCode("107") }
 
-        mockMvc.get("/api/admin/categories/$categoryId") {
+        mockMvc.get("/dev/admin/categories/$categoryId") {
             header("Authorization", "Bearer $adminToken")
         }.andExpect {
-            status { isOk() }
-            jsonPath("$.name") { value(name) }
-            jsonPath("$.status") { value("ACTIVE") }
+            responseCode("00")
+            jsonPath("$.data.name") { value(name) }
+            jsonPath("$.data.status") { value("ACTIVE") }
         }
     }
 
     @Test
     fun `an admin whose password must still be changed is blocked`() {
-        mockMvc.get("/api/admin/categories") {
+        mockMvc.get("/dev/admin/categories") {
             header("Authorization", "Bearer ${loginSeedAdmin()}")
-        }.andExpect { status { isForbidden() } }
+        }.andExpect { responseCode("107") }
     }
 
     @Test
     fun `create without a description stores none`() {
         val categoryId = createCategory(description = "   ")
-        val result = mockMvc.get("/api/admin/categories/$categoryId") {
+        val result = mockMvc.get("/dev/admin/categories/$categoryId") {
             header("Authorization", "Bearer $adminToken")
-        }.andExpect { status { isOk() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         val body = readJson(result)
         assertNotNull(body["name"])
         assertNull(body["description"].takeUnless { it.isNull })

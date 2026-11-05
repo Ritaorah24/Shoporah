@@ -41,6 +41,8 @@ out/
 
 ### Local secrets (never commit) ###
 secrets.local.properties
+src/main/resources/application-*.properties
+!src/main/resources/application-example.properties
 
 ### Local-only project documents and reference material ###
 /docs/

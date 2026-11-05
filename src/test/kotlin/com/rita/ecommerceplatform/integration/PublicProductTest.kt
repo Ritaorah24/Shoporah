@@ -28,11 +28,11 @@ class PublicProductTest : IntegrationTestBase() {
     private fun unique(prefix: String) = "$prefix-${UUID.randomUUID().toString().take(8)}"
 
     private fun createCategory(): Int {
-        val result = mockMvc.post("/api/admin/categories") {
+        val result = mockMvc.post("/dev/admin/categories") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to unique("Cat"))
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["categoryId"].asInt()
     }
 
@@ -42,7 +42,7 @@ class PublicProductTest : IntegrationTestBase() {
         lowStockThreshold: Int? = null,
         inCategory: Int = categoryId,
     ): Long {
-        val result = mockMvc.post("/api/admin/products") {
+        val result = mockMvc.post("/dev/admin/products") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json(
@@ -54,32 +54,32 @@ class PublicProductTest : IntegrationTestBase() {
                 "stockQuantity" to stock,
                 "lowStockThreshold" to lowStockThreshold,
             )
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["productId"].asLong()
     }
 
     private fun setStatus(kind: String, id: Number, status: String) {
-        mockMvc.patch("/api/admin/$kind/$id/status") {
+        mockMvc.patch("/dev/admin/$kind/$id/status") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("status" to status)
-        }.andExpect { status { isOk() } }
+        }.andExpect { responseCode("00") }
     }
 
     private fun publicIds(vararg params: Pair<String, Any>): List<Long> {
-        val result = mockMvc.get("/api/products") {
+        val result = mockMvc.get("/dev/products") {
             params.forEach { (name, value) -> param(name, value.toString()) }
-        }.andExpect { status { isOk() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["content"].toList().map { it["productId"].asLong() }
     }
 
     private fun expectPublicDetails(productId: Long, visible: Boolean) {
-        mockMvc.get("/api/products/$productId").andExpect {
+        mockMvc.get("/dev/products/$productId").andExpect {
             if (visible) {
-                status { isOk() }
+                responseCode("00")
             } else {
-                status { isNotFound() }
-                jsonPath("$.message") { value("Product not found") }
+                responseCode("25")
+                jsonPath("$.responseMessage") { value("Product not found") }
             }
         }
     }
@@ -89,23 +89,23 @@ class PublicProductTest : IntegrationTestBase() {
         val productId = createProduct(name = "Visible phone")
 
         assertEquals(listOf(productId), publicIds("categoryId" to categoryId))
-        mockMvc.get("/api/products/$productId").andExpect {
-            status { isOk() }
-            jsonPath("$.productId") { value(productId) }
-            jsonPath("$.name") { value("Visible phone") }
-            jsonPath("$.categoryId") { value(categoryId) }
-            jsonPath("$.categoryName") { isString() }
-            jsonPath("$.price") { value(1000.00) }
-            jsonPath("$.discountPrice") { value(900.00) }
-            jsonPath("$.sellingPrice") { value(900.00) }
-            jsonPath("$.availability") { value("IN_STOCK") }
+        mockMvc.get("/dev/products/$productId").andExpect {
+            responseCode("00")
+            jsonPath("$.data.productId") { value(productId) }
+            jsonPath("$.data.name") { value("Visible phone") }
+            jsonPath("$.data.categoryId") { value(categoryId) }
+            jsonPath("$.data.categoryName") { isString() }
+            jsonPath("$.data.price") { value(1000.00) }
+            jsonPath("$.data.discountPrice") { value(900.00) }
+            jsonPath("$.data.sellingPrice") { value(900.00) }
+            jsonPath("$.data.availability") { value("IN_STOCK") }
         }
     }
 
     @Test
     fun `the public response has no admin-only fields`() {
         val productId = createProduct()
-        val result = mockMvc.get("/api/products/$productId").andExpect { status { isOk() } }.andReturn()
+        val result = mockMvc.get("/dev/products/$productId").andExpect { responseCode("00") }.andReturn()
 
         // primaryImageUrl and images since checkpoint 2.2 Step 8b; still no SKU, stock, status or timestamps.
         assertEquals(
@@ -133,9 +133,9 @@ class PublicProductTest : IntegrationTestBase() {
     @Test
     fun `a deleted product is never visible`() {
         val productId = createProduct()
-        mockMvc.delete("/api/admin/products/$productId") {
+        mockMvc.delete("/dev/admin/products/$productId") {
             header("Authorization", "Bearer $adminToken")
-        }.andExpect { status { isNoContent() } }
+        }.andExpect { responseCode("00") }
 
         assertEquals(emptyList(), publicIds("categoryId" to categoryId))
         expectPublicDetails(productId, visible = false)
@@ -166,7 +166,7 @@ class PublicProductTest : IntegrationTestBase() {
         val plenty = createProduct(stock = 50, lowStockThreshold = 5)
 
         fun availabilityOf(productId: Long): String {
-            val result = mockMvc.get("/api/products/$productId").andExpect { status { isOk() } }.andReturn()
+            val result = mockMvc.get("/dev/products/$productId").andExpect { responseCode("00") }.andReturn()
             return readJson(result)["availability"].asString()
         }
 
@@ -184,21 +184,21 @@ class PublicProductTest : IntegrationTestBase() {
     fun `the listing is paged, newest first, with the page size capped at 50`() {
         val ids = (1..3).map { createProduct() }
 
-        mockMvc.get("/api/products") {
+        mockMvc.get("/dev/products") {
             param("categoryId", categoryId.toString())
             param("size", "2")
         }.andExpect {
-            status { isOk() }
-            jsonPath("$.size") { value(2) }
-            jsonPath("$.totalElements") { value(3) }
-            jsonPath("$.totalPages") { value(2) }
-            jsonPath("$.content[0].productId") { value(ids[2]) }
-            jsonPath("$.content[1].productId") { value(ids[1]) }
+            responseCode("00")
+            jsonPath("$.data.size") { value(2) }
+            jsonPath("$.data.totalElements") { value(3) }
+            jsonPath("$.data.totalPages") { value(2) }
+            jsonPath("$.data.content[0].productId") { value(ids[2]) }
+            jsonPath("$.data.content[1].productId") { value(ids[1]) }
         }
         assertEquals(listOf(ids[0]), publicIds("categoryId" to categoryId, "page" to 1, "size" to 2))
 
-        mockMvc.get("/api/products") { param("size", "1000") }.andExpect {
-            jsonPath("$.size") { value(50) }
+        mockMvc.get("/dev/products") { param("size", "1000") }.andExpect {
+            jsonPath("$.data.size") { value(50) }
         }
     }
 
@@ -218,9 +218,9 @@ class PublicProductTest : IntegrationTestBase() {
     fun `an unknown product returns 404 and only GET is public`() {
         expectPublicDetails(999999, visible = false)
 
-        mockMvc.post("/api/products") {
+        mockMvc.post("/dev/products") {
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to "Sneaky")
-        }.andExpect { status { isUnauthorized() } }
+        }.andExpect { responseCode("115") }
     }
 }

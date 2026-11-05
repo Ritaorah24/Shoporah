@@ -1,14 +1,14 @@
 package com.rita.ecommerceplatform.service
 
-import com.rita.ecommerceplatform.dto.request.CreateAddressRequest
-import com.rita.ecommerceplatform.dto.request.UpdateAddressRequest
-import com.rita.ecommerceplatform.dto.response.AddressResponse
-import com.rita.ecommerceplatform.exception.ConflictException
-import com.rita.ecommerceplatform.exception.NotFoundException
-import com.rita.ecommerceplatform.model.AddressDetails
-import com.rita.ecommerceplatform.model.CustomerAddress
-import com.rita.ecommerceplatform.repository.CustomerAddressRepository
-import com.rita.ecommerceplatform.repository.CustomerRepository
+import com.rita.ecommerceplatform.exception.BadRequestException
+import com.rita.ecommerceplatform.exception.UnableToLocateRecordException
+import com.rita.ecommerceplatform.model.request.CreateAddressRequest
+import com.rita.ecommerceplatform.model.request.UpdateAddressRequest
+import com.rita.ecommerceplatform.model.response.AddressResponse
+import com.rita.ecommerceplatform.model.entity.AddressDetails
+import com.rita.ecommerceplatform.model.entity.CustomerAddress
+import com.rita.ecommerceplatform.repository.database.CustomerAddressRepository
+import com.rita.ecommerceplatform.repository.database.CustomerRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
@@ -33,7 +33,7 @@ class AddressService(
     fun create(customerId: Long, request: CreateAddressRequest): AddressResponse {
         customerRepository.lockById(customerId)
         val count = addressRepository.countByCustomer(customerId)
-        if (count >= MAX_ADDRESSES) throw ConflictException("You can save at most $MAX_ADDRESSES addresses")
+        if (count >= MAX_ADDRESSES) throw BadRequestException("You can save at most $MAX_ADDRESSES addresses")
 
         // Fields are already trimmed (TrimStringDeserializer); required ones are non-null after @Valid.
         val details = AddressDetails(
@@ -79,7 +79,7 @@ class AddressService(
     fun setDefault(customerId: Long, addressId: Long): AddressResponse {
         customerRepository.lockById(customerId)
         val address = find(customerId, addressId)
-        if (!address.isDefault) {
+        if (!address.customerAddressIsDefault!!) {
             addressRepository.clearDefault(customerId)
             addressRepository.markDefault(addressId, customerId)
         }
@@ -97,7 +97,7 @@ class AddressService(
     private fun find(customerId: Long, addressId: Long): CustomerAddress =
         addressRepository.findById(addressId, customerId) ?: throw addressNotFound()
 
-    private fun addressNotFound() = NotFoundException("Address not found")
+    private fun addressNotFound() = UnableToLocateRecordException("Address not found")
 
     private fun String?.blankToNull(): String? = this?.trim()?.ifEmpty { null }
 

@@ -1,34 +1,34 @@
 package com.rita.ecommerceplatform.service
 
-import com.rita.ecommerceplatform.dto.request.CancelOrderRequest
-import com.rita.ecommerceplatform.dto.request.CheckoutRequest
-import com.rita.ecommerceplatform.dto.response.OrderResponse
-import com.rita.ecommerceplatform.dto.response.OrderSummaryResponse
-import com.rita.ecommerceplatform.dto.response.PageResponse
 import com.rita.ecommerceplatform.exception.BadRequestException
-import com.rita.ecommerceplatform.exception.ConflictException
-import com.rita.ecommerceplatform.exception.NotFoundException
-import com.rita.ecommerceplatform.model.CustomerAddress
-import com.rita.ecommerceplatform.model.NotificationType
-import com.rita.ecommerceplatform.model.Order
-import com.rita.ecommerceplatform.model.OrderPaymentStatus
-import com.rita.ecommerceplatform.model.OrderStatus
-import com.rita.ecommerceplatform.repository.CartRepository
-import com.rita.ecommerceplatform.repository.CouponRepository
-import com.rita.ecommerceplatform.repository.CustomerAddressRepository
-import com.rita.ecommerceplatform.repository.CustomerRepository
-import com.rita.ecommerceplatform.repository.DeliveryMethodRepository
-import com.rita.ecommerceplatform.repository.NewOrder
-import com.rita.ecommerceplatform.repository.OrderItemRepository
-import com.rita.ecommerceplatform.repository.OrderRepository
-import com.rita.ecommerceplatform.repository.OrderStatusHistoryRepository
+import com.rita.ecommerceplatform.exception.DuplicateTransactionException
+import com.rita.ecommerceplatform.exception.UnableToLocateRecordException
+import com.rita.ecommerceplatform.model.request.CancelOrderRequest
+import com.rita.ecommerceplatform.model.request.CheckoutRequest
+import com.rita.ecommerceplatform.model.response.OrderResponse
+import com.rita.ecommerceplatform.model.response.OrderSummaryResponse
+import com.rita.ecommerceplatform.model.response.PageResponse
+import com.rita.ecommerceplatform.model.entity.CustomerAddress
+import com.rita.ecommerceplatform.model.entity.NotificationType
+import com.rita.ecommerceplatform.model.entity.Order
+import com.rita.ecommerceplatform.model.entity.OrderPaymentStatus
+import com.rita.ecommerceplatform.model.entity.OrderStatus
+import com.rita.ecommerceplatform.repository.database.CartRepository
+import com.rita.ecommerceplatform.repository.database.CouponRepository
+import com.rita.ecommerceplatform.repository.database.CustomerAddressRepository
+import com.rita.ecommerceplatform.repository.database.CustomerRepository
+import com.rita.ecommerceplatform.repository.database.DeliveryMethodRepository
+import com.rita.ecommerceplatform.repository.database.NewOrder
+import com.rita.ecommerceplatform.repository.database.OrderItemRepository
+import com.rita.ecommerceplatform.repository.database.OrderRepository
+import com.rita.ecommerceplatform.repository.database.OrderStatusHistoryRepository
 import org.springframework.dao.DuplicateKeyException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
 import java.util.UUID
 
-/** The order and whether this request created it (201) or found it from an earlier attempt with the same key (200). */
+/** The order and whether this request created it ("Order created") or found it from an earlier attempt with the same key ("Successful"). */
 data class CheckoutResult(val order: OrderResponse, val created: Boolean)
 
 @Service
@@ -70,7 +70,7 @@ class OrderService(
         // Same rules as the cart view (CartService.issueOf), so the cart and checkout never disagree.
         val problems = items.mapNotNull { item -> cartService.issueOf(item)?.let { "${item.productName} ($it)" } }
         if (problems.isNotEmpty()) {
-            throw ConflictException("Some items cannot be ordered: ${problems.joinToString(", ")}")
+            throw BadRequestException("Some items cannot be ordered: ${problems.joinToString(", ")}")
         }
 
         // The fee is read here, inside the transaction, and copied onto the order: later fee changes never affect it.
@@ -88,11 +88,11 @@ class OrderService(
         } else {
             CouponCheck.discountFor(coupon, couponCode, subtotal, CouponService.now())
         }
-        val total = subtotal + deliveryMethod.fee - discount
+        val total = subtotal + deliveryMethod.deliveryMethodFee!! - discount
         if (coupon != null) {
             // Paystack cannot take ₦0, and stock is only taken when a payment is confirmed.
-            if (total.signum() <= 0) CouponCheck.refuse("Coupon ${coupon.code} would make the order free, which is not supported")
-            check(couponRepository.redeem(coupon.couponId) == 1) { "Coupon ${coupon.couponId} changed while locked" }
+            if (total.signum() <= 0) CouponCheck.refuse("Coupon ${coupon.couponCode} would make the order free, which is not supported")
+            check(couponRepository.redeem(coupon.couponId!!) == 1) { "Coupon ${coupon.couponId} changed while locked" }
         }
 
         val orderId = try {
@@ -101,24 +101,24 @@ class OrderService(
                     reference = newReference(),
                     idempotencyKey = idempotencyKey,
                     customerId = customerId,
-                    customerAddressId = address.addressId,
-                    deliveryMethodId = deliveryMethod.deliveryMethodId,
+                    customerAddressId = address.customerAddressId,
+                    deliveryMethodId = deliveryMethod.deliveryMethodId!!,
                     couponId = coupon?.couponId,
                     deliveryAddress = address.details,
                     subtotal = subtotal,
-                    deliveryFee = deliveryMethod.fee,
+                    deliveryFee = deliveryMethod.deliveryMethodFee!!,
                     discountAmount = discount,
                     total = total,
                 ),
             )
         } catch (e: DuplicateKeyException) {
             // Last safety net behind the lock: uq__ec_order__customerid_idempotencykey never allows a duplicate.
-            throw ConflictException("This Idempotency-Key was already used for another order")
+            throw DuplicateTransactionException("This Idempotency-Key was already used for another order")
         }
 
         // Snapshot of each product as it is now, so later product edits never change the order.
         items.forEach { item ->
-            orderItemRepository.insert(orderId, item.productId, item.productName, item.productSku, item.sellingPrice, item.quantity)
+            orderItemRepository.insert(orderId, item.productId!!, item.productName!!, item.productSku!!, item.productSellingPrice!!, item.cartItemQuantity!!)
         }
         statusHistoryRepository.insert(
             orderId = orderId,
@@ -137,7 +137,7 @@ class OrderService(
         notificationService.queueToCustomer(
             NotificationType.ORDER_CONFIRMATION,
             customer,
-            NotificationMessages.orderPlaced(customer.firstName, order, orderItemRepository.findByOrderId(orderId)),
+            NotificationMessages.orderPlaced(customer.customerFirstName!!, order, orderItemRepository.findByOrderId(orderId)),
             orderId = orderId,
         )
 
@@ -150,7 +150,7 @@ class OrderService(
         val safeSize = Paging.size(size)
         val orders = orderRepository.findByCustomer(customerId, safeSize, Paging.offset(safePage, safeSize))
         // One grouped query for the whole page, not one per order.
-        val quantities = orderItemRepository.quantitiesByOrderIds(orders.map { it.orderId })
+        val quantities = orderItemRepository.quantitiesByOrderIds(orders.map { it.orderId!! })
         return PageResponse.of(
             orders.map { OrderSummaryResponse.from(it, quantities[it.orderId] ?: 0) },
             safePage,
@@ -161,21 +161,21 @@ class OrderService(
 
     /** One of the customer's own orders; another customer's order is "not found" too. */
     fun get(customerId: Long, orderId: Long): OrderResponse =
-        toResponse(orderRepository.findById(orderId, customerId) ?: throw NotFoundException("Order not found"))
+        toResponse(orderRepository.findById(orderId, customerId) ?: throw UnableToLocateRecordException("Order not found"))
 
     /**
      * The customer cancels one of their own unpaid PENDING orders. If a payment page is open, the provider is
      * asked first (outside any transaction, like verify): a payment made just before the cancel then confirms the
-     * order (409 here) instead of leaving a paid, cancelled order. If the provider cannot be reached, nothing changes (502).
+     * order (code 106 here) instead of leaving a paid, cancelled order. If the provider cannot be reached, nothing changes (code 22).
      */
     fun cancel(customerId: Long, orderId: Long, request: CancelOrderRequest?): OrderResponse {
-        val order = orderRepository.findById(orderId, customerId) ?: throw NotFoundException("Order not found")
-        if (order.status != OrderStatus.PENDING || order.paymentStatus != OrderPaymentStatus.UNPAID) {
+        val order = orderRepository.findById(orderId, customerId) ?: throw UnableToLocateRecordException("Order not found")
+        if (order.orderStatus != OrderStatus.PENDING || order.orderPaymentStatus != OrderPaymentStatus.UNPAID) {
             throw OrderCancellation.notCancellable()
         }
 
         if (orderCancellation.settleOpenPayment(orderId)) {
-            throw ConflictException("This order has already been paid and can no longer be cancelled")
+            throw BadRequestException("This order has already been paid and can no longer be cancelled")
         }
 
         orderCancellation.cancelByCustomer(customerId, orderId, request?.reason?.trim()?.ifEmpty { null })
@@ -203,10 +203,10 @@ class OrderService(
     private fun toResponse(order: Order): OrderResponse =
         OrderResponse.from(
             order,
-            orderItemRepository.findByOrderId(order.orderId),
-            statusHistoryRepository.findByOrderId(order.orderId),
-            deliveryMethodRepository.findById(order.deliveryMethodId)!!,
-            order.couponId?.let { couponRepository.findById(it)!!.code },
+            orderItemRepository.findByOrderId(order.orderId!!),
+            statusHistoryRepository.findByOrderId(order.orderId!!),
+            deliveryMethodRepository.findById(order.orderDeliveryMethodId!!)!!,
+            order.orderCouponId?.let { couponRepository.findById(it)!!.couponCode },
         )
 
     companion object {

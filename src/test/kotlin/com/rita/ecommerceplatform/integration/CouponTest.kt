@@ -31,7 +31,7 @@ class CouponTest : IntegrationTestBase() {
     private fun platformNow(): LocalDateTime = LocalDateTime.now(ZoneOffset.ofHours(1))
 
     private fun create(body: String, token: String = adminToken): ResultActionsDsl =
-        mockMvc.post("/api/admin/coupons") {
+        mockMvc.post("/dev/admin/coupons") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = body
@@ -41,34 +41,34 @@ class CouponTest : IntegrationTestBase() {
     private fun createCoupon(code: String = uniqueCode(), vararg extra: Pair<String, Any?>): JsonNode =
         readJson(
             create(json("code" to code, "discountType" to "PERCENTAGE", "discountValue" to 10, *extra))
-                .andExpect { status { isCreated() } }.andReturn()
+                .andExpect { responseCode("00") }.andReturn()
         )
 
     private fun update(id: Int, body: String): ResultActionsDsl =
-        mockMvc.patch("/api/admin/coupons/$id") {
+        mockMvc.patch("/dev/admin/coupons/$id") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = body
         }
 
     private fun setStatus(id: Int, status: String): ResultActionsDsl =
-        mockMvc.patch("/api/admin/coupons/$id/status") {
+        mockMvc.patch("/dev/admin/coupons/$id/status") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("status" to status)
         }
 
     private fun get(id: Int): ResultActionsDsl =
-        mockMvc.get("/api/admin/coupons/$id") { header("Authorization", "Bearer $adminToken") }
+        mockMvc.get("/dev/admin/coupons/$id") { header("Authorization", "Bearer $adminToken") }
 
-    private fun stateOf(id: Int): String = readJson(get(id).andExpect { status { isOk() } }.andReturn())["state"].asString()
+    private fun stateOf(id: Int): String = readJson(get(id).andExpect { responseCode("00") }.andReturn())["state"].asString()
 
     private fun listCodes(vararg params: Pair<String, String>): JsonNode =
         readJson(
-            mockMvc.get("/api/admin/coupons") {
+            mockMvc.get("/dev/admin/coupons") {
                 header("Authorization", "Bearer $adminToken")
                 params.forEach { (name, value) -> param(name, value) }
-            }.andExpect { status { isOk() } }.andReturn()
+            }.andExpect { responseCode("00") }.andReturn()
         )
 
     private fun codes(page: JsonNode): List<String> = page["content"].toList().map { it["code"].asString() }
@@ -93,26 +93,26 @@ class CouponTest : IntegrationTestBase() {
                 "expiresAt" to platformNow().plusDays(30).withNano(0).toString(),
             )
         ).andExpect {
-            status { isCreated() }
-            jsonPath("$.code") { value(code.uppercase()) }
-            jsonPath("$.discountType") { value("PERCENTAGE") }
-            jsonPath("$.discountValue") { value(10.0) }
-            jsonPath("$.maxDiscountAmount") { value(5000.0) }
-            jsonPath("$.minimumOrderValue") { value(20000.0) }
-            jsonPath("$.usageLimit") { value(100) }
-            jsonPath("$.usageCount") { value(0) }
-            jsonPath("$.status") { value("ACTIVE") }
-            jsonPath("$.state") { value("USABLE") }
-            jsonPath("$.createdByAdminId") { value(seedAdminId()) }
+            responseCode("00")
+            jsonPath("$.data.code") { value(code.uppercase()) }
+            jsonPath("$.data.discountType") { value("PERCENTAGE") }
+            jsonPath("$.data.discountValue") { value(10.0) }
+            jsonPath("$.data.maxDiscountAmount") { value(5000.0) }
+            jsonPath("$.data.minimumOrderValue") { value(20000.0) }
+            jsonPath("$.data.usageLimit") { value(100) }
+            jsonPath("$.data.usageCount") { value(0) }
+            jsonPath("$.data.status") { value("ACTIVE") }
+            jsonPath("$.data.state") { value("USABLE") }
+            jsonPath("$.data.createdByAdminId") { value(seedAdminId()) }
         }
 
         create(json("code" to uniqueCode(), "discountType" to "FIXED_AMOUNT", "discountValue" to 1500)).andExpect {
-            status { isCreated() }
-            jsonPath("$.discountType") { value("FIXED_AMOUNT") }
-            jsonPath("$.minimumOrderValue") { value(0.0) }
-            jsonPath("$.usageLimit") { doesNotExist() }
-            jsonPath("$.expiresAt") { doesNotExist() }
-            jsonPath("$.state") { value("USABLE") }
+            responseCode("00")
+            jsonPath("$.data.discountType") { value("FIXED_AMOUNT") }
+            jsonPath("$.data.minimumOrderValue") { value(0.0) }
+            jsonPath("$.data.usageLimit") { doesNotExist() }
+            jsonPath("$.data.expiresAt") { doesNotExist() }
+            jsonPath("$.data.state") { value("USABLE") }
         }
     }
 
@@ -122,14 +122,14 @@ class CouponTest : IntegrationTestBase() {
         val couponId = createCoupon(code)["couponId"].asInt()
 
         create(json("code" to code.lowercase(), "discountType" to "PERCENTAGE", "discountValue" to 5)).andExpect {
-            status { isConflict() }
-            jsonPath("$.message") { value("Coupon code is already in use") }
+            responseCode("117")
+            jsonPath("$.responseMessage") { value("Coupon code is already in use") }
         }
 
-        mockMvc.delete("/api/admin/coupons/$couponId") { header("Authorization", "Bearer $adminToken") }
-            .andExpect { status { isNoContent() } }
+        mockMvc.delete("/dev/admin/coupons/$couponId") { header("Authorization", "Bearer $adminToken") }
+            .andExpect { responseCode("00") }
         create(json("code" to code, "discountType" to "PERCENTAGE", "discountValue" to 5))
-            .andExpect { status { isConflict() } }
+            .andExpect { responseCode("117") }
     }
 
     @Test
@@ -137,8 +137,8 @@ class CouponTest : IntegrationTestBase() {
         fun expectBadRequest(vararg fields: Pair<String, Any?>, message: String? = null) {
             val body = mapOf<String, Any?>("code" to uniqueCode(), "discountType" to "PERCENTAGE", "discountValue" to 10) + fields
             create(json(*body.toList().toTypedArray())).andExpect {
-                status { isBadRequest() }
-                message?.let { jsonPath("$.message") { value(it) } }
+                responseCode("106")
+                message?.let { jsonPath("$.responseMessage") { value(it) } }
             }
         }
 
@@ -162,7 +162,7 @@ class CouponTest : IntegrationTestBase() {
         )
         // A fixed amount over 100 is fine.
         create(json("code" to uniqueCode(), "discountType" to "FIXED_AMOUNT", "discountValue" to 2500))
-            .andExpect { status { isCreated() } }
+            .andExpect { responseCode("00") }
     }
 
     @Test
@@ -171,32 +171,32 @@ class CouponTest : IntegrationTestBase() {
         val id = coupon["couponId"].asInt()
 
         update(id, json("discountValue" to 15, "description" to "")).andExpect {
-            status { isOk() }
-            jsonPath("$.discountValue") { value(15.0) }
-            jsonPath("$.description") { doesNotExist() }
-            jsonPath("$.maxDiscountAmount") { value(3000.0) }
-            jsonPath("$.usageLimit") { value(50) }
-            jsonPath("$.code") { value(coupon["code"].asString()) }
+            responseCode("00")
+            jsonPath("$.data.discountValue") { value(15.0) }
+            jsonPath("$.data.description") { doesNotExist() }
+            jsonPath("$.data.maxDiscountAmount") { value(3000.0) }
+            jsonPath("$.data.usageLimit") { value(50) }
+            jsonPath("$.data.code") { value(coupon["code"].asString()) }
         }
 
         // FIXED_AMOUNT with the stored maximum is refused; clearing it at the same time works.
         update(id, json("discountType" to "FIXED_AMOUNT")).andExpect {
-            status { isBadRequest() }
-            jsonPath("$.message") { value("maxDiscountAmount is only for PERCENTAGE coupons") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("maxDiscountAmount is only for PERCENTAGE coupons") }
         }
         update(id, json("discountType" to "FIXED_AMOUNT", "discountValue" to 2000, "clearMaxDiscountAmount" to true)).andExpect {
-            status { isOk() }
-            jsonPath("$.discountType") { value("FIXED_AMOUNT") }
-            jsonPath("$.maxDiscountAmount") { doesNotExist() }
+            responseCode("00")
+            jsonPath("$.data.discountType") { value("FIXED_AMOUNT") }
+            jsonPath("$.data.maxDiscountAmount") { doesNotExist() }
         }
         // Back to PERCENTAGE with the stored 2000 is over 100.
-        update(id, json("discountType" to "PERCENTAGE")).andExpect { status { isBadRequest() } }
+        update(id, json("discountType" to "PERCENTAGE")).andExpect { responseCode("106") }
 
-        update(id, json("clearUsageLimit" to true)).andExpect { jsonPath("$.usageLimit") { doesNotExist() } }
-        update(id, json("code" to "NEWCODE")).andExpect { status { isBadRequest() } }
-        update(id, json("status" to "INACTIVE")).andExpect { status { isBadRequest() } }
-        update(id, json()).andExpect { status { isBadRequest() } }
-        update(id, json("usageLimit" to 5, "clearUsageLimit" to true)).andExpect { status { isBadRequest() } }
+        update(id, json("clearUsageLimit" to true)).andExpect { jsonPath("$.data.usageLimit") { doesNotExist() } }
+        update(id, json("code" to "NEWCODE")).andExpect { responseCode("106") }
+        update(id, json("status" to "INACTIVE")).andExpect { responseCode("106") }
+        update(id, json()).andExpect { responseCode("106") }
+        update(id, json("usageLimit" to 5, "clearUsageLimit" to true)).andExpect { responseCode("106") }
     }
 
     @Test
@@ -205,14 +205,14 @@ class CouponTest : IntegrationTestBase() {
         setColumn(id, "couponusagecount", 4)
 
         update(id, json("usageLimit" to 3)).andExpect {
-            status { isConflict() }
-            jsonPath("$.message") { value("Already used 4 times, so usageLimit cannot be lower than that") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("Already used 4 times, so usageLimit cannot be lower than that") }
         }
         update(id, json("usageLimit" to 4)).andExpect {
-            status { isOk() }
-            jsonPath("$.usageLimit") { value(4) }
-            jsonPath("$.usageCount") { value(4) }
-            jsonPath("$.state") { value("EXHAUSTED") }
+            responseCode("00")
+            jsonPath("$.data.usageLimit") { value(4) }
+            jsonPath("$.data.usageCount") { value(4) }
+            jsonPath("$.data.state") { value("EXHAUSTED") }
         }
     }
 
@@ -231,17 +231,17 @@ class CouponTest : IntegrationTestBase() {
 
         val inactive = createCoupon()["couponId"].asInt()
         setStatus(inactive, "INACTIVE").andExpect {
-            status { isOk() }
-            jsonPath("$.status") { value("INACTIVE") }
-            jsonPath("$.state") { value("INACTIVE") }
+            responseCode("00")
+            jsonPath("$.data.status") { value("INACTIVE") }
+            jsonPath("$.data.state") { value("INACTIVE") }
         }
-        setStatus(inactive, "active").andExpect { jsonPath("$.state") { value("USABLE") } }
-        setStatus(inactive, "DELETED").andExpect { status { isBadRequest() } }
+        setStatus(inactive, "active").andExpect { jsonPath("$.data.state") { value("USABLE") } }
+        setStatus(inactive, "DELETED").andExpect { responseCode("106") }
 
         // An expired coupon can still have other fields edited; only a newly sent expiry must be in the future.
-        update(expired, json("description" to "Ended")).andExpect { status { isOk() } }
+        update(expired, json("description" to "Ended")).andExpect { responseCode("00") }
         update(expired, json("expiresAt" to platformNow().plusDays(1).withNano(0).toString())).andExpect {
-            jsonPath("$.state") { value("USABLE") }
+            jsonPath("$.data.state") { value("USABLE") }
         }
     }
 
@@ -264,10 +264,10 @@ class CouponTest : IntegrationTestBase() {
 
         // The text is matched literally: % is not a wildcard.
         assertEquals(emptyList(), codes(listCodes("code" to "${prefix}%")))
-        mockMvc.get("/api/admin/coupons") {
+        mockMvc.get("/dev/admin/coupons") {
             header("Authorization", "Bearer $adminToken")
             param("status", "DELETED")
-        }.andExpect { status { isBadRequest() } }
+        }.andExpect { responseCode("106") }
     }
 
     @Test
@@ -275,19 +275,19 @@ class CouponTest : IntegrationTestBase() {
         val code = uniqueCode("D")
         val id = createCoupon(code)["couponId"].asInt()
 
-        mockMvc.delete("/api/admin/coupons/$id") { header("Authorization", "Bearer $adminToken") }
-            .andExpect { status { isNoContent() } }
+        mockMvc.delete("/dev/admin/coupons/$id") { header("Authorization", "Bearer $adminToken") }
+            .andExpect { responseCode("00") }
 
         assertEquals(emptyList(), codes(listCodes("code" to code)))
         get(id).andExpect {
-            status { isNotFound() }
-            jsonPath("$.message") { value("Coupon not found") }
+            responseCode("25")
+            jsonPath("$.responseMessage") { value("Coupon not found") }
         }
-        update(id, json("discountValue" to 20)).andExpect { status { isNotFound() } }
-        setStatus(id, "ACTIVE").andExpect { status { isNotFound() } }
-        mockMvc.delete("/api/admin/coupons/$id") { header("Authorization", "Bearer $adminToken") }
-            .andExpect { status { isNotFound() } }
-        get(999999).andExpect { status { isNotFound() } }
+        update(id, json("discountValue" to 20)).andExpect { responseCode("25") }
+        setStatus(id, "ACTIVE").andExpect { responseCode("25") }
+        mockMvc.delete("/dev/admin/coupons/$id") { header("Authorization", "Bearer $adminToken") }
+            .andExpect { responseCode("25") }
+        get(999999).andExpect { responseCode("25") }
 
         // The row stays, so orders that used it can still point to it.
         val status = jdbcClient.sql("SELECT couponstatus FROM public.ec_coupon WHERE couponid = :id")
@@ -300,14 +300,14 @@ class CouponTest : IntegrationTestBase() {
         val customerToken = newCustomerToken()
         val body = json("code" to uniqueCode(), "discountType" to "PERCENTAGE", "discountValue" to 10)
 
-        create(body, token = customerToken).andExpect { status { isForbidden() } }
-        mockMvc.get("/api/admin/coupons") { header("Authorization", "Bearer $customerToken") }
-            .andExpect { status { isForbidden() } }
-        mockMvc.post("/api/admin/coupons") {
+        create(body, token = customerToken).andExpect { responseCode("107") }
+        mockMvc.get("/dev/admin/coupons") { header("Authorization", "Bearer $customerToken") }
+            .andExpect { responseCode("107") }
+        mockMvc.post("/dev/admin/coupons") {
             contentType = MediaType.APPLICATION_JSON
             content = body
-        }.andExpect { status { isUnauthorized() } }
-        mockMvc.get("/api/admin/coupons") { header("Authorization", "Bearer ${loginSeedAdmin()}") }
-            .andExpect { status { isForbidden() } }
+        }.andExpect { responseCode("115") }
+        mockMvc.get("/dev/admin/coupons") { header("Authorization", "Bearer ${loginSeedAdmin()}") }
+            .andExpect { responseCode("107") }
     }
 }

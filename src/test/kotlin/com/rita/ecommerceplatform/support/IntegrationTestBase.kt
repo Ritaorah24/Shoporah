@@ -1,7 +1,8 @@
 package com.rita.ecommerceplatform.support
 
-import com.rita.ecommerceplatform.repository.CartRepository
-import com.rita.ecommerceplatform.repository.ProductImageRepository
+import org.springframework.test.web.servlet.MockMvcResultMatchersDsl
+import com.rita.ecommerceplatform.repository.database.CartRepository
+import com.rita.ecommerceplatform.repository.database.ProductImageRepository
 import com.rita.ecommerceplatform.service.NotificationSender
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Value
@@ -80,7 +81,21 @@ abstract class IntegrationTestBase {
 
     protected fun json(vararg fields: Pair<String, Any?>): String = jsonMapper.writeValueAsString(mapOf(*fields))
 
-    protected fun readJson(result: MvcResult): JsonNode = jsonMapper.readTree(result.response.contentAsString)
+    /** The data of a successful response; the whole envelope of a failed one (its responseCode and responseMessage). */
+    protected fun readJson(result: MvcResult): JsonNode {
+        val body = jsonMapper.readTree(result.response.contentAsString)
+        return if (body["responseCode"]?.asString() == "00" && body.has("data")) body["data"] else body
+    }
+
+    /** What a status check became: always HTTP 200, and this response code. */
+    protected fun MockMvcResultMatchersDsl.responseCode(code: String) {
+        status { isOk() }
+        jsonPath("$.responseCode") { value(code) }
+    }
+
+    protected fun readMessage(result: MvcResult): String = jsonMapper.readTree(result.response.contentAsString)["responseMessage"].asString()
+
+    protected fun MvcResult.responseCodeOf(): String = jsonMapper.readTree(response.contentAsString)["responseCode"].asString()
 
     protected fun registerBody(email: String, password: String = DEFAULT_PASSWORD): String = json(
         "firstName" to "Test",
@@ -92,19 +107,19 @@ abstract class IntegrationTestBase {
 
     /** Registers a customer and returns the new customerId. */
     protected fun registerCustomer(email: String = uniqueEmail(), password: String = DEFAULT_PASSWORD): Long {
-        val result = mockMvc.post("/api/auth/register") {
+        val result = mockMvc.post("/dev/auth/register") {
             contentType = MediaType.APPLICATION_JSON
             content = registerBody(email, password)
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["customerId"].asLong()
     }
 
     /** Logs a customer in and returns the access token. */
     protected fun loginCustomer(email: String, password: String = DEFAULT_PASSWORD): String {
-        val result = mockMvc.post("/api/auth/login") {
+        val result = mockMvc.post("/dev/auth/login") {
             contentType = MediaType.APPLICATION_JSON
             content = json("email" to email, "password" to password)
-        }.andExpect { status { isOk() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["accessToken"].asString()
     }
 
@@ -131,23 +146,23 @@ abstract class IntegrationTestBase {
     /** Resets the seed admin, logs in with the seed password and returns the (MUST_CHANGE) token. */
     protected fun loginSeedAdmin(): String {
         resetSeedAdmin()
-        val result = mockMvc.post("/api/admin/auth/login") {
+        val result = mockMvc.post("/dev/admin/auth/login") {
             contentType = MediaType.APPLICATION_JSON
             content = json("email" to seedAdminEmail, "password" to seedAdminPassword)
-        }.andExpect { status { isOk() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["accessToken"].asString()
     }
 
     /**
      * Resets the seed admin, changes its password and returns the new token: the state needed to use
-     * admin endpoints, since MUST_CHANGE blocks everything under /api/admin except the password change.
+     * admin endpoints, since MUST_CHANGE blocks everything under /dev/admin except the password change.
      */
     protected fun loginActiveAdmin(): String {
-        val result = mockMvc.patch("/api/admin/auth/password") {
+        val result = mockMvc.patch("/dev/admin/auth/password") {
             header("Authorization", "Bearer ${loginSeedAdmin()}")
             contentType = MediaType.APPLICATION_JSON
             content = json("currentPassword" to seedAdminPassword, "newPassword" to CHANGED_ADMIN_PASSWORD)
-        }.andExpect { status { isOk() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["accessToken"].asString()
     }
 

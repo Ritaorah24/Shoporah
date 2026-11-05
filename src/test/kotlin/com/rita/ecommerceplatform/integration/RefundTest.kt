@@ -41,16 +41,16 @@ class RefundTest : IntegrationTestBase() {
     private fun unique(prefix: String) = "$prefix-${UUID.randomUUID().toString().take(8)}"
 
     private fun createCategory(): Int {
-        val result = mockMvc.post("/api/admin/categories") {
+        val result = mockMvc.post("/dev/admin/categories") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to unique("Cat"))
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["categoryId"].asInt()
     }
 
     private fun createProduct(): Long {
-        val result = mockMvc.post("/api/admin/products") {
+        val result = mockMvc.post("/dev/admin/products") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json(
@@ -60,12 +60,12 @@ class RefundTest : IntegrationTestBase() {
                 "price" to 1000,
                 "stockQuantity" to 10,
             )
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["productId"].asLong()
     }
 
     private fun createAddress() {
-        mockMvc.post("/api/customer/addresses") {
+        mockMvc.post("/dev/customer/addresses") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json(
@@ -76,34 +76,34 @@ class RefundTest : IntegrationTestBase() {
                 "state" to "Lagos",
                 "country" to "Nigeria",
             )
-        }.andExpect { status { isCreated() } }
+        }.andExpect { responseCode("00") }
     }
 
     /** 2 of each of two products (stock 10 → 8 once paid): total ₦4,000.00. Returns the order and its payment reference. */
     private fun placeOrder(): Triple<Long, String, List<Long>> {
         val productIds = listOf(createProduct(), createProduct())
         productIds.forEach { productId ->
-            mockMvc.post("/api/customer/cart/items") {
+            mockMvc.post("/dev/customer/cart/items") {
                 header("Authorization", "Bearer $token")
                 contentType = MediaType.APPLICATION_JSON
                 content = json("productId" to productId, "quantity" to 2)
-            }.andExpect { status { isOk() } }
+            }.andExpect { responseCode("00") }
         }
         val order = readJson(
-            mockMvc.post("/api/customer/orders") {
+            mockMvc.post("/dev/customer/orders") {
                 header("Authorization", "Bearer $token")
                 header("Idempotency-Key", UUID.randomUUID().toString())
-            }.andExpect { status { isCreated() } }.andReturn(),
+            }.andExpect { responseCode("00") }.andReturn(),
         )
         return Triple(order["orderId"].asLong(), order["reference"].asString(), productIds)
     }
 
     private fun initialize(orderReference: String): String {
-        val result = mockMvc.post("/api/customer/payments/initialize") {
+        val result = mockMvc.post("/dev/customer/payments/initialize") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json("orderReference" to orderReference)
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["paymentReference"].asString()
     }
 
@@ -111,17 +111,17 @@ class RefundTest : IntegrationTestBase() {
         val (orderId, reference, productIds) = placeOrder()
         val paymentReference = initialize(reference)
         paymentGateway.pay(paymentReference)
-        mockMvc.get("/api/customer/payments/verify/$paymentReference") { header("Authorization", "Bearer $token") }
-            .andExpect { status { isOk() } }
+        mockMvc.get("/dev/customer/payments/verify/$paymentReference") { header("Authorization", "Bearer $token") }
+            .andExpect { responseCode("00"); jsonPath("$.responseMessage") { value("Successful") } }
         return Paid(orderId, reference, paymentReference, productIds)
     }
 
     private fun cancelledPaidOrder(): Paid = paidOrder().also {
-        mockMvc.post("/api/admin/orders/${it.orderId}/cancel") {
+        mockMvc.post("/dev/admin/orders/${it.orderId}/cancel") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("reason" to "Item damaged")
-        }.andExpect { status { isOk() } }
+        }.andExpect { responseCode("00") }
     }
 
     private fun deliveredOrder(): Paid = paidOrder().also { paid ->
@@ -129,11 +129,11 @@ class RefundTest : IntegrationTestBase() {
     }
 
     private fun moveTo(orderId: Long, status: String) {
-        mockMvc.patch("/api/admin/orders/$orderId/status") {
+        mockMvc.patch("/dev/admin/orders/$orderId/status") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("status" to status)
-        }.andExpect { status { isOk() } }
+        }.andExpect { responseCode("00") }
     }
 
     private fun refund(
@@ -142,7 +142,7 @@ class RefundTest : IntegrationTestBase() {
         restock: Boolean? = null,
         withToken: String? = adminToken,
     ): ResultActionsDsl =
-        mockMvc.post("/api/admin/orders/$orderId/refund") {
+        mockMvc.post("/dev/admin/orders/$orderId/refund") {
             withToken?.let { header("Authorization", "Bearer $it") }
             contentType = MediaType.APPLICATION_JSON
             content = if (restock == null) json("reason" to reason) else json("reason" to reason, "restock" to restock)
@@ -150,16 +150,16 @@ class RefundTest : IntegrationTestBase() {
 
     /** Starts a refund that must be accepted and returns its refundId. */
     private fun startRefund(orderId: Long, restock: Boolean? = null): Long {
-        val order = readJson(refund(orderId, restock = restock).andExpect { status { isAccepted() } }.andReturn())
+        val order = readJson(refund(orderId, restock = restock).andExpect { responseCode("00") }.andReturn())
         return order["refunds"].last()["refundId"].asLong()
     }
 
     private fun refresh(refundId: Long): ResultActionsDsl =
-        mockMvc.post("/api/admin/refunds/$refundId/refresh") { header("Authorization", "Bearer $adminToken") }
+        mockMvc.post("/dev/admin/refunds/$refundId/refresh") { header("Authorization", "Bearer $adminToken") }
 
     private fun adminOrder(orderId: Long): JsonNode = readJson(
-        mockMvc.get("/api/admin/orders/$orderId") { header("Authorization", "Bearer $adminToken") }
-            .andExpect { status { isOk() } }.andReturn(),
+        mockMvc.get("/dev/admin/orders/$orderId") { header("Authorization", "Bearer $adminToken") }
+            .andExpect { responseCode("00") }.andReturn(),
     )
 
     private fun JsonNode.last(): JsonNode = get(size() - 1)
@@ -193,16 +193,16 @@ class RefundTest : IntegrationTestBase() {
         val paid = cancelledPaidOrder()
 
         refund(paid.orderId, reason = "  Item damaged in the warehouse  ").andExpect {
-            status { isAccepted() }
-            jsonPath("$.status") { value("CANCELLED") }
-            jsonPath("$.paymentStatus") { value("PAID") }
-            jsonPath("$.canRefund") { value(false) }
-            jsonPath("$.refunds.length()") { value(1) }
-            jsonPath("$.refunds[0].status") { value("PENDING") }
-            jsonPath("$.refunds[0].amount") { value(4000.0) }
-            jsonPath("$.refunds[0].reason") { value("Item damaged in the warehouse") }
-            jsonPath("$.refunds[0].providerStatus") { value("pending") }
-            jsonPath("$.refunds[0].providerRefundId") { isNotEmpty() }
+            responseCode("00")
+            jsonPath("$.data.status") { value("CANCELLED") }
+            jsonPath("$.data.paymentStatus") { value("PAID") }
+            jsonPath("$.data.canRefund") { value(false) }
+            jsonPath("$.data.refunds.length()") { value(1) }
+            jsonPath("$.data.refunds[0].status") { value("PENDING") }
+            jsonPath("$.data.refunds[0].amount") { value(4000.0) }
+            jsonPath("$.data.refunds[0].reason") { value("Item damaged in the warehouse") }
+            jsonPath("$.data.refunds[0].providerStatus") { value("pending") }
+            jsonPath("$.data.refunds[0].providerRefundId") { isNotEmpty() }
         }
         val request = paymentGateway.refundRequests(paid.paymentReference).single()
         assertEquals(400_000, request.amountKobo)
@@ -213,24 +213,24 @@ class RefundTest : IntegrationTestBase() {
         val refundId = adminOrder(paid.orderId)["refunds"][0]["refundId"].asLong()
         paymentGateway.processRefund(paid.paymentReference)
         refresh(refundId).andExpect {
-            status { isOk() }
-            jsonPath("$.status") { value("CANCELLED") }
-            jsonPath("$.paymentStatus") { value("REFUNDED") }
-            jsonPath("$.canRefund") { value(false) }
-            jsonPath("$.refunds[0].status") { value("PROCESSED") }
-            jsonPath("$.refunds[0].processedAt") { isNotEmpty() }
-            jsonPath("$.payments[0].status") { value("SUCCESS") }
-            jsonPath("$.statusHistory[3].status") { value("CANCELLED") }
-            jsonPath("$.statusHistory[3].changedBy") { value("ADMIN") }
-            jsonPath("$.statusHistory[3].note") { value("Refund processed: ₦4,000.00") }
+            responseCode("00")
+            jsonPath("$.data.status") { value("CANCELLED") }
+            jsonPath("$.data.paymentStatus") { value("REFUNDED") }
+            jsonPath("$.data.canRefund") { value(false) }
+            jsonPath("$.data.refunds[0].status") { value("PROCESSED") }
+            jsonPath("$.data.refunds[0].processedAt") { isNotEmpty() }
+            jsonPath("$.data.payments[0].status") { value("SUCCESS") }
+            jsonPath("$.data.statusHistory[3].status") { value("CANCELLED") }
+            jsonPath("$.data.statusHistory[3].changedBy") { value("ADMIN") }
+            jsonPath("$.data.statusHistory[3].note") { value("Refund processed: ₦4,000.00") }
         }
         // Stock went back when it was cancelled; the refund does not add it again.
         paid.productIds.forEach { assertEquals(10, stock(it)) }
         assertTrue(returns(paid.orderId).isEmpty())
 
-        mockMvc.get("/api/customer/orders/${paid.orderId}") { header("Authorization", "Bearer $token") }.andExpect {
-            status { isOk() }
-            jsonPath("$.paymentStatus") { value("REFUNDED") }
+        mockMvc.get("/dev/customer/orders/${paid.orderId}") { header("Authorization", "Bearer $token") }.andExpect {
+            responseCode("00")
+            jsonPath("$.data.paymentStatus") { value("REFUNDED") }
         }
         val body = refundEmails(paid.reference).single()
         assertTrue("Your refund of ₦4,000.00 for order ${paid.reference} has been processed." in body, body)
@@ -246,20 +246,20 @@ class RefundTest : IntegrationTestBase() {
 
         paymentGateway.processRefund(paid.paymentReference)
         refresh(refundId).andExpect {
-            status { isOk() }
-            jsonPath("$.status") { value("REFUNDED") }
-            jsonPath("$.paymentStatus") { value("REFUNDED") }
-            jsonPath("$.nextStatuses.length()") { value(0) }
-            jsonPath("$.refunds[0].restock") { value(true) }
-            jsonPath("$.statusHistory[5].fromStatus") { value("DELIVERED") }
-            jsonPath("$.statusHistory[5].status") { value("REFUNDED") }
-            jsonPath("$.statusHistory[5].note") { value("Refund processed: ₦4,000.00. Items returned to stock") }
+            responseCode("00")
+            jsonPath("$.data.status") { value("REFUNDED") }
+            jsonPath("$.data.paymentStatus") { value("REFUNDED") }
+            jsonPath("$.data.nextStatuses.length()") { value(0) }
+            jsonPath("$.data.refunds[0].restock") { value(true) }
+            jsonPath("$.data.statusHistory[5].fromStatus") { value("DELIVERED") }
+            jsonPath("$.data.statusHistory[5].status") { value("REFUNDED") }
+            jsonPath("$.data.statusHistory[5].note") { value("Refund processed: ₦4,000.00. Items returned to stock") }
         }
         paid.productIds.forEach { assertEquals(10, stock(it)) }
         assertEquals(paid.productIds.sorted().map { listOf<Any>(it, 2, 10) }, returns(paid.orderId))
 
         // A second refresh of a settled refund changes nothing.
-        refresh(refundId).andExpect { status { isOk() } }
+        refresh(refundId).andExpect { responseCode("00") }
         paid.productIds.forEach { assertEquals(10, stock(it)) }
         assertEquals(2, returns(paid.orderId).size)
         assertEquals(1, refundEmails(paid.reference).size)
@@ -272,9 +272,9 @@ class RefundTest : IntegrationTestBase() {
         paymentGateway.processRefund(paid.paymentReference)
 
         refresh(refundId).andExpect {
-            jsonPath("$.status") { value("REFUNDED") }
-            jsonPath("$.refunds[0].restock") { value(false) }
-            jsonPath("$.statusHistory[5].note") { value("Refund processed: ₦4,000.00") }
+            jsonPath("$.data.status") { value("REFUNDED") }
+            jsonPath("$.data.refunds[0].restock") { value(false) }
+            jsonPath("$.data.statusHistory[5].note") { value("Refund processed: ₦4,000.00") }
         }
         paid.productIds.forEach { assertEquals(8, stock(it)) }
         assertTrue(returns(paid.orderId).isEmpty())
@@ -285,8 +285,8 @@ class RefundTest : IntegrationTestBase() {
         val paid = cancelledPaidOrder()
 
         refund(paid.orderId, restock = true).andExpect {
-            status { isBadRequest() }
-            jsonPath("$.message") { value("restock is only for delivered orders: a cancelled order's stock was already put back") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("restock is only for delivered orders: a cancelled order's stock was already put back") }
         }
         assertEquals(0, refundRows(paid.orderId))
         assertTrue(paymentGateway.refundRequests(paid.paymentReference).isEmpty())
@@ -299,18 +299,18 @@ class RefundTest : IntegrationTestBase() {
 
         paymentGateway.failRefund(paid.paymentReference, reason = "Customer bank account closed")
         refresh(refundId).andExpect {
-            status { isOk() }
-            jsonPath("$.paymentStatus") { value("PAID") }
-            jsonPath("$.canRefund") { value(true) }
-            jsonPath("$.refunds[0].status") { value("FAILED") }
-            jsonPath("$.refunds[0].providerStatus") { value("failed") }
-            jsonPath("$.refunds[0].failureReason") { value("Customer bank account closed") }
+            responseCode("00")
+            jsonPath("$.data.paymentStatus") { value("PAID") }
+            jsonPath("$.data.canRefund") { value(true) }
+            jsonPath("$.data.refunds[0].status") { value("FAILED") }
+            jsonPath("$.data.refunds[0].providerStatus") { value("failed") }
+            jsonPath("$.data.refunds[0].failureReason") { value("Customer bank account closed") }
         }
 
         refund(paid.orderId).andExpect {
-            status { isAccepted() }
-            jsonPath("$.refunds.length()") { value(2) }
-            jsonPath("$.refunds[1].status") { value("PENDING") }
+            responseCode("00")
+            jsonPath("$.data.refunds.length()") { value(2) }
+            jsonPath("$.data.refunds[1].status") { value("PENDING") }
         }
         assertEquals(2, paymentGateway.refundRequests(paid.paymentReference).size)
         assertTrue(refundEmails(paid.reference).isEmpty())
@@ -322,16 +322,16 @@ class RefundTest : IntegrationTestBase() {
         paymentGateway.rejectRefund(paid.paymentReference, "Insufficient balance to process refund")
 
         refund(paid.orderId).andExpect {
-            status { isAccepted() }
-            jsonPath("$.paymentStatus") { value("PAID") }
-            jsonPath("$.canRefund") { value(true) }
-            jsonPath("$.refunds[0].status") { value("FAILED") }
-            jsonPath("$.refunds[0].failureReason") { value("Insufficient balance to process refund") }
-            jsonPath("$.refunds[0].providerRefundId") { doesNotExist() }
+            responseCode("00")
+            jsonPath("$.data.paymentStatus") { value("PAID") }
+            jsonPath("$.data.canRefund") { value(true) }
+            jsonPath("$.data.refunds[0].status") { value("FAILED") }
+            jsonPath("$.data.refunds[0].failureReason") { value("Insufficient balance to process refund") }
+            jsonPath("$.data.refunds[0].providerRefundId") { doesNotExist() }
         }
         refund(paid.orderId).andExpect {
-            status { isAccepted() }
-            jsonPath("$.refunds[1].status") { value("PENDING") }
+            responseCode("00")
+            jsonPath("$.data.refunds[1].status") { value("PENDING") }
         }
     }
 
@@ -341,23 +341,23 @@ class RefundTest : IntegrationTestBase() {
         paymentGateway.loseRefundAnswer(paid.paymentReference)
 
         refund(paid.orderId).andExpect {
-            status { isAccepted() }
-            jsonPath("$.canRefund") { value(false) }
-            jsonPath("$.refunds[0].status") { value("PENDING") }
-            jsonPath("$.refunds[0].providerRefundId") { doesNotExist() }
+            responseCode("00")
+            jsonPath("$.data.canRefund") { value(false) }
+            jsonPath("$.data.refunds[0].status") { value("PENDING") }
+            jsonPath("$.data.refunds[0].providerRefundId") { doesNotExist() }
         }
         val refundId = adminOrder(paid.orderId)["refunds"][0]["refundId"].asLong()
 
         // Paystack has it and still works on it (needs-attention): it is linked, still PENDING.
         paymentGateway.refundNeedsAttention(paid.paymentReference)
         refresh(refundId).andExpect {
-            status { isOk() }
-            jsonPath("$.refunds[0].status") { value("PENDING") }
-            jsonPath("$.refunds[0].providerStatus") { value("needs-attention") }
-            jsonPath("$.refunds[0].providerRefundId") { isNotEmpty() }
+            responseCode("00")
+            jsonPath("$.data.refunds[0].status") { value("PENDING") }
+            jsonPath("$.data.refunds[0].providerStatus") { value("needs-attention") }
+            jsonPath("$.data.refunds[0].providerRefundId") { isNotEmpty() }
         }
         paymentGateway.processRefund(paid.paymentReference)
-        refresh(refundId).andExpect { jsonPath("$.paymentStatus") { value("REFUNDED") } }
+        refresh(refundId).andExpect { jsonPath("$.data.paymentStatus") { value("REFUNDED") } }
 
         assertEquals(1, paymentGateway.refundRequests(paid.paymentReference).size)
         assertEquals(1, refundEmails(paid.reference).size)
@@ -369,8 +369,8 @@ class RefundTest : IntegrationTestBase() {
         paymentGateway.down = true
         try {
             refund(paid.orderId).andExpect {
-                status { isAccepted() }
-                jsonPath("$.refunds[0].status") { value("PENDING") }
+                responseCode("00")
+                jsonPath("$.data.refunds[0].status") { value("PENDING") }
             }
         } finally {
             paymentGateway.down = false
@@ -378,17 +378,17 @@ class RefundTest : IntegrationTestBase() {
         val refundId = adminOrder(paid.orderId)["refunds"][0]["refundId"].asLong()
 
         // Too soon to be sure: it may still be on its way to Paystack.
-        refresh(refundId).andExpect { jsonPath("$.refunds[0].status") { value("PENDING") } }
+        refresh(refundId).andExpect { jsonPath("$.data.refunds[0].status") { value("PENDING") } }
 
         jdbcClient.sql("UPDATE public.ec_refund SET refundcreatedat = refundcreatedat - INTERVAL '2 minutes' WHERE refundid = :id")
             .param("id", refundId).update()
         refresh(refundId).andExpect {
-            jsonPath("$.paymentStatus") { value("PAID") }
-            jsonPath("$.canRefund") { value(true) }
-            jsonPath("$.refunds[0].status") { value("FAILED") }
-            jsonPath("$.refunds[0].failureReason") { value(RefundService.NOT_RECEIVED) }
+            jsonPath("$.data.paymentStatus") { value("PAID") }
+            jsonPath("$.data.canRefund") { value(true) }
+            jsonPath("$.data.refunds[0].status") { value("FAILED") }
+            jsonPath("$.data.refunds[0].failureReason") { value(RefundService.NOT_RECEIVED) }
         }
-        refund(paid.orderId).andExpect { status { isAccepted() } }
+        refund(paid.orderId).andExpect { responseCode("00") }
     }
 
     @Test
@@ -396,18 +396,18 @@ class RefundTest : IntegrationTestBase() {
         val first = cancelledPaidOrder()
         startRefund(first.orderId)
         refund(first.orderId).andExpect {
-            status { isConflict() }
-            jsonPath("$.message") { value("A refund for this order is already in progress") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("A refund for this order is already in progress") }
         }
 
         val second = cancelledPaidOrder()
         val pool = Executors.newFixedThreadPool(2)
         val statuses = try {
-            pool.invokeAll(List(2) { Callable { refund(second.orderId).andReturn().response.status } }).map { it.get() }
+            pool.invokeAll(List(2) { Callable { refund(second.orderId).andReturn().responseCodeOf() } }).map { it.get() }
         } finally {
             pool.shutdown()
         }
-        assertEquals(listOf(202, 409), statuses.sorted())
+        assertEquals(listOf("00", "106"), statuses.sorted())
         assertEquals(1, refundRows(second.orderId))
         assertEquals(1, paymentGateway.refundRequests(second.paymentReference).size)
     }
@@ -432,19 +432,19 @@ class RefundTest : IntegrationTestBase() {
     fun `orders that are unpaid, not yet cancelled or delivered, or already refunded cannot be refunded`() {
         val (unpaidId, _, _) = placeOrder()
         refund(unpaidId).andExpect {
-            status { isConflict() }
-            jsonPath("$.message") { value("Only paid orders can be refunded") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("Only paid orders can be refunded") }
         }
         assertEquals(false, adminOrder(unpaidId)["canRefund"].asBoolean())
 
         val confirmed = paidOrder()
         refund(confirmed.orderId).andExpect {
-            status { isConflict() }
-            jsonPath("$.message") { value("Only cancelled or delivered orders can be refunded; cancel the order first if it has not shipped") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("Only cancelled or delivered orders can be refunded; cancel the order first if it has not shipped") }
         }
         assertEquals(false, adminOrder(confirmed.orderId)["canRefund"].asBoolean())
         listOf("PROCESSING", "SHIPPED").forEach { moveTo(confirmed.orderId, it) }
-        refund(confirmed.orderId).andExpect { status { isConflict() } }
+        refund(confirmed.orderId).andExpect { responseCode("106") }
         moveTo(confirmed.orderId, "DELIVERED")
         assertEquals(true, adminOrder(confirmed.orderId)["canRefund"].asBoolean())
 
@@ -452,8 +452,8 @@ class RefundTest : IntegrationTestBase() {
         paymentGateway.processRefund(confirmed.paymentReference)
         refresh(refundId)
         refund(confirmed.orderId).andExpect {
-            status { isConflict() }
-            jsonPath("$.message") { value("This order has already been refunded") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("This order has already been refunded") }
         }
         assertEquals(1, paymentGateway.refundRequests(confirmed.paymentReference).size)
     }
@@ -461,15 +461,15 @@ class RefundTest : IntegrationTestBase() {
     @Test
     fun `refunds need a reason, an admin and an existing order or refund`() {
         val paid = cancelledPaidOrder()
-        refund(paid.orderId, reason = null).andExpect { status { isBadRequest() } }
-        refund(paid.orderId, reason = "   ").andExpect { status { isBadRequest() } }
-        refund(paid.orderId, reason = "x".repeat(501)).andExpect { status { isBadRequest() } }
-        refund(paid.orderId, withToken = token).andExpect { status { isForbidden() } }
-        refund(paid.orderId, withToken = null).andExpect { status { isUnauthorized() } }
-        refund(999_999_999).andExpect { status { isNotFound() } }
-        refresh(999_999_999).andExpect { status { isNotFound() } }
-        mockMvc.post("/api/admin/refunds/1/refresh") { header("Authorization", "Bearer $token") }
-            .andExpect { status { isForbidden() } }
+        refund(paid.orderId, reason = null).andExpect { responseCode("106") }
+        refund(paid.orderId, reason = "   ").andExpect { responseCode("106") }
+        refund(paid.orderId, reason = "x".repeat(501)).andExpect { responseCode("106") }
+        refund(paid.orderId, withToken = token).andExpect { responseCode("107") }
+        refund(paid.orderId, withToken = null).andExpect { responseCode("115") }
+        refund(999_999_999).andExpect { responseCode("25") }
+        refresh(999_999_999).andExpect { responseCode("25") }
+        mockMvc.post("/dev/admin/refunds/1/refresh") { header("Authorization", "Bearer $token") }
+            .andExpect { responseCode("107") }
         assertEquals(0, refundRows(paid.orderId))
 
         // The order view lists no refunds yet and allows one.

@@ -1,21 +1,21 @@
 package com.rita.ecommerceplatform.service
 
-import com.rita.ecommerceplatform.dto.request.UpdateProductImageRequest
-import com.rita.ecommerceplatform.dto.response.AdminProductImageResponse
+import io.github.oshai.kotlinlogging.KotlinLogging
 import com.rita.ecommerceplatform.exception.BadRequestException
-import com.rita.ecommerceplatform.exception.ConflictException
-import com.rita.ecommerceplatform.exception.NotFoundException
-import com.rita.ecommerceplatform.exception.PayloadTooLargeException
-import com.rita.ecommerceplatform.model.ProductImage
-import com.rita.ecommerceplatform.model.ProductStatus
-import com.rita.ecommerceplatform.repository.ProductImageRepository
-import com.rita.ecommerceplatform.repository.ProductRepository
+import com.rita.ecommerceplatform.exception.UnableToLocateRecordException
+import com.rita.ecommerceplatform.model.request.UpdateProductImageRequest
+import com.rita.ecommerceplatform.model.response.AdminProductImageResponse
+import com.rita.ecommerceplatform.model.entity.ProductImage
+import com.rita.ecommerceplatform.model.entity.ProductStatus
+import com.rita.ecommerceplatform.repository.database.ProductImageRepository
+import com.rita.ecommerceplatform.repository.database.ProductRepository
 import com.rita.ecommerceplatform.repository.api.ImageStorage
 import com.rita.ecommerceplatform.repository.api.StoredImage
-import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.web.multipart.MultipartFile
+
+private val logger = KotlinLogging.logger {}
 
 /**
  * Product images (checkpoint 2.2, Step 8). The file goes to the image storage outside any transaction (it can take
@@ -31,15 +31,13 @@ class ProductImageService(
     private val transactionTemplate: TransactionTemplate,
 ) {
 
-    private val log = LoggerFactory.getLogger(ProductImageService::class.java)
-
     /**
      * Checks the file (size, and its real type from its first bytes), stores it, and records it. The product's first
      * image becomes its primary image. If recording fails after the upload, the stored file is removed again.
      */
     fun upload(productId: Long, file: MultipartFile, altText: String?): AdminProductImageResponse {
         // Spring's multipart limit refuses bigger requests first; this check also covers any other way in.
-        if (file.size > MAX_BYTES) throw PayloadTooLargeException(TOO_LARGE)
+        if (file.size > MAX_BYTES) throw BadRequestException(TOO_LARGE)
         val content = file.bytes
         if (content.isEmpty()) throw BadRequestException("The image file is empty")
         val type = ImageTypeDetector.detect(content) ?: throw BadRequestException("Only JPEG, PNG or WebP images are allowed")
@@ -72,11 +70,11 @@ class ProductImageService(
         return transactionTemplate.execute {
             // The product lock makes primary changes for one product run one at a time, so there is always one primary.
             lockNotDeleted(productId)
-            val image = productImageRepository.findById(productId, imageId) ?: throw NotFoundException("Image not found")
+            val image = productImageRepository.findById(productId, imageId) ?: throw UnableToLocateRecordException("Image not found")
             productImageRepository.update(
                 imageId = imageId,
-                altText = if (request.altText != null) request.altText.trim().ifEmpty { null } else image.altText,
-                sortOrder = request.sortOrder ?: image.sortOrder,
+                altText = if (request.altText != null) request.altText.trim().ifEmpty { null } else image.productImageAltText,
+                sortOrder = request.sortOrder ?: image.productImageSortOrder!!,
             )
             if (request.primary == true) productImageRepository.makePrimary(productId, imageId)
             productImageRepository.findByProduct(productId).map(AdminProductImageResponse::from)
@@ -90,12 +88,12 @@ class ProductImageService(
     fun delete(productId: Long, imageId: Long) {
         val image = transactionTemplate.execute {
             lockNotDeleted(productId)
-            val image = productImageRepository.findById(productId, imageId) ?: throw NotFoundException("Image not found")
+            val image = productImageRepository.findById(productId, imageId) ?: throw UnableToLocateRecordException("Image not found")
             productImageRepository.delete(imageId)
-            if (image.isPrimary) productImageRepository.promoteFirstIfNoPrimary(productId)
+            if (image.productImageIsPrimary!!) productImageRepository.promoteFirstIfNoPrimary(productId)
             image
         }!!
-        deleteQuietly(image.storageKey)
+        deleteQuietly(image.productImageStorageKey!!)
     }
 
     private fun save(productId: Long, stored: StoredImage, altText: String?): ProductImage {
@@ -117,23 +115,23 @@ class ProductImageService(
     // Deleted products behave as if they do not exist (D3), images included.
     private fun findNotDeleted(productId: Long) {
         val product = productRepository.findById(productId)
-        if (product == null || product.status == ProductStatus.DELETED) throw NotFoundException("Product not found")
+        if (product == null || product.productStatus == ProductStatus.DELETED) throw UnableToLocateRecordException("Product not found")
     }
 
     private fun lockNotDeleted(productId: Long) {
         val product = productRepository.findByIdForUpdate(productId)
-        if (product == null || product.status == ProductStatus.DELETED) throw NotFoundException("Product not found")
+        if (product == null || product.productStatus == ProductStatus.DELETED) throw UnableToLocateRecordException("Product not found")
     }
 
     private fun deleteQuietly(storageKey: String) {
         try {
             imageStorage.delete(storageKey)
         } catch (e: Exception) {
-            log.warn("Could not remove stored image {}; it is left over in the image storage", storageKey, e)
+            logger.warn(e) { "Could not remove stored image $storageKey; it is left over in the image storage" }
         }
     }
 
-    private fun tooManyImages() = ConflictException("A product can have at most $MAX_IMAGES images")
+    private fun tooManyImages() = BadRequestException("A product can have at most $MAX_IMAGES images")
 
     companion object {
         const val MAX_BYTES = 5L * 1024 * 1024

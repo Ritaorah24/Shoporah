@@ -1,13 +1,13 @@
 package com.rita.ecommerceplatform.service
 
-import com.rita.ecommerceplatform.dto.response.AdminCustomerResponse
-import com.rita.ecommerceplatform.dto.response.AdminCustomerSummaryResponse
-import com.rita.ecommerceplatform.dto.response.PageResponse
 import com.rita.ecommerceplatform.exception.BadRequestException
-import com.rita.ecommerceplatform.exception.NotFoundException
-import com.rita.ecommerceplatform.model.CustomerStatus
-import com.rita.ecommerceplatform.repository.CustomerRepository
-import com.rita.ecommerceplatform.repository.OrderRepository
+import com.rita.ecommerceplatform.exception.UnableToLocateRecordException
+import com.rita.ecommerceplatform.model.response.AdminCustomerResponse
+import com.rita.ecommerceplatform.model.response.AdminCustomerSummaryResponse
+import com.rita.ecommerceplatform.model.response.PageResponse
+import com.rita.ecommerceplatform.model.entity.CustomerStatus
+import com.rita.ecommerceplatform.repository.database.CustomerRepository
+import com.rita.ecommerceplatform.repository.database.OrderRepository
 import org.springframework.stereotype.Service
 
 /** Customers as admins look them up (checkpoint 2.2, Step 7). Read-only: suspending accounts comes with V4. */
@@ -25,7 +25,7 @@ class AdminCustomerService(
         val safeSize = Paging.size(size)
         val customers = customerRepository.search(statusFilter, contains, safeSize, Paging.offset(safePage, safeSize))
         // One grouped query for the whole page, not one per customer.
-        val orderCounts = orderRepository.countByCustomerIds(customers.map { it.customerId })
+        val orderCounts = orderRepository.countByCustomerIds(customers.map { it.customerId!! })
         return PageResponse.of(
             customers.map { AdminCustomerSummaryResponse.from(it, orderCounts[it.customerId] ?: 0) },
             safePage,
@@ -35,7 +35,7 @@ class AdminCustomerService(
     }
 
     fun get(customerId: Long): AdminCustomerResponse {
-        val customer = customerRepository.findById(customerId) ?: throw NotFoundException("Customer not found")
+        val customer = customerRepository.findById(customerId) ?: throw UnableToLocateRecordException("Customer not found")
         return AdminCustomerResponse.from(customer, orderRepository.customerTotals(customerId))
     }
 

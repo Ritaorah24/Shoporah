@@ -1,16 +1,16 @@
 package com.rita.ecommerceplatform.service
 
-import com.rita.ecommerceplatform.dto.request.CreateDeliveryMethodRequest
-import com.rita.ecommerceplatform.dto.request.UpdateDeliveryMethodRequest
-import com.rita.ecommerceplatform.dto.request.UpdateStatusRequest
-import com.rita.ecommerceplatform.dto.response.AdminDeliveryMethodResponse
-import com.rita.ecommerceplatform.dto.response.DeliveryMethodResponse
 import com.rita.ecommerceplatform.exception.BadRequestException
-import com.rita.ecommerceplatform.exception.ConflictException
-import com.rita.ecommerceplatform.exception.NotFoundException
-import com.rita.ecommerceplatform.model.DeliveryMethod
-import com.rita.ecommerceplatform.model.DeliveryMethodStatus
-import com.rita.ecommerceplatform.repository.DeliveryMethodRepository
+import com.rita.ecommerceplatform.exception.RecordAlreadyExistException
+import com.rita.ecommerceplatform.exception.UnableToLocateRecordException
+import com.rita.ecommerceplatform.model.request.CreateDeliveryMethodRequest
+import com.rita.ecommerceplatform.model.request.UpdateDeliveryMethodRequest
+import com.rita.ecommerceplatform.model.request.UpdateStatusRequest
+import com.rita.ecommerceplatform.model.response.AdminDeliveryMethodResponse
+import com.rita.ecommerceplatform.model.response.DeliveryMethodResponse
+import com.rita.ecommerceplatform.model.entity.DeliveryMethod
+import com.rita.ecommerceplatform.model.entity.DeliveryMethodStatus
+import com.rita.ecommerceplatform.repository.database.DeliveryMethodRepository
 import org.springframework.dao.DuplicateKeyException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -59,16 +59,16 @@ class DeliveryMethodService(private val deliveryMethodRepository: DeliveryMethod
     @Transactional
     fun update(deliveryMethodId: Int, request: UpdateDeliveryMethodRequest): AdminDeliveryMethodResponse {
         val existing = find(deliveryMethodId)
-        val minDays = request.estimatedMinDays ?: existing.estimatedMinDays
-        val maxDays = request.estimatedMaxDays ?: existing.estimatedMaxDays
+        val minDays = request.estimatedMinDays ?: existing.deliveryMethodEstimatedMinDays
+        val maxDays = request.estimatedMaxDays ?: existing.deliveryMethodEstimatedMaxDays
         // Checked on the merged values, so sending only one of the two is compared with the stored other.
         checkDays(minDays, maxDays)
 
         deliveryMethodRepository.update(
             deliveryMethodId = deliveryMethodId,
-            name = request.name ?: existing.name,
-            description = if (request.description != null) request.description.blankToNull() else existing.description,
-            fee = request.fee ?: existing.fee,
+            name = request.name ?: existing.deliveryMethodName!!,
+            description = if (request.description != null) request.description.blankToNull() else existing.deliveryMethodDescription,
+            fee = request.fee ?: existing.deliveryMethodFee!!,
             estimatedMinDays = minDays,
             estimatedMaxDays = maxDays,
         )
@@ -81,15 +81,15 @@ class DeliveryMethodService(private val deliveryMethodRepository: DeliveryMethod
         val existing = find(deliveryMethodId)
         val status = DeliveryMethodStatus.valueOf(request.status!!.uppercase())
         // Checkout falls back to STANDARD when no method is named, so it must always be available.
-        if (status == DeliveryMethodStatus.INACTIVE && existing.code.equals(OrderService.DEFAULT_DELIVERY_METHOD, ignoreCase = true)) {
-            throw ConflictException("${OrderService.DEFAULT_DELIVERY_METHOD} is the default delivery method and cannot be deactivated")
+        if (status == DeliveryMethodStatus.INACTIVE && existing.deliveryMethodCode.equals(OrderService.DEFAULT_DELIVERY_METHOD, ignoreCase = true)) {
+            throw BadRequestException("${OrderService.DEFAULT_DELIVERY_METHOD} is the default delivery method and cannot be deactivated")
         }
         deliveryMethodRepository.updateStatus(deliveryMethodId, status)
         return getForAdmin(deliveryMethodId)
     }
 
     private fun find(deliveryMethodId: Int): DeliveryMethod =
-        deliveryMethodRepository.findById(deliveryMethodId) ?: throw NotFoundException("Delivery method not found")
+        deliveryMethodRepository.findById(deliveryMethodId) ?: throw UnableToLocateRecordException("Delivery method not found")
 
     private fun checkDays(minDays: Int?, maxDays: Int?) {
         if (minDays != null && maxDays != null && maxDays < minDays) {
@@ -97,7 +97,7 @@ class DeliveryMethodService(private val deliveryMethodRepository: DeliveryMethod
         }
     }
 
-    private fun codeInUse() = ConflictException("Delivery method code is already in use")
+    private fun codeInUse() = RecordAlreadyExistException("Delivery method code is already in use")
 
     private fun String?.blankToNull(): String? = this?.trim()?.ifEmpty { null }
 }

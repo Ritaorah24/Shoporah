@@ -34,18 +34,18 @@ class AddressTest : IntegrationTestBase() {
         return jsonMapper.writeValueAsString(fields)
     }
 
-    private fun postAddress(body: String, withToken: String = token) = mockMvc.post("/api/customer/addresses") {
+    private fun postAddress(body: String, withToken: String = token) = mockMvc.post("/dev/customer/addresses") {
         header("Authorization", "Bearer $withToken")
         contentType = MediaType.APPLICATION_JSON
         content = body
     }
 
     private fun createAddress(vararg overrides: Pair<String, Any?>): Long {
-        val result = postAddress(addressBody(*overrides)).andExpect { status { isCreated() } }.andReturn()
+        val result = postAddress(addressBody(*overrides)).andExpect { responseCode("00") }.andReturn()
         return readJson(result)["addressId"].asLong()
     }
 
-    private fun patchAddress(addressId: Long, body: String) = mockMvc.patch("/api/customer/addresses/$addressId") {
+    private fun patchAddress(addressId: Long, body: String) = mockMvc.patch("/dev/customer/addresses/$addressId") {
         header("Authorization", "Bearer $token")
         contentType = MediaType.APPLICATION_JSON
         content = body
@@ -53,23 +53,23 @@ class AddressTest : IntegrationTestBase() {
 
     /** The customer's addresses in list order, as "id:isDefault". */
     private fun listed(): List<String> {
-        val result = mockMvc.get("/api/customer/addresses") {
+        val result = mockMvc.get("/dev/customer/addresses") {
             header("Authorization", "Bearer $token")
-        }.andExpect { status { isOk() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result).toList().map { "${it["addressId"].asLong()}:${it["isDefault"].asBoolean()}" }
     }
 
     @Test
     fun `create trims the fields and the first address becomes the default`() {
         postAddress(addressBody("recipientName" to "  Ada Obi  ", "city" to " Ikeja ", "postalCode" to "  ")).andExpect {
-            status { isCreated() }
-            jsonPath("$.addressId") { isNumber() }
-            jsonPath("$.recipientName") { value("Ada Obi") }
-            jsonPath("$.city") { value("Ikeja") }
-            jsonPath("$.addressLine2") { value(null) }
-            jsonPath("$.postalCode") { value(null) }
+            responseCode("00")
+            jsonPath("$.data.addressId") { isNumber() }
+            jsonPath("$.data.recipientName") { value("Ada Obi") }
+            jsonPath("$.data.city") { value("Ikeja") }
+            jsonPath("$.data.addressLine2") { value(null) }
+            jsonPath("$.data.postalCode") { value(null) }
             // Even though isDefault was not sent.
-            jsonPath("$.isDefault") { value(true) }
+            jsonPath("$.data.isDefault") { value(true) }
         }
     }
 
@@ -85,12 +85,12 @@ class AddressTest : IntegrationTestBase() {
     @Test
     fun `missing required fields and a bad phone number return 400`() {
         postAddress(addressBody("recipientName" to null, "city" to "   ")).andExpect {
-            status { isBadRequest() }
-            jsonPath("$.fieldErrors.length()") { value(2) }
+            responseCode("106")
+            jsonPath("$.data.fieldErrors.length()") { value(2) }
         }
         postAddress(addressBody("recipientPhoneNumber" to "123")).andExpect {
-            status { isBadRequest() }
-            jsonPath("$.fieldErrors[0].field") { value("recipientPhoneNumber") }
+            responseCode("106")
+            jsonPath("$.data.fieldErrors[0].field") { value("recipientPhoneNumber") }
         }
     }
 
@@ -99,12 +99,12 @@ class AddressTest : IntegrationTestBase() {
         val addressId = createAddress("addressLine2" to "Flat 3", "postalCode" to "100001")
 
         patchAddress(addressId, json("city" to " Yaba ", "addressLine2" to "")).andExpect {
-            status { isOk() }
-            jsonPath("$.city") { value("Yaba") }
-            jsonPath("$.addressLine2") { value(null) }
-            jsonPath("$.postalCode") { value("100001") }
-            jsonPath("$.recipientName") { value("Ada Obi") }
-            jsonPath("$.isDefault") { value(true) }
+            responseCode("00")
+            jsonPath("$.data.city") { value("Yaba") }
+            jsonPath("$.data.addressLine2") { value(null) }
+            jsonPath("$.data.postalCode") { value("100001") }
+            jsonPath("$.data.recipientName") { value("Ada Obi") }
+            jsonPath("$.data.isDefault") { value(true) }
         }
     }
 
@@ -113,24 +113,24 @@ class AddressTest : IntegrationTestBase() {
         val addressId = createAddress()
 
         patchAddress(addressId, json("city" to "  ")).andExpect {
-            status { isBadRequest() }
-            jsonPath("$.fieldErrors[0].field") { value("city") }
+            responseCode("106")
+            jsonPath("$.data.fieldErrors[0].field") { value("city") }
         }
         // Rejected even next to a valid field, and nothing is changed.
         patchAddress(addressId, json("city" to "Yaba", "isDefault" to false)).andExpect {
-            status { isBadRequest() }
-            jsonPath("$.fieldErrors.length()") { value(1) }
-            jsonPath("$.fieldErrors[0].message") { value(containsString("PATCH .../default")) }
+            responseCode("106")
+            jsonPath("$.data.fieldErrors.length()") { value(1) }
+            jsonPath("$.data.fieldErrors[0].message") { value(containsString("PATCH .../default")) }
         }
-        mockMvc.get("/api/customer/addresses/$addressId") {
+        mockMvc.get("/dev/customer/addresses/$addressId") {
             header("Authorization", "Bearer $token")
         }.andExpect {
-            jsonPath("$.city") { value("Ikeja") }
-            jsonPath("$.isDefault") { value(true) }
+            jsonPath("$.data.city") { value("Ikeja") }
+            jsonPath("$.data.isDefault") { value(true) }
         }
         patchAddress(addressId, "{}").andExpect {
-            status { isBadRequest() }
-            jsonPath("$.fieldErrors[0].message") { value("send at least one field to update") }
+            responseCode("106")
+            jsonPath("$.data.fieldErrors[0].message") { value("send at least one field to update") }
         }
     }
 
@@ -140,18 +140,18 @@ class AddressTest : IntegrationTestBase() {
         val second = createAddress("isDefault" to true)
         assertEquals(listOf("$second:true", "$first:false"), listed())
 
-        mockMvc.patch("/api/customer/addresses/$first/default") {
+        mockMvc.patch("/dev/customer/addresses/$first/default") {
             header("Authorization", "Bearer $token")
         }.andExpect {
-            status { isOk() }
-            jsonPath("$.isDefault") { value(true) }
+            responseCode("00")
+            jsonPath("$.data.isDefault") { value(true) }
         }
         assertEquals(listOf("$first:true", "$second:false"), listed())
 
         // Setting the current default again changes nothing.
-        mockMvc.patch("/api/customer/addresses/$first/default") {
+        mockMvc.patch("/dev/customer/addresses/$first/default") {
             header("Authorization", "Bearer $token")
-        }.andExpect { status { isOk() } }
+        }.andExpect { responseCode("00") }
         assertEquals(listOf("$first:true", "$second:false"), listed())
     }
 
@@ -160,14 +160,14 @@ class AddressTest : IntegrationTestBase() {
         val first = createAddress()
         val second = createAddress()
 
-        mockMvc.delete("/api/customer/addresses/$first") {
+        mockMvc.delete("/dev/customer/addresses/$first") {
             header("Authorization", "Bearer $token")
-        }.andExpect { status { isNoContent() } }
+        }.andExpect { responseCode("00") }
 
         assertEquals(listOf("$second:false"), listed())
-        mockMvc.get("/api/customer/addresses/$first") {
+        mockMvc.get("/dev/customer/addresses/$first") {
             header("Authorization", "Bearer $token")
-        }.andExpect { status { isNotFound() } }
+        }.andExpect { responseCode("25") }
     }
 
     @Test
@@ -175,45 +175,45 @@ class AddressTest : IntegrationTestBase() {
         val addressId = createAddress()
         val other = newCustomerToken()
 
-        mockMvc.get("/api/customer/addresses/$addressId") {
+        mockMvc.get("/dev/customer/addresses/$addressId") {
             header("Authorization", "Bearer $other")
         }.andExpect {
-            status { isNotFound() }
-            jsonPath("$.message") { value("Address not found") }
+            responseCode("25")
+            jsonPath("$.responseMessage") { value("Address not found") }
         }
-        mockMvc.patch("/api/customer/addresses/$addressId") {
+        mockMvc.patch("/dev/customer/addresses/$addressId") {
             header("Authorization", "Bearer $other")
             contentType = MediaType.APPLICATION_JSON
             content = json("city" to "Stolen")
-        }.andExpect { status { isNotFound() } }
-        mockMvc.patch("/api/customer/addresses/$addressId/default") {
+        }.andExpect { responseCode("25") }
+        mockMvc.patch("/dev/customer/addresses/$addressId/default") {
             header("Authorization", "Bearer $other")
-        }.andExpect { status { isNotFound() } }
-        mockMvc.delete("/api/customer/addresses/$addressId") {
+        }.andExpect { responseCode("25") }
+        mockMvc.delete("/dev/customer/addresses/$addressId") {
             header("Authorization", "Bearer $other")
-        }.andExpect { status { isNotFound() } }
+        }.andExpect { responseCode("25") }
 
         // The other customer's own list is empty, and the owner's address is untouched.
-        mockMvc.get("/api/customer/addresses") {
+        mockMvc.get("/dev/customer/addresses") {
             header("Authorization", "Bearer $other")
-        }.andExpect { jsonPath("$.length()") { value(0) } }
-        mockMvc.get("/api/customer/addresses/$addressId") {
+        }.andExpect { jsonPath("$.data.length()") { value(0) } }
+        mockMvc.get("/dev/customer/addresses/$addressId") {
             header("Authorization", "Bearer $token")
         }.andExpect {
-            status { isOk() }
-            jsonPath("$.city") { value("Ikeja") }
-            jsonPath("$.isDefault") { value(true) }
+            responseCode("00")
+            jsonPath("$.data.city") { value("Ikeja") }
+            jsonPath("$.data.isDefault") { value(true) }
         }
     }
 
     @Test
     fun `an unknown address returns 404`() {
-        mockMvc.get("/api/customer/addresses/999999") {
+        mockMvc.get("/dev/customer/addresses/999999") {
             header("Authorization", "Bearer $token")
-        }.andExpect { status { isNotFound() } }
-        mockMvc.delete("/api/customer/addresses/999999") {
+        }.andExpect { responseCode("25") }
+        mockMvc.delete("/dev/customer/addresses/999999") {
             header("Authorization", "Bearer $token")
-        }.andExpect { status { isNotFound() } }
+        }.andExpect { responseCode("25") }
     }
 
     @Test
@@ -221,15 +221,15 @@ class AddressTest : IntegrationTestBase() {
         repeat(10) { createAddress() }
 
         postAddress(addressBody()).andExpect {
-            status { isConflict() }
-            jsonPath("$.message") { value("You can save at most 10 addresses") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("You can save at most 10 addresses") }
         }
         assertEquals(10, listed().size)
     }
 
     @Test
     fun `addresses need a customer token`() {
-        mockMvc.get("/api/customer/addresses").andExpect { status { isUnauthorized() } }
-        postAddress(addressBody(), withToken = loginActiveAdmin()).andExpect { status { isForbidden() } }
+        mockMvc.get("/dev/customer/addresses").andExpect { responseCode("115") }
+        postAddress(addressBody(), withToken = loginActiveAdmin()).andExpect { responseCode("107") }
     }
 }

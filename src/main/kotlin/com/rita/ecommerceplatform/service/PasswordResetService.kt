@@ -1,22 +1,20 @@
 package com.rita.ecommerceplatform.service
 
-import com.rita.ecommerceplatform.config.EmailExecutorConfig
-import com.rita.ecommerceplatform.dto.request.ForgotPasswordRequest
-import com.rita.ecommerceplatform.dto.request.ResetPasswordRequest
-import com.rita.ecommerceplatform.exception.AccountNotActiveException
+import io.github.oshai.kotlinlogging.KotlinLogging
+import com.rita.ecommerceplatform.config.PasswordResetProps
+import com.rita.ecommerceplatform.exception.AccessNotAllowedException
 import com.rita.ecommerceplatform.exception.BadRequestException
-import com.rita.ecommerceplatform.model.Customer
-import com.rita.ecommerceplatform.model.CustomerAuthStatus
-import com.rita.ecommerceplatform.model.CustomerStatus
-import com.rita.ecommerceplatform.model.NotificationStatus
-import com.rita.ecommerceplatform.model.NotificationType
-import com.rita.ecommerceplatform.repository.CustomerAuthRepository
-import com.rita.ecommerceplatform.repository.CustomerRepository
-import com.rita.ecommerceplatform.repository.NotificationRepository
+import com.rita.ecommerceplatform.model.request.ForgotPasswordRequest
+import com.rita.ecommerceplatform.model.request.ResetPasswordRequest
+import com.rita.ecommerceplatform.model.entity.Customer
+import com.rita.ecommerceplatform.model.entity.CustomerAuthStatus
+import com.rita.ecommerceplatform.model.entity.CustomerStatus
+import com.rita.ecommerceplatform.model.entity.NotificationStatus
+import com.rita.ecommerceplatform.model.entity.NotificationType
+import com.rita.ecommerceplatform.repository.database.CustomerAuthRepository
+import com.rita.ecommerceplatform.repository.database.CustomerRepository
+import com.rita.ecommerceplatform.repository.database.NotificationRepository
 import com.rita.ecommerceplatform.repository.api.NotificationChannel
-import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Qualifier
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.core.task.TaskExecutor
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
@@ -25,6 +23,8 @@ import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.Base64
 import java.util.HexFormat
+
+private val logger = KotlinLogging.logger {}
 
 /**
  * Forgot / reset password for customers (checkpoint 2.1).
@@ -40,13 +40,10 @@ class PasswordResetService(
     private val notificationService: NotificationService,
     private val channel: NotificationChannel,
     private val passwordEncoder: PasswordEncoder,
-    @Qualifier(EmailExecutorConfig.EMAIL_EXECUTOR) private val emailExecutor: TaskExecutor,
-    @Value("\${app.password-reset.token-minutes}") private val tokenMinutes: Int,
-    @Value("\${app.password-reset.cooldown-seconds}") private val cooldownSeconds: Int,
-    @Value("\${app.password-reset.url}") private val resetUrl: String,
+    private val taskExecutor: TaskExecutor,
+    private val passwordResetProps: PasswordResetProps,
 ) {
 
-    private val log = LoggerFactory.getLogger(PasswordResetService::class.java)
     private val random = SecureRandom()
 
     /**
@@ -56,14 +53,14 @@ class PasswordResetService(
      */
     fun requestReset(request: ForgotPasswordRequest) {
         val customer = customerRepository.findByEmail(request.email!!.lowercase()) ?: return
-        val auth = customerAuthRepository.findByCustomerId(customer.customerId) ?: return
-        if (customer.status != CustomerStatus.ACTIVE || auth.status != CustomerAuthStatus.ACTIVE) return
+        val auth = customerAuthRepository.findByCustomerId(customer.customerId!!) ?: return
+        if (customer.customerStatus != CustomerStatus.ACTIVE || auth.customerAuthStatus != CustomerAuthStatus.ACTIVE) return
 
         val token = newToken()
-        if (customerAuthRepository.saveResetToken(customer.customerId, hash(token), tokenMinutes, cooldownSeconds) == 0) {
+        if (customerAuthRepository.saveResetToken(customer.customerId!!, hash(token), passwordResetProps.tokenMinutes, passwordResetProps.cooldownSeconds) == 0) {
             return // a link was sent less than cooldownSeconds ago
         }
-        emailExecutor.execute { sendResetEmail(customer, token) }
+        taskExecutor.execute { sendResetEmail(customer, token) }
     }
 
     /**
@@ -74,40 +71,40 @@ class PasswordResetService(
     fun resetPassword(request: ResetPasswordRequest) {
         val tokenHash = hash(request.token!!)
         val auth = customerAuthRepository.findByValidResetTokenHash(tokenHash) ?: throw invalidLink()
-        val customer = customerRepository.findById(auth.customerId) ?: throw invalidLink()
+        val customer = customerRepository.findById(auth.customerAuthCustomerId!!) ?: throw invalidLink()
         // Only someone holding a valid link gets this far, so revealing the status here is fine.
-        if (customer.status != CustomerStatus.ACTIVE || auth.status != CustomerAuthStatus.ACTIVE) {
-            throw AccountNotActiveException()
+        if (customer.customerStatus != CustomerStatus.ACTIVE || auth.customerAuthStatus != CustomerAuthStatus.ACTIVE) {
+            throw AccessNotAllowedException("Account is not active")
         }
         if (customerAuthRepository.resetPassword(tokenHash, passwordEncoder.encode(request.newPassword!!)!!) != 1) {
             throw invalidLink()
         }
-        notificationService.queueToCustomer(NotificationType.PASSWORD_CHANGED, customer, NotificationMessages.passwordChanged(customer.firstName))
+        notificationService.queueToCustomer(NotificationType.PASSWORD_CHANGED, customer, NotificationMessages.passwordChanged(customer.customerFirstName!!))
     }
 
     private fun sendResetEmail(customer: Customer, token: String) {
         val subject = "Reset your Shoporah password"
         val body = """
-            Hi ${customer.firstName},
+            Hi ${customer.customerFirstName},
 
-            We received a request to reset your password. Use this link within $tokenMinutes minutes:
-            $resetUrl?token=$token
+            We received a request to reset your password. Use this link within ${passwordResetProps.tokenMinutes} minutes:
+            ${passwordResetProps.url}?token=$token
 
             If you didn't ask for this, ignore this email; your password stays the same.
         """.trimIndent()
 
         val (status, reason) = try {
-            channel.send(customer.email, subject, body)
+            channel.send(customer.customerEmail!!, subject, body)
             NotificationStatus.SENT to null
         } catch (e: Exception) {
-            log.warn("Password reset email for customer {} failed: {}", customer.customerId, e.message)
+            logger.warn { "Password reset email for customer ${customer.customerId} failed: ${e.message}" }
             NotificationStatus.FAILED to (e.message ?: e.javaClass.simpleName)
         }
         try {
             notificationRepository.insertLog(
                 type = NotificationType.PASSWORD_RESET,
                 channel = channel.type,
-                recipient = customer.email,
+                recipient = customer.customerEmail!!,
                 subject = subject,
                 body = LOG_BODY,
                 status = status,
@@ -116,7 +113,7 @@ class PasswordResetService(
                 adminId = null,
             )
         } catch (e: Exception) {
-            log.error("Could not record the password reset email for customer {}", customer.customerId, e)
+            logger.error(e) { "Could not record the password reset email for customer ${customer.customerId}" }
         }
     }
 

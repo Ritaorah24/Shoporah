@@ -32,11 +32,11 @@ class CouponCheckoutTest : IntegrationTestBase() {
     fun setUp() {
         adminToken = loginActiveAdmin()
         categoryId = readJson(
-            mockMvc.post("/api/admin/categories") {
+            mockMvc.post("/dev/admin/categories") {
                 header("Authorization", "Bearer $adminToken")
                 contentType = MediaType.APPLICATION_JSON
                 content = json("name" to unique("Cat"))
-            }.andExpect { status { isCreated() } }.andReturn()
+            }.andExpect { responseCode("00") }.andReturn()
         )["categoryId"].asInt()
         deliveryCode = createDeliveryMethod(1500)
     }
@@ -49,22 +49,22 @@ class CouponCheckoutTest : IntegrationTestBase() {
 
     private fun createDeliveryMethod(fee: Int): String {
         val code = "DM_${UUID.randomUUID().toString().take(8).uppercase()}"
-        mockMvc.post("/api/admin/delivery-methods") {
+        mockMvc.post("/dev/admin/delivery-methods") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("code" to code, "name" to "Test delivery", "fee" to fee)
-        }.andExpect { status { isCreated() } }
+        }.andExpect { responseCode("00") }
         return code
     }
 
     /** Creates a coupon and returns its id. */
     private fun createCoupon(code: String, vararg fields: Pair<String, Any?>): Int =
         readJson(
-            mockMvc.post("/api/admin/coupons") {
+            mockMvc.post("/dev/admin/coupons") {
                 header("Authorization", "Bearer $adminToken")
                 contentType = MediaType.APPLICATION_JSON
                 content = json("code" to code, *fields)
-            }.andExpect { status { isCreated() } }.andReturn()
+            }.andExpect { responseCode("00") }.andReturn()
         )["couponId"].asInt()
 
     private fun percentCoupon(code: String, percent: Int, vararg extra: Pair<String, Any?>): Int =
@@ -86,7 +86,7 @@ class CouponCheckoutTest : IntegrationTestBase() {
         val email = uniqueEmail()
         registerCustomer(email)
         val shopper = Shopper(email, loginCustomer(email))
-        mockMvc.post("/api/customer/addresses") {
+        mockMvc.post("/dev/customer/addresses") {
             header("Authorization", "Bearer ${shopper.token}")
             contentType = MediaType.APPLICATION_JSON
             content = json(
@@ -97,22 +97,22 @@ class CouponCheckoutTest : IntegrationTestBase() {
                 "state" to "Lagos",
                 "country" to "Nigeria",
             )
-        }.andExpect { status { isCreated() } }
+        }.andExpect { responseCode("00") }
         return shopper
     }
 
     /** Puts `quantity` units of a new product priced `price` in the cart. */
     private fun fillCart(shopper: Shopper, price: Any = 10000, quantity: Int = 2) {
-        val product = mockMvc.post("/api/admin/products") {
+        val product = mockMvc.post("/dev/admin/products") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to unique("Phone"), "sku" to unique("sku"), "categoryId" to categoryId, "price" to price, "stockQuantity" to 50)
-        }.andExpect { status { isCreated() } }.andReturn()
-        mockMvc.post("/api/customer/cart/items") {
+        }.andExpect { responseCode("00") }.andReturn()
+        mockMvc.post("/dev/customer/cart/items") {
             header("Authorization", "Bearer ${shopper.token}")
             contentType = MediaType.APPLICATION_JSON
             content = json("productId" to readJson(product)["productId"].asLong(), "quantity" to quantity)
-        }.andExpect { status { isOk() } }
+        }.andExpect { responseCode("00") }
     }
 
     private fun checkout(
@@ -121,7 +121,7 @@ class CouponCheckoutTest : IntegrationTestBase() {
         key: UUID = UUID.randomUUID(),
         delivery: String = deliveryCode,
     ): ResultActionsDsl =
-        mockMvc.post("/api/customer/orders") {
+        mockMvc.post("/dev/customer/orders") {
             header("Authorization", "Bearer ${shopper.token}")
             header("Idempotency-Key", key.toString())
             contentType = MediaType.APPLICATION_JSON
@@ -129,47 +129,47 @@ class CouponCheckoutTest : IntegrationTestBase() {
         }
 
     private fun placeOrder(shopper: Shopper, couponCode: String?): JsonNode =
-        readJson(checkout(shopper, couponCode).andExpect { status { isCreated() } }.andReturn())
+        readJson(checkout(shopper, couponCode).andExpect { responseCode("00"); jsonPath("$.responseMessage") { value("Order created") } }.andReturn())
 
     private fun preview(shopper: Shopper, code: String): ResultActionsDsl =
-        mockMvc.post("/api/customer/coupons/validate") {
+        mockMvc.post("/dev/customer/coupons/validate") {
             header("Authorization", "Bearer ${shopper.token}")
             contentType = MediaType.APPLICATION_JSON
             content = json("code" to code)
         }
 
     private fun cartSize(shopper: Shopper): Int =
-        readJson(mockMvc.get("/api/customer/cart") { header("Authorization", "Bearer ${shopper.token}") }.andReturn())["items"].size()
+        readJson(mockMvc.get("/dev/customer/cart") { header("Authorization", "Bearer ${shopper.token}") }.andReturn())["items"].size()
 
     private fun money(node: JsonNode): BigDecimal = node.decimalValue()
 
     private fun assertMoney(expected: String, actual: JsonNode) = assertEquals(0, BigDecimal(expected).compareTo(money(actual)), "expected $expected, was $actual")
 
     private fun customerCancel(shopper: Shopper, orderId: Long) {
-        mockMvc.post("/api/customer/orders/$orderId/cancel") { header("Authorization", "Bearer ${shopper.token}") }
-            .andExpect { status { isOk() } }
+        mockMvc.post("/dev/customer/orders/$orderId/cancel") { header("Authorization", "Bearer ${shopper.token}") }
+            .andExpect { responseCode("00") }
     }
 
     private fun adminCancel(orderId: Long) {
-        mockMvc.post("/api/admin/orders/$orderId/cancel") {
+        mockMvc.post("/dev/admin/orders/$orderId/cancel") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("reason" to "Out of stock at the warehouse")
-        }.andExpect { status { isOk() } }
+        }.andExpect { responseCode("00") }
     }
 
     private fun pay(shopper: Shopper, order: JsonNode): Long {
         val payment = readJson(
-            mockMvc.post("/api/customer/payments/initialize") {
+            mockMvc.post("/dev/customer/payments/initialize") {
                 header("Authorization", "Bearer ${shopper.token}")
                 contentType = MediaType.APPLICATION_JSON
                 content = json("orderReference" to order["reference"].asString())
-            }.andExpect { status { isCreated() } }.andReturn()
+            }.andExpect { responseCode("00") }.andReturn()
         )
         val reference = payment["paymentReference"].asString()
         paymentGateway.pay(reference)
-        mockMvc.get("/api/customer/payments/verify/$reference") { header("Authorization", "Bearer ${shopper.token}") }
-            .andExpect { status { isOk() } }
+        mockMvc.get("/dev/customer/payments/verify/$reference") { header("Authorization", "Bearer ${shopper.token}") }
+            .andExpect { responseCode("00") }
         return paymentGateway.initialized.single { it.reference == reference }.amountKobo
     }
 
@@ -189,12 +189,12 @@ class CouponCheckoutTest : IntegrationTestBase() {
         assertEquals(1, usageCount(couponId))
 
         assertEquals(2_000_000L, pay(shopper, order))
-        mockMvc.get("/api/admin/orders/${order["orderId"].asLong()}") { header("Authorization", "Bearer $adminToken") }.andExpect {
-            jsonPath("$.couponCode") { value(code) }
-            jsonPath("$.discountAmount") { value(1500.0) }
+        mockMvc.get("/dev/admin/orders/${order["orderId"].asLong()}") { header("Authorization", "Bearer $adminToken") }.andExpect {
+            jsonPath("$.data.couponCode") { value(code) }
+            jsonPath("$.data.discountAmount") { value(1500.0) }
         }
-        mockMvc.get("/api/customer/orders/${order["orderId"].asLong()}") { header("Authorization", "Bearer ${shopper.token}") }
-            .andExpect { jsonPath("$.couponCode") { value(code) } }
+        mockMvc.get("/dev/customer/orders/${order["orderId"].asLong()}") { header("Authorization", "Bearer ${shopper.token}") }
+            .andExpect { jsonPath("$.data.couponCode") { value(code) } }
 
         // Without a coupon there is no code and no discount.
         val plain = newShopper().also { fillCart(it) }
@@ -229,14 +229,14 @@ class CouponCheckoutTest : IntegrationTestBase() {
 
         fun expectRefused(code: String, message: String) {
             checkout(shopper, code).andExpect {
-                status { isBadRequest() }
-                jsonPath("$.message") { value(message) }
-                jsonPath("$.fieldErrors[0].field") { value("couponCode") }
-                jsonPath("$.fieldErrors[0].message") { value(message) }
+                responseCode("106")
+                jsonPath("$.responseMessage") { value(message) }
+                jsonPath("$.data.fieldErrors[0].field") { value("couponCode") }
+                jsonPath("$.data.fieldErrors[0].message") { value(message) }
             }
             preview(shopper, code).andExpect {
-                status { isBadRequest() }
-                jsonPath("$.message") { value(message) }
+                responseCode("106")
+                jsonPath("$.responseMessage") { value(message) }
             }
         }
 
@@ -245,8 +245,8 @@ class CouponCheckoutTest : IntegrationTestBase() {
 
         val deleted = uniqueCode()
         val deletedId = percentCoupon(deleted, 10)
-        mockMvc.delete("/api/admin/coupons/$deletedId") { header("Authorization", "Bearer $adminToken") }
-            .andExpect { status { isNoContent() } }
+        mockMvc.delete("/dev/admin/coupons/$deletedId") { header("Authorization", "Bearer $adminToken") }
+            .andExpect { responseCode("00") }
         expectRefused(deleted, "Coupon $deleted does not exist")
 
         val inactive = uniqueCode()
@@ -285,18 +285,18 @@ class CouponCheckoutTest : IntegrationTestBase() {
         val shopper = newShopper()
 
         preview(shopper, code).andExpect {
-            status { isBadRequest() }
-            jsonPath("$.message") { value("Cart is empty") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("Cart is empty") }
         }
 
         fillCart(shopper) // 20,000; 15% = 3,000
         repeat(2) {
             preview(shopper, code.lowercase()).andExpect {
-                status { isOk() }
-                jsonPath("$.code") { value(code) }
-                jsonPath("$.subtotal") { value(20000.0) }
-                jsonPath("$.discountAmount") { value(3000.0) }
-                jsonPath("$.subtotalAfterDiscount") { value(17000.0) }
+                responseCode("00")
+                jsonPath("$.data.code") { value(code) }
+                jsonPath("$.data.subtotal") { value(20000.0) }
+                jsonPath("$.data.discountAmount") { value(3000.0) }
+                jsonPath("$.data.subtotalAfterDiscount") { value(17000.0) }
             }
         }
         assertEquals(0, usageCount(couponId))
@@ -304,13 +304,13 @@ class CouponCheckoutTest : IntegrationTestBase() {
         assertMoney("3000", placeOrder(shopper, code)["discountAmount"])
         assertEquals(1, usageCount(couponId))
 
-        preview(newShopper(), code).andExpect { status { isBadRequest() } } // empty cart is checked first
-        mockMvc.post("/api/customer/coupons/validate") {
+        preview(newShopper(), code).andExpect { responseCode("106") } // empty cart is checked first
+        mockMvc.post("/dev/customer/coupons/validate") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("code" to code)
-        }.andExpect { status { isForbidden() } }
-        preview(shopper, " ").andExpect { status { isBadRequest() } }
+        }.andExpect { responseCode("107") }
+        preview(shopper, " ").andExpect { responseCode("106") }
     }
 
     @Test
@@ -321,10 +321,10 @@ class CouponCheckoutTest : IntegrationTestBase() {
         fillCart(shopper)
         val key = UUID.randomUUID()
 
-        checkout(shopper, code, key).andExpect { status { isCreated() } }
+        checkout(shopper, code, key).andExpect { responseCode("00"); jsonPath("$.responseMessage") { value("Order created") } }
         checkout(shopper, code, key).andExpect {
-            status { isOk() }
-            jsonPath("$.couponCode") { value(code) }
+            responseCode("00"); jsonPath("$.responseMessage") { value("Successful") }
+            jsonPath("$.data.couponCode") { value(code) }
         }
         assertEquals(1, usageCount(couponId))
     }
@@ -338,15 +338,15 @@ class CouponCheckoutTest : IntegrationTestBase() {
         val pool = Executors.newFixedThreadPool(5)
         val results = try {
             pool.invokeAll(shoppers.map { shopper ->
-                Callable { checkout(shopper, code).andReturn().response.let { it.status to it.contentAsString } }
+                Callable { checkout(shopper, code).andReturn().response.let { jsonMapper.readTree(it.contentAsString).let { b -> b["responseCode"].asString() to it.contentAsString } } }
             }).map { it.get() }
         } finally {
             pool.shutdown()
         }
 
-        assertEquals(listOf(201, 400, 400, 400, 400), results.map { it.first }.sorted())
-        results.filter { it.first == 400 }.forEach { (_, body) ->
-            assertEquals("Coupon $code has reached its usage limit", jsonMapper.readTree(body)["message"].asString())
+        assertEquals(listOf("00", "106", "106", "106", "106"), results.map { it.first }.sorted())
+        results.filter { it.first == "106" }.forEach { (_, body) ->
+            assertEquals("Coupon $code has reached its usage limit", jsonMapper.readTree(body)["responseMessage"].asString())
         }
         assertEquals(1, usageCount(couponId))
     }
@@ -359,7 +359,7 @@ class CouponCheckoutTest : IntegrationTestBase() {
         val second = newShopper().also { fillCart(it) }
 
         val order = placeOrder(first, code)
-        checkout(second, code).andExpect { status { isBadRequest() } }
+        checkout(second, code).andExpect { responseCode("106") }
 
         customerCancel(first, order["orderId"].asLong())
         assertEquals(0, usageCount(couponId))
@@ -396,9 +396,9 @@ class CouponCheckoutTest : IntegrationTestBase() {
         fillCart(shopper)
 
         checkout(shopper, full, delivery = freeDelivery).andExpect {
-            status { isBadRequest() }
-            jsonPath("$.message") { value("Coupon $full would make the order free, which is not supported") }
-            jsonPath("$.fieldErrors[0].field") { value("couponCode") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("Coupon $full would make the order free, which is not supported") }
+            jsonPath("$.data.fieldErrors[0].field") { value("couponCode") }
         }
         assertEquals(0, usageCount(fullId))
         assertEquals(1, cartSize(shopper))

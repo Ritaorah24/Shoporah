@@ -25,7 +25,7 @@ import kotlin.test.assertEquals
  */
 class PaymentWebhookTest : IntegrationTestBase() {
 
-    @Value("\${app.paystack.secret-key}")
+    @Value("\${paystack.secret-key}")
     private lateinit var secretKey: String
 
     private lateinit var adminToken: String
@@ -48,16 +48,16 @@ class PaymentWebhookTest : IntegrationTestBase() {
     private fun unique(prefix: String) = "$prefix-${UUID.randomUUID().toString().take(8)}"
 
     private fun createCategory(): Int {
-        val result = mockMvc.post("/api/admin/categories") {
+        val result = mockMvc.post("/dev/admin/categories") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to unique("Cat"))
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["categoryId"].asInt()
     }
 
     private fun createProduct(stock: Int): Long {
-        val result = mockMvc.post("/api/admin/products") {
+        val result = mockMvc.post("/dev/admin/products") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json(
@@ -67,12 +67,12 @@ class PaymentWebhookTest : IntegrationTestBase() {
                 "price" to 1000,
                 "stockQuantity" to stock,
             )
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["productId"].asLong()
     }
 
     private fun createAddress() {
-        mockMvc.post("/api/customer/addresses") {
+        mockMvc.post("/dev/customer/addresses") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json(
@@ -83,31 +83,31 @@ class PaymentWebhookTest : IntegrationTestBase() {
                 "state" to "Lagos",
                 "country" to "Nigeria",
             )
-        }.andExpect { status { isCreated() } }
+        }.andExpect { responseCode("00") }
     }
 
     /** One new product (stock 10), quantity 2 in the cart, then checkout. */
     private fun placeOrder(): Placed {
         val productId = createProduct(stock = 10)
-        mockMvc.post("/api/customer/cart/items") {
+        mockMvc.post("/dev/customer/cart/items") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json("productId" to productId, "quantity" to 2)
-        }.andExpect { status { isOk() } }
-        val result = mockMvc.post("/api/customer/orders") {
+        }.andExpect { responseCode("00") }
+        val result = mockMvc.post("/dev/customer/orders") {
             header("Authorization", "Bearer $token")
             header("Idempotency-Key", UUID.randomUUID().toString())
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return Placed(readJson(result), listOf(productId))
     }
 
     /** Starts a payment for the order and returns its reference. */
     private fun initialize(placed: Placed): String {
-        val result = mockMvc.post("/api/customer/payments/initialize") {
+        val result = mockMvc.post("/dev/customer/payments/initialize") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json("orderReference" to placed.reference)
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["paymentReference"].asString()
     }
 
@@ -122,7 +122,7 @@ class PaymentWebhookTest : IntegrationTestBase() {
 
     /** Sends the body to the webhook, signed correctly unless another signature (or none) is given. */
     private fun webhook(body: String, signature: String? = sign(body), bearer: String? = null): ResultActionsDsl =
-        mockMvc.post("/api/webhooks/paystack") {
+        mockMvc.post("/webhook/paystack") {
             contentType = MediaType.APPLICATION_JSON
             content = body
             signature?.let { header("x-paystack-signature", it) }
@@ -130,7 +130,7 @@ class PaymentWebhookTest : IntegrationTestBase() {
         }
 
     private fun verify(paymentReference: String): ResultActionsDsl =
-        mockMvc.get("/api/customer/payments/verify/$paymentReference") { header("Authorization", "Bearer $token") }
+        mockMvc.get("/dev/customer/payments/verify/$paymentReference") { header("Authorization", "Bearer $token") }
 
     private fun stock(productId: Long): Int =
         jdbcClient.sql("SELECT productstockquantity FROM public.ec_product WHERE productid = :id")
@@ -195,7 +195,7 @@ class PaymentWebhookTest : IntegrationTestBase() {
 
         webhook(body, signature = null).andExpect {
             status { isUnauthorized() }
-            jsonPath("$.message") { value("Invalid webhook signature") }
+            jsonPath("$.responseMessage") { value("Invalid webhook signature") }
         }
         webhook(body, signature = "0".repeat(128)).andExpect { status { isUnauthorized() } }
         webhook(body, signature = sign(body, key = "sk_test_someone_else")).andExpect { status { isUnauthorized() } }
@@ -227,16 +227,16 @@ class PaymentWebhookTest : IntegrationTestBase() {
         paymentGateway.pay(first)
         webhook(event(first)).andExpect { status { isOk() } }
         verify(first).andExpect {
-            status { isOk() }
-            jsonPath("$.paymentStatus") { value("SUCCESS") }
-            jsonPath("$.orderStatus") { value("CONFIRMED") }
+            responseCode("00")
+            jsonPath("$.data.paymentStatus") { value("SUCCESS") }
+            jsonPath("$.data.orderStatus") { value("CONFIRMED") }
         }
         assertConfirmedOnce(webhookFirst)
 
         val verifyFirst = placeOrder()
         val second = initialize(verifyFirst)
         paymentGateway.pay(second)
-        verify(second).andExpect { status { isOk() } }
+        verify(second).andExpect { responseCode("00"); jsonPath("$.responseMessage") { value("Successful") } }
         webhook(event(second)).andExpect { status { isOk() } }
         assertConfirmedOnce(verifyFirst)
     }
@@ -251,15 +251,15 @@ class PaymentWebhookTest : IntegrationTestBase() {
         val statuses = try {
             pool.invokeAll(
                 listOf(
-                    Callable { webhook(event(reference)).andReturn().response.status },
-                    Callable { verify(reference).andReturn().response.status },
+                    Callable { webhook(event(reference)).andReturn().response.status == 200 },
+                    Callable { verify(reference).andReturn().responseCodeOf() == "00" },
                 )
             ).map { it.get() }
         } finally {
             pool.shutdown()
         }
 
-        assertEquals(listOf(200, 200), statuses)
+        assertEquals(listOf(true, true), statuses)
         assertConfirmedOnce(placed)
     }
 

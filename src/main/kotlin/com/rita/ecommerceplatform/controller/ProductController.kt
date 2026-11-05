@@ -1,7 +1,6 @@
 package com.rita.ecommerceplatform.controller
 
-import com.rita.ecommerceplatform.dto.response.PageResponse
-import com.rita.ecommerceplatform.dto.response.ProductResponse
+import com.rita.ecommerceplatform.model.response.BaseDataResponse
 import com.rita.ecommerceplatform.service.Paging
 import com.rita.ecommerceplatform.service.ProductFilters
 import com.rita.ecommerceplatform.service.ProductService
@@ -13,10 +12,10 @@ import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import java.math.BigDecimal
 
-/** Public: no token needed (SecurityConfig permits GET on every /api/products URL). */
+/** Public: no token needed (SecurityConfig permits GET on every /{stage}/products URL). */
 @Tag(name = "Products", description = "Browse active products")
 @RestController
-@RequestMapping("/api/products")
+@RequestMapping("/{stage}/products")
 class ProductController(private val productService: ProductService) {
 
     /**
@@ -33,9 +32,13 @@ class ProductController(private val productService: ProductService) {
         @RequestParam(required = false) maxPrice: BigDecimal?,
         @RequestParam(required = false) inStock: Boolean?,
         @RequestParam(required = false) sort: String?,
-    ): PageResponse<ProductResponse> =
-        productService.listPublic(page, size, search, categoryId, ProductFilters(minPrice, maxPrice, inStock, sort))
+        @PathVariable stage: String,
+    ): BaseDataResponse {
+        return BaseDataResponse("00", "Successful", productService.listPublic(page, size, search, categoryId, ProductFilters(minPrice, maxPrice, inStock, sort)))
+    }
 
     @GetMapping("/{productId}")
-    fun get(@PathVariable productId: Long): ProductResponse = productService.getPublic(productId)
+    fun get(@PathVariable productId: Long, @PathVariable stage: String): BaseDataResponse {
+        return BaseDataResponse("00", "Successful", productService.getPublic(productId))
+    }
 }

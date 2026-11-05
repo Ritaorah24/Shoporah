@@ -1,12 +1,12 @@
 package com.rita.ecommerceplatform.service
 
-import com.rita.ecommerceplatform.dto.request.UpdateProfileRequest
-import com.rita.ecommerceplatform.dto.response.CustomerProfileResponse
-import com.rita.ecommerceplatform.exception.AccountNotActiveException
-import com.rita.ecommerceplatform.exception.NotFoundException
-import com.rita.ecommerceplatform.model.Customer
-import com.rita.ecommerceplatform.model.CustomerStatus
-import com.rita.ecommerceplatform.repository.CustomerRepository
+import com.rita.ecommerceplatform.exception.AccessNotAllowedException
+import com.rita.ecommerceplatform.exception.UnableToLocateRecordException
+import com.rita.ecommerceplatform.model.request.UpdateProfileRequest
+import com.rita.ecommerceplatform.model.response.CustomerProfileResponse
+import com.rita.ecommerceplatform.model.entity.Customer
+import com.rita.ecommerceplatform.model.entity.CustomerStatus
+import com.rita.ecommerceplatform.repository.database.CustomerRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
@@ -23,9 +23,9 @@ class CustomerService(private val customerRepository: CustomerRepository) {
 
         customerRepository.updateProfile(
             customerId = customerId,
-            firstName = request.firstName?.trim() ?: existing.firstName,
-            lastName = request.lastName?.trim() ?: existing.lastName,
-            phoneNumber = request.phoneNumber ?: existing.phoneNumber,
+            firstName = request.firstName?.trim() ?: existing.customerFirstName!!,
+            lastName = request.lastName?.trim() ?: existing.customerLastName!!,
+            phoneNumber = request.phoneNumber ?: existing.customerPhoneNumber,
         )
 
         val updated = customerRepository.findById(customerId)
@@ -38,8 +38,8 @@ class CustomerService(private val customerRepository: CustomerRepository) {
      * the token was issued. These endpoints read the row anyway, so the check is free.
      */
     private fun findActiveCustomer(customerId: Long): Customer {
-        val customer = customerRepository.findById(customerId) ?: throw NotFoundException("Customer not found")
-        if (customer.status != CustomerStatus.ACTIVE) throw AccountNotActiveException()
+        val customer = customerRepository.findById(customerId) ?: throw UnableToLocateRecordException("Customer not found")
+        if (customer.customerStatus != CustomerStatus.ACTIVE) throw AccessNotAllowedException("Account is not active")
         return customer
     }
 }

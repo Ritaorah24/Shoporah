@@ -1,18 +1,15 @@
 package com.rita.ecommerceplatform.controller
 
-import com.rita.ecommerceplatform.config.OpenApiConfig
-import com.rita.ecommerceplatform.dto.request.InitializePaymentRequest
-import com.rita.ecommerceplatform.dto.response.PaymentInitResponse
-import com.rita.ecommerceplatform.dto.response.PaymentVerifyResponse
-import com.rita.ecommerceplatform.exception.AccountNotActiveException
+import com.rita.ecommerceplatform.model.response.BaseDataResponse
+import com.rita.ecommerceplatform.exception.AccessNotAllowedException
+import com.rita.ecommerceplatform.config.SwaggerConfig
+import com.rita.ecommerceplatform.model.request.InitializePaymentRequest
 import com.rita.ecommerceplatform.security.CurrentUser
 import com.rita.ecommerceplatform.security.UserType
 import com.rita.ecommerceplatform.service.PaymentService
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
-import org.springframework.http.HttpStatus
-import org.springframework.http.ResponseEntity
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.web.bind.annotation.GetMapping
@@ -24,23 +21,24 @@ import org.springframework.web.bind.annotation.RestController
 
 /** Paying for the logged-in customer's orders. */
 @Tag(name = "Payments", description = "Paying for the logged-in customer's orders")
-@SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+@SecurityRequirement(name = SwaggerConfig.BEARER_AUTH)
 @RestController
-@RequestMapping("/api/customer/payments")
+@RequestMapping("/{stage}/customer/payments")
 class PaymentController(private val paymentService: PaymentService) {
 
     /**
      * Starts paying for a PENDING order and returns the Paystack page to send the customer to.
-     * 201 when a new payment is started; 200 with the same payment when one is already open for the order.
+     * responseMessage "Payment started" when new; "Successful" with the same payment when one is already open for the order.
      * The order is only marked paid after the payment is verified.
      */
     @PostMapping("/initialize")
     fun initialize(
         @AuthenticationPrincipal jwt: Jwt,
         @Valid @RequestBody request: InitializePaymentRequest,
-    ): ResponseEntity<PaymentInitResponse> {
+        @PathVariable stage: String,
+    ): BaseDataResponse {
         val result = paymentService.initialize(customerId(jwt), request.orderReference!!)
-        return ResponseEntity.status(if (result.created) HttpStatus.CREATED else HttpStatus.OK).body(result.payment)
+        return BaseDataResponse("00", if (result.created) "Payment started" else "Successful", result.payment)
     }
 
     /**
@@ -49,13 +47,14 @@ class PaymentController(private val paymentService: PaymentService) {
      * a payment is settled only once.
      */
     @GetMapping("/verify/{reference}")
-    fun verify(@AuthenticationPrincipal jwt: Jwt, @PathVariable reference: String): PaymentVerifyResponse =
-        paymentService.verify(customerId(jwt), reference.trim())
+    fun verify(@AuthenticationPrincipal jwt: Jwt, @PathVariable reference: String, @PathVariable stage: String): BaseDataResponse {
+        return BaseDataResponse("00", "Successful", paymentService.verify(customerId(jwt), reference.trim()))
+    }
 
-    // Roles already restrict /api/customer/** to customer tokens; this guards against a mis-issued token.
+    // Roles already restrict /{stage}/customer/** to customer tokens; this guards against a mis-issued token.
     private fun customerId(jwt: Jwt): Long {
         val currentUser = CurrentUser.from(jwt)
-        if (currentUser.userType != UserType.CUSTOMER) throw AccountNotActiveException()
+        if (currentUser.userType != UserType.CUSTOMER) throw AccessNotAllowedException("Account is not active")
         return currentUser.id
     }
 }

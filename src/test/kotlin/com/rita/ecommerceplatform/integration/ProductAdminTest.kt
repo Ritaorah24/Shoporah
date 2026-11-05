@@ -30,11 +30,11 @@ class ProductAdminTest : IntegrationTestBase() {
     private fun unique(prefix: String) = "$prefix-${UUID.randomUUID().toString().take(8)}"
 
     private fun createCategory(): Int {
-        val result = mockMvc.post("/api/admin/categories") {
+        val result = mockMvc.post("/dev/admin/categories") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to unique("Cat"))
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["categoryId"].asInt()
     }
 
@@ -50,18 +50,18 @@ class ProductAdminTest : IntegrationTestBase() {
         return jsonMapper.writeValueAsString(fields)
     }
 
-    private fun postProduct(body: String) = mockMvc.post("/api/admin/products") {
+    private fun postProduct(body: String) = mockMvc.post("/dev/admin/products") {
         header("Authorization", "Bearer $adminToken")
         contentType = MediaType.APPLICATION_JSON
         content = body
     }
 
     private fun createProduct(vararg overrides: Pair<String, Any?>): Long {
-        val result = postProduct(productBody(*overrides)).andExpect { status { isCreated() } }.andReturn()
+        val result = postProduct(productBody(*overrides)).andExpect { responseCode("00") }.andReturn()
         return readJson(result)["productId"].asLong()
     }
 
-    private fun patchProduct(productId: Long, body: String) = mockMvc.patch("/api/admin/products/$productId") {
+    private fun patchProduct(productId: Long, body: String) = mockMvc.patch("/dev/admin/products/$productId") {
         header("Authorization", "Bearer $adminToken")
         contentType = MediaType.APPLICATION_JSON
         content = body
@@ -82,10 +82,10 @@ class ProductAdminTest : IntegrationTestBase() {
             .list()
 
     private fun listedProductIds(vararg params: Pair<String, Any>): List<Long> {
-        val result = mockMvc.get("/api/admin/products") {
+        val result = mockMvc.get("/dev/admin/products") {
             header("Authorization", "Bearer $adminToken")
             params.forEach { (name, value) -> param(name, value.toString()) }
-        }.andExpect { status { isOk() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["content"].toList().map { it["productId"].asLong() }
     }
 
@@ -93,16 +93,16 @@ class ProductAdminTest : IntegrationTestBase() {
     fun `create stores the product, uppercases the SKU and logs the initial stock`() {
         val sku = unique("abc")
         val result = postProduct(productBody("sku" to "  $sku  ", "price" to 1500.50, "discountPrice" to 1200)).andExpect {
-            status { isCreated() }
-            jsonPath("$.sku") { value(sku.uppercase()) }
-            jsonPath("$.categoryId") { value(categoryId) }
-            jsonPath("$.categoryName") { isString() }
-            jsonPath("$.price") { value(1500.50) }
-            jsonPath("$.discountPrice") { value(1200.00) }
-            jsonPath("$.sellingPrice") { value(1200.00) }
-            jsonPath("$.stockQuantity") { value(10) }
-            jsonPath("$.status") { value("ACTIVE") }
-            jsonPath("$.createdByAdminId") { value(seedAdminId()) }
+            responseCode("00")
+            jsonPath("$.data.sku") { value(sku.uppercase()) }
+            jsonPath("$.data.categoryId") { value(categoryId) }
+            jsonPath("$.data.categoryName") { isString() }
+            jsonPath("$.data.price") { value(1500.50) }
+            jsonPath("$.data.discountPrice") { value(1200.00) }
+            jsonPath("$.data.sellingPrice") { value(1200.00) }
+            jsonPath("$.data.stockQuantity") { value(10) }
+            jsonPath("$.data.status") { value("ACTIVE") }
+            jsonPath("$.data.createdByAdminId") { value(seedAdminId()) }
         }.andReturn()
 
         assertEquals(listOf("RESTOCK 10 10"), movements(readJson(result)["productId"].asLong()))
@@ -111,10 +111,10 @@ class ProductAdminTest : IntegrationTestBase() {
     @Test
     fun `create with no stock logs nothing and selling price falls back to price`() {
         val result = postProduct(productBody("stockQuantity" to null)).andExpect {
-            status { isCreated() }
-            jsonPath("$.stockQuantity") { value(0) }
-            jsonPath("$.discountPrice") { value(null) }
-            jsonPath("$.sellingPrice") { value(1000.00) }
+            responseCode("00")
+            jsonPath("$.data.stockQuantity") { value(0) }
+            jsonPath("$.data.discountPrice") { value(null) }
+            jsonPath("$.data.sellingPrice") { value(1000.00) }
         }.andReturn()
 
         assertEquals(emptyList(), movements(readJson(result)["productId"].asLong()))
@@ -126,77 +126,77 @@ class ProductAdminTest : IntegrationTestBase() {
         createProduct("sku" to sku.uppercase())
 
         postProduct(productBody("sku" to sku.lowercase())).andExpect {
-            status { isConflict() }
-            jsonPath("$.message") { value("SKU is already in use") }
+            responseCode("117")
+            jsonPath("$.responseMessage") { value("SKU is already in use") }
         }
     }
 
     @Test
     fun `invalid fields return 400 with field errors`() {
         postProduct(productBody("sku" to "has space")).andExpect {
-            status { isBadRequest() }
-            jsonPath("$.fieldErrors[0].field") { value("sku") }
+            responseCode("106")
+            jsonPath("$.data.fieldErrors[0].field") { value("sku") }
         }
         postProduct(productBody("price" to 0)).andExpect {
-            status { isBadRequest() }
-            jsonPath("$.fieldErrors[0].field") { value("price") }
-            jsonPath("$.fieldErrors[0].message") { value("must be greater than 0") }
+            responseCode("106")
+            jsonPath("$.data.fieldErrors[0].field") { value("price") }
+            jsonPath("$.data.fieldErrors[0].message") { value("must be greater than 0") }
         }
         postProduct(productBody("price" to 10.555)).andExpect {
-            status { isBadRequest() }
-            jsonPath("$.fieldErrors[0].field") { value("price") }
+            responseCode("106")
+            jsonPath("$.data.fieldErrors[0].field") { value("price") }
         }
         postProduct(productBody("stockQuantity" to -1)).andExpect {
-            status { isBadRequest() }
-            jsonPath("$.fieldErrors[0].field") { value("stockQuantity") }
+            responseCode("106")
+            jsonPath("$.data.fieldErrors[0].field") { value("stockQuantity") }
         }
         postProduct(productBody("name" to null, "categoryId" to null)).andExpect {
-            status { isBadRequest() }
-            jsonPath("$.fieldErrors.length()") { value(2) }
+            responseCode("106")
+            jsonPath("$.data.fieldErrors.length()") { value(2) }
         }
     }
 
     @Test
     fun `a discount not below the price returns 400`() {
         postProduct(productBody("discountPrice" to 1000)).andExpect {
-            status { isBadRequest() }
-            jsonPath("$.message") { value("discountPrice must be less than price") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("discountPrice must be less than price") }
         }
     }
 
     @Test
     fun `the category must exist and not be deleted, but may be inactive`() {
         postProduct(productBody("categoryId" to 999999)).andExpect {
-            status { isBadRequest() }
-            jsonPath("$.message") { value("Category 999999 does not exist") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("Category 999999 does not exist") }
         }
 
         val deletedCategory = createCategory()
-        mockMvc.delete("/api/admin/categories/$deletedCategory") {
+        mockMvc.delete("/dev/admin/categories/$deletedCategory") {
             header("Authorization", "Bearer $adminToken")
-        }.andExpect { status { isNoContent() } }
-        postProduct(productBody("categoryId" to deletedCategory)).andExpect { status { isBadRequest() } }
+        }.andExpect { responseCode("00") }
+        postProduct(productBody("categoryId" to deletedCategory)).andExpect { responseCode("106") }
 
-        mockMvc.patch("/api/admin/categories/$categoryId/status") {
+        mockMvc.patch("/dev/admin/categories/$categoryId/status") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("status" to "INACTIVE")
-        }.andExpect { status { isOk() } }
-        postProduct(productBody()).andExpect { status { isCreated() } }
+        }.andExpect { responseCode("00") }
+        postProduct(productBody()).andExpect { responseCode("00") }
     }
 
     @Test
     fun `PATCH changes only the fields sent`() {
         val productId = createProduct("description" to "Old")
         patchProduct(productId, json("name" to "New name")).andExpect {
-            status { isOk() }
-            jsonPath("$.name") { value("New name") }
-            jsonPath("$.description") { value("Old") }
-            jsonPath("$.price") { value(1000.00) }
-            jsonPath("$.stockQuantity") { value(10) }
+            responseCode("00")
+            jsonPath("$.data.name") { value("New name") }
+            jsonPath("$.data.description") { value("Old") }
+            jsonPath("$.data.price") { value(1000.00) }
+            jsonPath("$.data.stockQuantity") { value(10) }
         }
         patchProduct(productId, json("description" to "")).andExpect {
-            jsonPath("$.description") { value(null) }
+            jsonPath("$.data.description") { value(null) }
         }
     }
 
@@ -206,8 +206,8 @@ class ProductAdminTest : IntegrationTestBase() {
 
         // Only the price is sent, but it would fall below the existing discount.
         patchProduct(productId, json("price" to 700)).andExpect {
-            status { isBadRequest() }
-            jsonPath("$.message") { value("discountPrice must be less than price") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("discountPrice must be less than price") }
         }
     }
 
@@ -216,13 +216,13 @@ class ProductAdminTest : IntegrationTestBase() {
         val productId = createProduct("discountPrice" to 800)
 
         patchProduct(productId, json("discountPrice" to 500, "clearDiscountPrice" to true)).andExpect {
-            status { isBadRequest() }
+            responseCode("106")
             content { string(containsString("send either discountPrice or clearDiscountPrice, not both")) }
         }
         patchProduct(productId, json("clearDiscountPrice" to true)).andExpect {
-            status { isOk() }
-            jsonPath("$.discountPrice") { value(null) }
-            jsonPath("$.sellingPrice") { value(1000.00) }
+            responseCode("00")
+            jsonPath("$.data.discountPrice") { value(null) }
+            jsonPath("$.data.sellingPrice") { value(1000.00) }
         }
     }
 
@@ -230,11 +230,11 @@ class ProductAdminTest : IntegrationTestBase() {
     fun `every stock change is logged with its direction and the stock after it`() {
         val productId = createProduct("stockQuantity" to 50)
 
-        patchProduct(productId, json("stockQuantity" to 45)).andExpect { status { isOk() } }
-        patchProduct(productId, json("stockQuantity" to 60)).andExpect { status { isOk() } }
+        patchProduct(productId, json("stockQuantity" to 45)).andExpect { responseCode("00") }
+        patchProduct(productId, json("stockQuantity" to 60)).andExpect { responseCode("00") }
         // No stock change: no log row.
-        patchProduct(productId, json("name" to "Renamed")).andExpect { status { isOk() } }
-        patchProduct(productId, json("stockQuantity" to 60)).andExpect { status { isOk() } }
+        patchProduct(productId, json("name" to "Renamed")).andExpect { responseCode("00") }
+        patchProduct(productId, json("stockQuantity" to 60)).andExpect { responseCode("00") }
 
         assertEquals(listOf("RESTOCK 50 50", "ADJUSTMENT -5 45", "RESTOCK 15 60"), movements(productId))
     }
@@ -243,11 +243,11 @@ class ProductAdminTest : IntegrationTestBase() {
     fun `PATCH rejects unknown fields and empty bodies`() {
         val productId = createProduct()
         patchProduct(productId, json("status" to "INACTIVE")).andExpect {
-            status { isBadRequest() }
+            responseCode("106")
             content { string(containsString("use PATCH .../status to change the status")) }
         }
         patchProduct(productId, "{}").andExpect {
-            status { isBadRequest() }
+            responseCode("106")
             content { string(containsString("send at least one field to update")) }
         }
     }
@@ -260,32 +260,32 @@ class ProductAdminTest : IntegrationTestBase() {
         createProduct("sku" to otherSku)
 
         patchProduct(productId, json("sku" to ownSku.lowercase())).andExpect {
-            status { isOk() }
-            jsonPath("$.sku") { value(ownSku.uppercase()) }
+            responseCode("00")
+            jsonPath("$.data.sku") { value(ownSku.uppercase()) }
         }
-        patchProduct(productId, json("sku" to otherSku)).andExpect { status { isConflict() } }
+        patchProduct(productId, json("sku" to otherSku)).andExpect { responseCode("117") }
     }
 
     @Test
     fun `status changes and the admin list status filter`() {
         val activeId = createProduct()
         val inactiveId = createProduct()
-        mockMvc.patch("/api/admin/products/$inactiveId/status") {
+        mockMvc.patch("/dev/admin/products/$inactiveId/status") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("status" to "inactive")
         }.andExpect {
-            status { isOk() }
-            jsonPath("$.status") { value("INACTIVE") }
+            responseCode("00")
+            jsonPath("$.data.status") { value("INACTIVE") }
         }
 
         assertEquals(setOf(activeId, inactiveId), listedProductIds("categoryId" to categoryId).toSet())
         assertEquals(listOf(activeId), listedProductIds("categoryId" to categoryId, "status" to "ACTIVE"))
         assertEquals(listOf(inactiveId), listedProductIds("categoryId" to categoryId, "status" to "inactive"))
 
-        mockMvc.get("/api/admin/products?status=DELETED") {
+        mockMvc.get("/dev/admin/products?status=DELETED") {
             header("Authorization", "Bearer $adminToken")
-        }.andExpect { status { isBadRequest() } }
+        }.andExpect { responseCode("106") }
     }
 
     @Test
@@ -293,51 +293,51 @@ class ProductAdminTest : IntegrationTestBase() {
         val sku = unique("gone")
         val productId = createProduct("sku" to sku)
 
-        mockMvc.delete("/api/admin/products/$productId") {
+        mockMvc.delete("/dev/admin/products/$productId") {
             header("Authorization", "Bearer $adminToken")
-        }.andExpect { status { isNoContent() } }
+        }.andExpect { responseCode("00") }
 
-        mockMvc.get("/api/admin/products/$productId") {
+        mockMvc.get("/dev/admin/products/$productId") {
             header("Authorization", "Bearer $adminToken")
         }.andExpect {
-            status { isNotFound() }
-            jsonPath("$.message") { value("Product not found") }
+            responseCode("25")
+            jsonPath("$.responseMessage") { value("Product not found") }
         }
-        patchProduct(productId, json("name" to "Back?")).andExpect { status { isNotFound() } }
-        mockMvc.delete("/api/admin/products/$productId") {
+        patchProduct(productId, json("name" to "Back?")).andExpect { responseCode("25") }
+        mockMvc.delete("/dev/admin/products/$productId") {
             header("Authorization", "Bearer $adminToken")
-        }.andExpect { status { isNotFound() } }
+        }.andExpect { responseCode("25") }
 
         assertTrue(productId !in listedProductIds("categoryId" to categoryId))
-        postProduct(productBody("sku" to sku)).andExpect { status { isConflict() } }
+        postProduct(productBody("sku" to sku)).andExpect { responseCode("117") }
 
         // With its only product deleted, the category can now be deleted (D2).
-        mockMvc.delete("/api/admin/categories/$categoryId") {
+        mockMvc.delete("/dev/admin/categories/$categoryId") {
             header("Authorization", "Bearer $adminToken")
-        }.andExpect { status { isNoContent() } }
+        }.andExpect { responseCode("00") }
     }
 
     @Test
     fun `the list is paged, newest first, with the page size capped at 50`() {
         val ids = (1..3).map { createProduct() }
 
-        val result = mockMvc.get("/api/admin/products?categoryId=$categoryId&page=0&size=2") {
+        val result = mockMvc.get("/dev/admin/products?categoryId=$categoryId&page=0&size=2") {
             header("Authorization", "Bearer $adminToken")
         }.andExpect {
-            status { isOk() }
-            jsonPath("$.page") { value(0) }
-            jsonPath("$.size") { value(2) }
-            jsonPath("$.totalElements") { value(3) }
-            jsonPath("$.totalPages") { value(2) }
+            responseCode("00")
+            jsonPath("$.data.page") { value(0) }
+            jsonPath("$.data.size") { value(2) }
+            jsonPath("$.data.totalElements") { value(3) }
+            jsonPath("$.data.totalPages") { value(2) }
         }.andReturn()
         assertEquals(listOf(ids[2], ids[1]), readJson(result)["content"].toList().map { it["productId"].asLong() })
         assertEquals(listOf(ids[0]), listedProductIds("categoryId" to categoryId, "page" to "1", "size" to "2"))
 
-        mockMvc.get("/api/admin/products?size=1000&page=-3") {
+        mockMvc.get("/dev/admin/products?size=1000&page=-3") {
             header("Authorization", "Bearer $adminToken")
         }.andExpect {
-            jsonPath("$.size") { value(50) }
-            jsonPath("$.page") { value(0) }
+            jsonPath("$.data.size") { value(50) }
+            jsonPath("$.data.page") { value(0) }
         }
     }
 
@@ -353,44 +353,44 @@ class ProductAdminTest : IntegrationTestBase() {
 
     @Test
     fun `customers cannot manage products`() {
-        mockMvc.post("/api/admin/products") {
+        mockMvc.post("/dev/admin/products") {
             header("Authorization", "Bearer ${newCustomerToken()}")
             contentType = MediaType.APPLICATION_JSON
             content = productBody()
-        }.andExpect { status { isForbidden() } }
+        }.andExpect { responseCode("107") }
 
-        mockMvc.get("/api/admin/products").andExpect { status { isUnauthorized() } }
+        mockMvc.get("/dev/admin/products").andExpect { responseCode("115") }
     }
 
     // Acceptance check 1.2: "price and stock cannot be negative", on create and on edit.
     @Test
     fun `negative price, discount and stock are rejected on create and on PATCH`() {
         postProduct(productBody("price" to -5)).andExpect {
-            status { isBadRequest() }
-            jsonPath("$.fieldErrors[0].field") { value("price") }
+            responseCode("106")
+            jsonPath("$.data.fieldErrors[0].field") { value("price") }
         }
         postProduct(productBody("discountPrice" to -1)).andExpect {
-            status { isBadRequest() }
-            jsonPath("$.fieldErrors[0].field") { value("discountPrice") }
+            responseCode("106")
+            jsonPath("$.data.fieldErrors[0].field") { value("discountPrice") }
         }
 
         val productId = createProduct("lowStockThreshold" to 5)
         listOf("price" to -5, "discountPrice" to -1, "stockQuantity" to -1, "lowStockThreshold" to -1).forEach { (field, badValue) ->
             patchProduct(productId, json(field to badValue)).andExpect {
-                status { isBadRequest() }
-                jsonPath("$.fieldErrors[0].field") { value(field) }
+                responseCode("106")
+                jsonPath("$.data.fieldErrors[0].field") { value(field) }
             }
         }
 
         // Nothing was changed by the rejected requests.
-        mockMvc.get("/api/admin/products/$productId") {
+        mockMvc.get("/dev/admin/products/$productId") {
             header("Authorization", "Bearer $adminToken")
         }.andExpect {
-            status { isOk() }
-            jsonPath("$.price") { value(1000.00) }
-            jsonPath("$.discountPrice") { value(null) }
-            jsonPath("$.stockQuantity") { value(10) }
-            jsonPath("$.lowStockThreshold") { value(5) }
+            responseCode("00")
+            jsonPath("$.data.price") { value(1000.00) }
+            jsonPath("$.data.discountPrice") { value(null) }
+            jsonPath("$.data.stockQuantity") { value(10) }
+            jsonPath("$.data.lowStockThreshold") { value(5) }
         }
     }
 
@@ -400,26 +400,26 @@ class ProductAdminTest : IntegrationTestBase() {
         val productId = createProduct()
         val customerToken = newCustomerToken()
 
-        mockMvc.patch("/api/admin/products/$productId") {
+        mockMvc.patch("/dev/admin/products/$productId") {
             header("Authorization", "Bearer $customerToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to "Hacked")
-        }.andExpect { status { isForbidden() } }
-        mockMvc.patch("/api/admin/products/$productId/status") {
+        }.andExpect { responseCode("107") }
+        mockMvc.patch("/dev/admin/products/$productId/status") {
             header("Authorization", "Bearer $customerToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("status" to "INACTIVE")
-        }.andExpect { status { isForbidden() } }
-        mockMvc.delete("/api/admin/products/$productId") {
+        }.andExpect { responseCode("107") }
+        mockMvc.delete("/dev/admin/products/$productId") {
             header("Authorization", "Bearer $customerToken")
-        }.andExpect { status { isForbidden() } }
+        }.andExpect { responseCode("107") }
 
-        mockMvc.get("/api/admin/products/$productId") {
+        mockMvc.get("/dev/admin/products/$productId") {
             header("Authorization", "Bearer $adminToken")
         }.andExpect {
-            status { isOk() }
-            jsonPath("$.name") { value("Test phone") }
-            jsonPath("$.status") { value("ACTIVE") }
+            responseCode("00")
+            jsonPath("$.data.name") { value("Test phone") }
+            jsonPath("$.data.status") { value("ACTIVE") }
         }
     }
 }

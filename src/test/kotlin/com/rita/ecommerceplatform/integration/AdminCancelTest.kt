@@ -40,16 +40,16 @@ class AdminCancelTest : IntegrationTestBase() {
     private fun unique(prefix: String) = "$prefix-${UUID.randomUUID().toString().take(8)}"
 
     private fun createCategory(): Int {
-        val result = mockMvc.post("/api/admin/categories") {
+        val result = mockMvc.post("/dev/admin/categories") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to unique("Cat"))
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["categoryId"].asInt()
     }
 
     private fun createProduct(stock: Int = 10): Long {
-        val result = mockMvc.post("/api/admin/products") {
+        val result = mockMvc.post("/dev/admin/products") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json(
@@ -59,12 +59,12 @@ class AdminCancelTest : IntegrationTestBase() {
                 "price" to 1000,
                 "stockQuantity" to stock,
             )
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["productId"].asLong()
     }
 
     private fun createAddress() {
-        mockMvc.post("/api/customer/addresses") {
+        mockMvc.post("/dev/customer/addresses") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json(
@@ -75,55 +75,55 @@ class AdminCancelTest : IntegrationTestBase() {
                 "state" to "Lagos",
                 "country" to "Nigeria",
             )
-        }.andExpect { status { isCreated() } }
+        }.andExpect { responseCode("00") }
     }
 
     /** Each product, `quantity` of it in the cart, then checkout. */
     private fun placeOrder(productIds: List<Long> = listOf(createProduct(), createProduct()), quantity: Int = 2): Placed {
         productIds.forEach { productId ->
-            mockMvc.post("/api/customer/cart/items") {
+            mockMvc.post("/dev/customer/cart/items") {
                 header("Authorization", "Bearer $token")
                 contentType = MediaType.APPLICATION_JSON
                 content = json("productId" to productId, "quantity" to quantity)
-            }.andExpect { status { isOk() } }
+            }.andExpect { responseCode("00") }
         }
-        val result = mockMvc.post("/api/customer/orders") {
+        val result = mockMvc.post("/dev/customer/orders") {
             header("Authorization", "Bearer $token")
             header("Idempotency-Key", UUID.randomUUID().toString())
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         val order = readJson(result)
         return Placed(order["orderId"].asLong(), order["reference"].asString(), productIds)
     }
 
     private fun initialize(placed: Placed): String {
-        val result = mockMvc.post("/api/customer/payments/initialize") {
+        val result = mockMvc.post("/dev/customer/payments/initialize") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json("orderReference" to placed.reference)
-        }.andExpect { status { isCreated() } }.andReturn()
+        }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["paymentReference"].asString()
     }
 
     private fun payAndVerify(placed: Placed) {
         val reference = initialize(placed)
         paymentGateway.pay(reference)
-        mockMvc.get("/api/customer/payments/verify/$reference") { header("Authorization", "Bearer $token") }
-            .andExpect { status { isOk() } }
+        mockMvc.get("/dev/customer/payments/verify/$reference") { header("Authorization", "Bearer $token") }
+            .andExpect { responseCode("00"); jsonPath("$.responseMessage") { value("Successful") } }
     }
 
     /** A paid order: 2 of each of two products (stock 10 → 8). */
     private fun paidOrder(): Placed = placeOrder().also(::payAndVerify)
 
     private fun moveTo(orderId: Long, status: String) {
-        mockMvc.patch("/api/admin/orders/$orderId/status") {
+        mockMvc.patch("/dev/admin/orders/$orderId/status") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("status" to status)
-        }.andExpect { status { isOk() } }
+        }.andExpect { responseCode("00") }
     }
 
     private fun cancel(orderId: Long, reason: String? = "Customer called to cancel", withToken: String? = adminToken): ResultActionsDsl =
-        mockMvc.post("/api/admin/orders/$orderId/cancel") {
+        mockMvc.post("/dev/admin/orders/$orderId/cancel") {
             withToken?.let { header("Authorization", "Bearer $it") }
             contentType = MediaType.APPLICATION_JSON
             content = json("reason" to reason)
@@ -156,8 +156,8 @@ class AdminCancelTest : IntegrationTestBase() {
     }
 
     private fun canCancel(orderId: Long): Boolean {
-        val result = mockMvc.get("/api/admin/orders/$orderId") { header("Authorization", "Bearer $adminToken") }
-            .andExpect { status { isOk() } }.andReturn()
+        val result = mockMvc.get("/dev/admin/orders/$orderId") { header("Authorization", "Bearer $adminToken") }
+            .andExpect { responseCode("00") }.andReturn()
         return readJson(result)["canCancel"].asBoolean()
     }
 
@@ -167,14 +167,14 @@ class AdminCancelTest : IntegrationTestBase() {
         placed.productIds.forEach { assertEquals(8, stock(it)) }
 
         cancel(placed.orderId, reason = "  Item damaged in the warehouse  ").andExpect {
-            status { isOk() }
-            jsonPath("$.status") { value("CANCELLED") }
-            jsonPath("$.paymentStatus") { value("PAID") }
-            jsonPath("$.canCancel") { value(false) }
-            jsonPath("$.statusHistory[2].status") { value("CANCELLED") }
-            jsonPath("$.statusHistory[2].changedBy") { value("ADMIN") }
-            jsonPath("$.statusHistory[2].adminId") { value(seedAdminId()) }
-            jsonPath("$.statusHistory[2].note") {
+            responseCode("00")
+            jsonPath("$.data.status") { value("CANCELLED") }
+            jsonPath("$.data.paymentStatus") { value("PAID") }
+            jsonPath("$.data.canCancel") { value(false) }
+            jsonPath("$.data.statusHistory[2].status") { value("CANCELLED") }
+            jsonPath("$.data.statusHistory[2].changedBy") { value("ADMIN") }
+            jsonPath("$.data.statusHistory[2].adminId") { value(seedAdminId()) }
+            jsonPath("$.data.statusHistory[2].note") {
                 value("${OrderCancellation.CANCELLED_BY_ADMIN}: Item damaged in the warehouse. ${OrderCancellation.REFUND_NEEDED}")
             }
         }
@@ -195,7 +195,7 @@ class AdminCancelTest : IntegrationTestBase() {
         moveTo(placed.orderId, "PROCESSING")
         assertTrue(canCancel(placed.orderId))
 
-        cancel(placed.orderId).andExpect { status { isOk() } }
+        cancel(placed.orderId).andExpect { responseCode("00") }
 
         assertEquals("CANCELLED" to "PAID", orderState(placed.orderId))
         placed.productIds.forEach { assertEquals(10, stock(it)) }
@@ -209,11 +209,11 @@ class AdminCancelTest : IntegrationTestBase() {
         assertTrue(canCancel(placed.orderId))
 
         cancel(placed.orderId).andExpect {
-            status { isOk() }
-            jsonPath("$.paymentStatus") { value("UNPAID") }
-            jsonPath("$.statusHistory[1].note") { value("${OrderCancellation.CANCELLED_BY_ADMIN}: Customer called to cancel") }
-            jsonPath("$.payments[0].status") { value("FAILED") }
-            jsonPath("$.payments[0].gatewayResponse") { value(OrderCancellation.PAYMENT_CLOSED_BY_ADMIN) }
+            responseCode("00")
+            jsonPath("$.data.paymentStatus") { value("UNPAID") }
+            jsonPath("$.data.statusHistory[1].note") { value("${OrderCancellation.CANCELLED_BY_ADMIN}: Customer called to cancel") }
+            jsonPath("$.data.payments[0].status") { value("FAILED") }
+            jsonPath("$.data.payments[0].gatewayResponse") { value(OrderCancellation.PAYMENT_CLOSED_BY_ADMIN) }
         }
 
         assertEquals(1, paymentGateway.verifyCalls(paymentReference))
@@ -228,14 +228,14 @@ class AdminCancelTest : IntegrationTestBase() {
         paymentGateway.pay(initialize(placed))
 
         cancel(placed.orderId).andExpect {
-            status { isConflict() }
-            jsonPath("$.message") { value("This order was just paid; check it and cancel again if needed") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("This order was just paid; check it and cancel again if needed") }
         }
         assertEquals("CONFIRMED" to "PAID", orderState(placed.orderId))
         placed.productIds.forEach { assertEquals(8, stock(it)) }
 
         // Cancelling again, now knowingly, restores the stock and flags the refund.
-        cancel(placed.orderId).andExpect { status { isOk() } }
+        cancel(placed.orderId).andExpect { responseCode("00") }
         placed.productIds.forEach { assertEquals(10, stock(it)) }
         assertTrue(cancelEmails(placed.reference).single().contains("will be refunded"))
     }
@@ -248,11 +248,11 @@ class AdminCancelTest : IntegrationTestBase() {
         assertEquals(false, canCancel(placed.orderId))
 
         cancel(placed.orderId).andExpect {
-            status { isConflict() }
-            jsonPath("$.message") { value("Shipped or delivered orders cannot be cancelled; use a refund instead") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("Shipped or delivered orders cannot be cancelled; use a refund instead") }
         }
         moveTo(placed.orderId, "DELIVERED")
-        cancel(placed.orderId).andExpect { status { isConflict() } }
+        cancel(placed.orderId).andExpect { responseCode("106") }
 
         assertEquals("DELIVERED" to "PAID", orderState(placed.orderId))
         placed.productIds.forEach { assertEquals(8, stock(it)) }
@@ -263,10 +263,10 @@ class AdminCancelTest : IntegrationTestBase() {
     fun `cancelling twice restores the stock once and sends one email`() {
         val placed = paidOrder()
 
-        cancel(placed.orderId).andExpect { status { isOk() } }
+        cancel(placed.orderId).andExpect { responseCode("00") }
         cancel(placed.orderId).andExpect {
-            status { isConflict() }
-            jsonPath("$.message") { value("Order status cannot change from CANCELLED to CANCELLED") }
+            responseCode("106")
+            jsonPath("$.responseMessage") { value("Order status cannot change from CANCELLED to CANCELLED") }
         }
 
         placed.productIds.forEach { assertEquals(10, stock(it)) }
@@ -280,12 +280,12 @@ class AdminCancelTest : IntegrationTestBase() {
 
         val pool = Executors.newFixedThreadPool(2)
         val statuses = try {
-            pool.invokeAll(List(2) { Callable { cancel(placed.orderId).andReturn().response.status } }).map { it.get() }
+            pool.invokeAll(List(2) { Callable { cancel(placed.orderId).andReturn().responseCodeOf() } }).map { it.get() }
         } finally {
             pool.shutdown()
         }
 
-        assertEquals(listOf(200, 409), statuses.sorted())
+        assertEquals(listOf("00", "106"), statuses.sorted())
         placed.productIds.forEach { assertEquals(10, stock(it)) }
         assertEquals(2, restores(placed.orderId).size)
     }
@@ -293,7 +293,7 @@ class AdminCancelTest : IntegrationTestBase() {
     @Test
     fun `the database rejects a second restore for the same order and product`() {
         val placed = paidOrder()
-        cancel(placed.orderId).andExpect { status { isOk() } }
+        cancel(placed.orderId).andExpect { responseCode("00") }
 
         assertFailsWith<DuplicateKeyException> {
             jdbcClient.sql(
@@ -330,13 +330,13 @@ class AdminCancelTest : IntegrationTestBase() {
     fun `a missing or too long reason, a customer token and an unknown order are rejected`() {
         val placed = paidOrder()
 
-        cancel(placed.orderId, reason = null).andExpect { status { isBadRequest() } }
-        cancel(placed.orderId, reason = "   ").andExpect { status { isBadRequest() } }
-        cancel(placed.orderId, reason = "x".repeat(501)).andExpect { status { isBadRequest() } }
-        cancel(placed.orderId, withToken = token).andExpect { status { isForbidden() } }
+        cancel(placed.orderId, reason = null).andExpect { responseCode("106") }
+        cancel(placed.orderId, reason = "   ").andExpect { responseCode("106") }
+        cancel(placed.orderId, reason = "x".repeat(501)).andExpect { responseCode("106") }
+        cancel(placed.orderId, withToken = token).andExpect { responseCode("107") }
         cancel(999_999_999).andExpect {
-            status { isNotFound() }
-            jsonPath("$.message") { value("Order not found") }
+            responseCode("25")
+            jsonPath("$.responseMessage") { value("Order not found") }
         }
         assertEquals("CONFIRMED" to "PAID", orderState(placed.orderId))
     }

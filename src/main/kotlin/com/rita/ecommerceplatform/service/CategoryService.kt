@@ -1,15 +1,16 @@
 package com.rita.ecommerceplatform.service
 
-import com.rita.ecommerceplatform.dto.request.CreateCategoryRequest
-import com.rita.ecommerceplatform.dto.request.UpdateCategoryRequest
-import com.rita.ecommerceplatform.dto.request.UpdateStatusRequest
-import com.rita.ecommerceplatform.dto.response.AdminCategoryResponse
-import com.rita.ecommerceplatform.dto.response.CategoryResponse
-import com.rita.ecommerceplatform.exception.ConflictException
-import com.rita.ecommerceplatform.exception.NotFoundException
-import com.rita.ecommerceplatform.model.Category
-import com.rita.ecommerceplatform.model.CategoryStatus
-import com.rita.ecommerceplatform.repository.CategoryRepository
+import com.rita.ecommerceplatform.exception.BadRequestException
+import com.rita.ecommerceplatform.exception.RecordAlreadyExistException
+import com.rita.ecommerceplatform.exception.UnableToLocateRecordException
+import com.rita.ecommerceplatform.model.request.CreateCategoryRequest
+import com.rita.ecommerceplatform.model.request.UpdateCategoryRequest
+import com.rita.ecommerceplatform.model.request.UpdateStatusRequest
+import com.rita.ecommerceplatform.model.response.AdminCategoryResponse
+import com.rita.ecommerceplatform.model.response.CategoryResponse
+import com.rita.ecommerceplatform.model.entity.Category
+import com.rita.ecommerceplatform.model.entity.CategoryStatus
+import com.rita.ecommerceplatform.repository.database.CategoryRepository
 import org.springframework.dao.DuplicateKeyException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -48,12 +49,12 @@ class CategoryService(private val categoryRepository: CategoryRepository) {
     @Transactional
     fun update(categoryId: Int, request: UpdateCategoryRequest): AdminCategoryResponse {
         val existing = findNotDeleted(categoryId)
-        val name = request.name ?: existing.name
-        if (categoryRepository.existsByName(name, excludingCategoryId = categoryId)) throw nameInUse()
+        val name = request.name ?: existing.categoryName
+        if (categoryRepository.existsByName(name!!, excludingCategoryId = categoryId)) throw nameInUse()
 
-        val description = if (request.description != null) request.description.blankToNull() else existing.description
+        val description = if (request.description != null) request.description.blankToNull() else existing.categoryDescription
         try {
-            categoryRepository.update(categoryId, name, description)
+            categoryRepository.update(categoryId, name!!, description)
         } catch (e: DuplicateKeyException) {
             throw nameInUse()
         }
@@ -73,7 +74,7 @@ class CategoryService(private val categoryRepository: CategoryRepository) {
     fun delete(categoryId: Int) {
         findNotDeleted(categoryId)
         if (categoryRepository.hasProducts(categoryId)) {
-            throw ConflictException("Category still has products: move or delete them first, or deactivate the category instead")
+            throw BadRequestException("Category still has products: move or delete them first, or deactivate the category instead")
         }
         categoryRepository.updateStatus(categoryId, CategoryStatus.DELETED)
     }
@@ -81,12 +82,12 @@ class CategoryService(private val categoryRepository: CategoryRepository) {
     /** Deleted categories behave as if they do not exist (D3). */
     private fun findNotDeleted(categoryId: Int): Category {
         val category = categoryRepository.findById(categoryId)
-        if (category == null || category.status == CategoryStatus.DELETED) throw NotFoundException("Category not found")
+        if (category == null || category.categoryStatus == CategoryStatus.DELETED) throw UnableToLocateRecordException("Category not found")
         return category
     }
 
     // Covers deleted categories too: their names stay taken (unique constraint includes them).
-    private fun nameInUse() = ConflictException("Category name is already in use")
+    private fun nameInUse() = RecordAlreadyExistException("Category name is already in use")
 
     private fun String?.blankToNull(): String? = this?.trim()?.ifEmpty { null }
 }

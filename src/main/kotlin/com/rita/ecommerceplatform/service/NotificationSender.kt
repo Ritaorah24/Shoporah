@@ -1,12 +1,14 @@
 package com.rita.ecommerceplatform.service
 
-import com.rita.ecommerceplatform.repository.NotificationRepository
+import io.github.oshai.kotlinlogging.KotlinLogging
+import com.rita.ecommerceplatform.config.NotificationProps
+import com.rita.ecommerceplatform.repository.database.NotificationRepository
 import com.rita.ecommerceplatform.repository.api.NotificationChannel
-import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.transaction.support.TransactionTemplate
+
+private val logger = KotlinLogging.logger {}
 
 /**
  * Delivers the outbox in the background (SchedulingConfig switches the schedule on; tests call sendDue directly).
@@ -20,35 +22,30 @@ class NotificationSender(
     // A single channel while EMAIL is the only type; pick by NotificationChannel.type once there are more.
     private val channel: NotificationChannel,
     private val transactionTemplate: TransactionTemplate,
-    @Value("\${app.notifications.max-attempts}") private val maxAttempts: Int,
-    @Value("\${app.notifications.retry-delay-seconds}") private val retryDelaySeconds: Int,
-    @Value("\${app.notifications.batch-size}") private val batchSize: Int,
+    private val notificationProps: NotificationProps,
 ) {
 
-    private val log = LoggerFactory.getLogger(NotificationSender::class.java)
-
     /** Sends due rows until none are left or batch-size is reached; returns how many rows were tried. */
-    @Scheduled(fixedDelayString = "\${app.notifications.poll-delay-ms}")
+    @Scheduled(fixedDelayString = "\${notifications.poll-delay-ms}")
     fun sendDue(): Int {
         var tried = 0
-        while (tried < batchSize && sendNext()) tried++
+        while (tried < notificationProps.batchSize && sendNext()) tried++
         return tried
     }
 
     private fun sendNext(): Boolean = transactionTemplate.execute {
-        val notification = notificationRepository.lockNextDue(retryDelaySeconds) ?: return@execute false
-        if (notification.channel != channel.type) {
-            notificationRepository.markAttemptFailed(notification.notificationId, "No ${notification.channel} channel", maxAttempts)
+        val notification = notificationRepository.lockNextDue(notificationProps.retryDelaySeconds) ?: return@execute false
+        if (notification.notificationChannel != channel.type) {
+            notificationRepository.markAttemptFailed(notification.notificationId!!, "No ${notification.notificationChannel} channel", notificationProps.maxAttempts)
             return@execute true
         }
         try {
-            channel.send(notification.recipient, notification.subject, notification.body)
-            notificationRepository.markSent(notification.notificationId)
+            channel.send(notification.notificationRecipient!!, notification.notificationSubject, notification.notificationBody)
+            notificationRepository.markSent(notification.notificationId!!)
         } catch (e: Exception) {
             // The reason is saved for support; the body is not logged (it can hold personal details).
-            log.warn("Notification {} ({}) failed on attempt {}: {}",
-                notification.notificationId, notification.type, notification.attemptCount + 1, e.message)
-            notificationRepository.markAttemptFailed(notification.notificationId, e.message ?: e.javaClass.simpleName, maxAttempts)
+            logger.warn { "Notification ${notification.notificationId} (${notification.notificationType}) failed on attempt ${notification.notificationAttemptCount!! + 1}: ${e.message}" }
+            notificationRepository.markAttemptFailed(notification.notificationId!!, e.message ?: e.javaClass.simpleName, notificationProps.maxAttempts)
         }
         true
     } ?: false

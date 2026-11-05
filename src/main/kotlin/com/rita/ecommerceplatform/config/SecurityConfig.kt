@@ -41,25 +41,25 @@ class SecurityConfig(
             csrf { disable() }
             sessionManagement { sessionCreationPolicy = SessionCreationPolicy.STATELESS }
             authorizeHttpRequests {
-                authorize("/api/auth/**", permitAll)
-                // Only the admin login is open; other /api/admin/auth/* endpoints need a token.
-                authorize("/api/admin/auth/login", permitAll)
+                authorize("/*/auth/**", permitAll)
+                // Only the admin login is open; other /{stage}/admin/auth/* endpoints need a token.
+                authorize("/*/admin/auth/login", permitAll)
                 authorize("/v3/api-docs/**", permitAll)
                 authorize("/swagger-ui/**", permitAll)
                 authorize("/swagger-ui.html", permitAll)
-                // Spring forwards errors (400, 409, ...) to /error; it must be open or every error turns into 401.
+                // Spring forwards unhandled errors to /error; it must be open or they would all answer as a bad token.
                 authorize("/error", permitAll)
                 // Public catalogue browsing: GET only, so writes to these URLs still need a token.
-                authorize(HttpMethod.GET, "/api/categories/**", permitAll)
-                authorize(HttpMethod.GET, "/api/products/**", permitAll)
-                authorize(HttpMethod.GET, "/api/delivery-methods/**", permitAll)
+                authorize(HttpMethod.GET, "/*/categories/**", permitAll)
+                authorize(HttpMethod.GET, "/*/products/**", permitAll)
+                authorize(HttpMethod.GET, "/*/delivery-methods/**", permitAll)
                 // Paystack has no token; the webhook checks Paystack's signature instead.
-                authorize(HttpMethod.POST, "/api/webhooks/paystack", permitAll)
+                authorize(HttpMethod.POST, "/webhook/paystack", permitAll)
 
-                authorize("/api/customer/**", hasRole("CUSTOMER"))
+                authorize("/*/customer/**", hasRole("CUSTOMER"))
                 // Allowed even while MUST_CHANGE: it is how the admin clears it (D4).
-                authorize(HttpMethod.PATCH, "/api/admin/auth/password", hasAnyRole("ADMIN", "SUPER_ADMIN"))
-                authorize("/api/admin/**", adminWithChangedPassword)
+                authorize(HttpMethod.PATCH, "/*/admin/auth/password", hasAnyRole("ADMIN", "SUPER_ADMIN"))
+                authorize("/*/admin/**", adminWithChangedPassword)
 
                 authorize(anyRequest, authenticated)
             }

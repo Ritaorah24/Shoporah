@@ -1,32 +1,33 @@
 package com.rita.ecommerceplatform.service
 
-import com.rita.ecommerceplatform.dto.response.PaymentInitResponse
-import com.rita.ecommerceplatform.dto.response.PaymentVerifyResponse
+import io.github.oshai.kotlinlogging.KotlinLogging
+import com.rita.ecommerceplatform.config.PaystackProps
 import com.rita.ecommerceplatform.exception.BadRequestException
-import com.rita.ecommerceplatform.exception.ConflictException
-import com.rita.ecommerceplatform.exception.InvalidCredentialsException
-import com.rita.ecommerceplatform.exception.NotFoundException
-import com.rita.ecommerceplatform.model.Order
-import com.rita.ecommerceplatform.model.OrderPaymentStatus
-import com.rita.ecommerceplatform.model.OrderStatus
-import com.rita.ecommerceplatform.model.Payment
-import com.rita.ecommerceplatform.model.PaymentStatus
-import com.rita.ecommerceplatform.repository.CustomerRepository
-import com.rita.ecommerceplatform.repository.OrderRepository
-import com.rita.ecommerceplatform.repository.PaymentRepository
+import com.rita.ecommerceplatform.exception.IncorrectPasswordException
+import com.rita.ecommerceplatform.exception.UnableToLocateRecordException
+import com.rita.ecommerceplatform.model.response.PaymentInitResponse
+import com.rita.ecommerceplatform.model.response.PaymentVerifyResponse
+import com.rita.ecommerceplatform.model.entity.Order
+import com.rita.ecommerceplatform.model.entity.OrderPaymentStatus
+import com.rita.ecommerceplatform.model.entity.OrderStatus
+import com.rita.ecommerceplatform.model.entity.Payment
+import com.rita.ecommerceplatform.model.entity.PaymentStatus
+import com.rita.ecommerceplatform.repository.database.CustomerRepository
+import com.rita.ecommerceplatform.repository.database.OrderRepository
+import com.rita.ecommerceplatform.repository.database.PaymentRepository
 import com.rita.ecommerceplatform.repository.api.GatewayInitRequest
 import com.rita.ecommerceplatform.repository.api.PaymentGateway
-import com.rita.ecommerceplatform.repository.api.paystack.PaystackWebhookEvent
-import com.rita.ecommerceplatform.repository.api.paystack.PaystackWebhookVerifier
-import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Value
+import com.rita.ecommerceplatform.model.request.paystack.PaystackWebhookEvent
+import com.rita.ecommerceplatform.security.PaystackWebhookVerifier
 import org.springframework.stereotype.Service
 import org.springframework.transaction.support.TransactionTemplate
 import tools.jackson.databind.json.JsonMapper
 import java.math.BigDecimal
 import java.util.UUID
 
-/** The payment and whether this request started it (201) or found an attempt already open for the order (200). */
+private val logger = KotlinLogging.logger {}
+
+/** The payment and whether this request started it ("Payment started") or found an attempt already open for the order ("Successful"). */
 data class PaymentInitResult(val payment: PaymentInitResponse, val created: Boolean)
 
 @Service
@@ -43,10 +44,8 @@ class PaymentService(
     // initialize must run outside any transaction, and @Transactional on a method called from inside
     // this same class would be ignored (Spring applies it through a proxy that such calls bypass).
     private val transactionTemplate: TransactionTemplate,
-    @Value("\${app.paystack.callback-url}") private val callbackUrl: String,
+    private val paystackProps: PaystackProps,
 ) {
-
-    private val log = LoggerFactory.getLogger(PaymentService::class.java)
 
     /**
      * Starts paying for one of the customer's PENDING, UNPAID orders and returns the provider's payment page.
@@ -55,28 +54,28 @@ class PaymentService(
      */
     fun initialize(customerId: Long, orderReference: String): PaymentInitResult {
         val start = transactionTemplate.execute { startAttempt(customerId, orderReference) }!!
-        if (!start.isNew) return PaymentInitResult(PaymentInitResponse.from(start.payment, start.order.reference), created = false)
+        if (!start.isNew) return PaymentInitResult(PaymentInitResponse.from(start.payment, start.order.orderReference!!), created = false)
 
         // Outside any transaction: Paystack can take up to 10 s, and no lock is held meanwhile.
         val page = try {
             paymentGateway.initialize(
                 GatewayInitRequest(
-                    reference = start.payment.reference,
+                    reference = start.payment.paymentReference!!,
                     email = start.email!!,
-                    amountKobo = toKobo(start.payment.amount),
-                    currency = start.payment.currency,
-                    callbackUrl = callbackUrl.ifBlank { null },
+                    amountKobo = toKobo(start.payment.paymentAmount!!),
+                    currency = start.payment.paymentCurrency!!,
+                    callbackUrl = paystackProps.callbackUrl.ifBlank { null },
                 ),
             )
         } catch (e: Exception) {
             // One statement, so it commits on its own. The order can then be paid with a new attempt.
-            paymentRepository.markFailed(start.payment.paymentId, NOT_STARTED)
+            paymentRepository.markFailed(start.payment.paymentId!!, NOT_STARTED)
             throw e
         }
 
-        paymentRepository.saveAuthorizationUrl(start.payment.paymentId, page.authorizationUrl)
-        val payment = paymentRepository.findById(start.payment.paymentId)!!
-        return PaymentInitResult(PaymentInitResponse.from(payment, start.order.reference), created = true)
+        paymentRepository.saveAuthorizationUrl(start.payment.paymentId!!, page.authorizationUrl)
+        val payment = paymentRepository.findById(start.payment.paymentId!!)!!
+        return PaymentInitResult(PaymentInitResponse.from(payment, start.order.orderReference!!), created = true)
     }
 
     /**
@@ -86,15 +85,15 @@ class PaymentService(
      */
     fun verify(customerId: Long, paymentReference: String): PaymentVerifyResponse {
         val payment = paymentRepository.findByReferenceForCustomer(paymentReference, customerId)
-            ?: throw NotFoundException("Payment not found")
-        val settled = if (payment.status != PaymentStatus.PENDING) {
+            ?: throw UnableToLocateRecordException("Payment not found")
+        val settled = if (payment.paymentStatus != PaymentStatus.PENDING) {
             payment
         } else {
             // Outside any transaction, like initialize: no lock is held while the provider answers.
-            val result = paymentGateway.verify(payment.reference)
-            paymentSettlement.settle(payment.paymentId, result)
+            val result = paymentGateway.verify(payment.paymentReference!!)
+            paymentSettlement.settle(payment.paymentId!!, result)
         }
-        val order = orderRepository.findById(settled.orderId, customerId)!!
+        val order = orderRepository.findById(settled.paymentOrderId!!, customerId)!!
         return PaymentVerifyResponse.from(settled, order)
     }
 
@@ -107,11 +106,11 @@ class PaymentService(
      */
     fun handleWebhook(body: ByteArray, signature: String?) {
         if (!webhookVerifier.isValid(body, signature)) {
-            log.warn("Rejected a Paystack webhook with a missing or wrong signature")
-            throw InvalidCredentialsException("Invalid webhook signature")
+            logger.warn { "Rejected a Paystack webhook with a missing or wrong signature" }
+            throw IncorrectPasswordException("Invalid webhook signature")
         }
         val event = PaystackWebhookEvent.parse(jsonMapper, body) ?: run {
-            log.error("Paystack webhook has a valid signature but an unreadable body: {}", body.toString(Charsets.UTF_8).take(500))
+            logger.error { "Paystack webhook has a valid signature but an unreadable body: ${body.toString(Charsets.UTF_8).take(500)}" }
             throw BadRequestException("Unreadable webhook body")
         }
         if (event.isRefundEvent) {
@@ -119,41 +118,41 @@ class PaymentService(
             return
         }
         if (!event.isChargeSuccess || event.reference == null) {
-            log.info("Ignored Paystack webhook {} for {}", event.event, event.reference)
+            logger.info { "Ignored Paystack webhook ${event.event} for ${event.reference}" }
             return
         }
 
         // Not ours (e.g. another app on the same Paystack account): retrying would not help, so it is not an error.
         val payment = paymentRepository.findByReference(event.reference) ?: run {
-            log.warn("Paystack webhook {} for unknown reference {}", event.event, event.reference)
+            logger.warn { "Paystack webhook ${event.event} for unknown reference ${event.reference}" }
             return
         }
-        if (payment.status != PaymentStatus.PENDING) return
+        if (payment.paymentStatus != PaymentStatus.PENDING) return
 
         // Outside any transaction, like verify. If Paystack cannot be reached this is a 502 and Paystack retries.
-        val result = paymentGateway.verify(payment.reference)
-        val settled = paymentSettlement.settle(payment.paymentId, result)
-        log.info("Paystack webhook {} settled payment {} as {}", event.event, settled.reference, settled.status)
+        val result = paymentGateway.verify(payment.paymentReference!!)
+        val settled = paymentSettlement.settle(payment.paymentId!!, result)
+        logger.info { "Paystack webhook ${event.event} settled payment ${settled.paymentReference} as ${settled.paymentStatus}" }
     }
 
     /** Runs in one short transaction: checks the order and returns its open attempt or a new PENDING one. */
     private fun startAttempt(customerId: Long, orderReference: String): Start {
         // Payment starts for the same order run one at a time; another customer's order is "not found" too.
-        val order = orderRepository.lockByReference(orderReference, customerId) ?: throw NotFoundException("Order not found")
-        if (order.status != OrderStatus.PENDING || order.paymentStatus != OrderPaymentStatus.UNPAID) {
-            throw ConflictException("This order cannot be paid")
+        val order = orderRepository.lockByReference(orderReference, customerId) ?: throw UnableToLocateRecordException("Order not found")
+        if (order.orderStatus != OrderStatus.PENDING || order.orderPaymentStatus != OrderPaymentStatus.UNPAID) {
+            throw BadRequestException("This order cannot be paid")
         }
 
         // An attempt still without a page after STALE_START_SECONDS was left by a crashed request.
-        paymentRepository.failStaleStarts(order.orderId, STALE_START_SECONDS, NOT_STARTED)
-        paymentRepository.findOpenAttempt(order.orderId)?.let { open ->
-            if (open.authorizationUrl != null) return Start(order, open, email = null, isNew = false)
+        paymentRepository.failStaleStarts(order.orderId!!, STALE_START_SECONDS, NOT_STARTED)
+        paymentRepository.findOpenAttempt(order.orderId!!)?.let { open ->
+            if (open.paymentAuthorizationUrl != null) return Start(order, open, email = null, isNew = false)
             // Another request is waiting for Paystack right now; it will return the page.
-            throw ConflictException("A payment for this order is already being started, try again in a moment")
+            throw BadRequestException("A payment for this order is already being started, try again in a moment")
         }
 
-        val email = customerRepository.findById(customerId)?.email ?: throw NotFoundException("Order not found")
-        val paymentId = paymentRepository.insert(order.orderId, newReference(), PROVIDER, order.total, CURRENCY)
+        val email = customerRepository.findById(customerId)?.customerEmail ?: throw UnableToLocateRecordException("Order not found")
+        val paymentId = paymentRepository.insert(order.orderId!!, newReference(), PROVIDER, order.orderTotal!!, CURRENCY)
         return Start(order, paymentRepository.findById(paymentId)!!, email, isNew = true)
     }
 
@@ -163,7 +162,7 @@ class PaymentService(
         const val PROVIDER = "PAYSTACK"
         // Orders have no currency column: the store sells in naira only.
         const val CURRENCY = "NGN"
-        // Longer than PaystackConfig's 5 s connect + 10 s read timeouts, so a live request is never cut off.
+        // Longer than PaystackApi's 5 s connect + 10 s read timeouts, so a live request is never cut off.
         const val STALE_START_SECONDS = 30
         const val NOT_STARTED ="Not started: the payment provider could not be reached"
 

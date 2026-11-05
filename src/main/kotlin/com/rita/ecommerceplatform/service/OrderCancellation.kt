@@ -1,20 +1,20 @@
 package com.rita.ecommerceplatform.service
 
-import com.rita.ecommerceplatform.exception.ConflictException
-import com.rita.ecommerceplatform.exception.NotFoundException
-import com.rita.ecommerceplatform.model.InventoryMovementType
-import com.rita.ecommerceplatform.model.NotificationType
-import com.rita.ecommerceplatform.model.Order
-import com.rita.ecommerceplatform.model.OrderPaymentStatus
-import com.rita.ecommerceplatform.model.OrderStatus
-import com.rita.ecommerceplatform.model.PaymentStatus
-import com.rita.ecommerceplatform.repository.CouponRepository
-import com.rita.ecommerceplatform.repository.CustomerRepository
-import com.rita.ecommerceplatform.repository.InventoryMovementRepository
-import com.rita.ecommerceplatform.repository.OrderRepository
-import com.rita.ecommerceplatform.repository.OrderStatusHistoryRepository
-import com.rita.ecommerceplatform.repository.PaymentRepository
-import com.rita.ecommerceplatform.repository.ProductRepository
+import com.rita.ecommerceplatform.exception.BadRequestException
+import com.rita.ecommerceplatform.exception.UnableToLocateRecordException
+import com.rita.ecommerceplatform.model.entity.InventoryMovementType
+import com.rita.ecommerceplatform.model.entity.NotificationType
+import com.rita.ecommerceplatform.model.entity.Order
+import com.rita.ecommerceplatform.model.entity.OrderPaymentStatus
+import com.rita.ecommerceplatform.model.entity.OrderStatus
+import com.rita.ecommerceplatform.model.entity.PaymentStatus
+import com.rita.ecommerceplatform.repository.database.CouponRepository
+import com.rita.ecommerceplatform.repository.database.CustomerRepository
+import com.rita.ecommerceplatform.repository.database.InventoryMovementRepository
+import com.rita.ecommerceplatform.repository.database.OrderRepository
+import com.rita.ecommerceplatform.repository.database.OrderStatusHistoryRepository
+import com.rita.ecommerceplatform.repository.database.PaymentRepository
+import com.rita.ecommerceplatform.repository.database.ProductRepository
 import com.rita.ecommerceplatform.repository.api.PaymentGateway
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -42,11 +42,11 @@ class OrderCancellation(
     /**
      * Call outside any transaction, before cancelling an unpaid order. If the order has an open payment page, asks
      * the provider about it and settles it (like verify). Returns true if it was paid: the order is then CONFIRMED.
-     * Throws 502 if the provider cannot be reached, so nothing is cancelled blindly.
+     * Throws code 22 if the provider cannot be reached, so nothing is cancelled blindly.
      */
     fun settleOpenPayment(orderId: Long): Boolean {
-        val open = paymentRepository.findOpenAttempt(orderId)?.takeIf { it.authorizationUrl != null } ?: return false
-        return paymentSettlement.settle(open.paymentId, paymentGateway.verify(open.reference)).status == PaymentStatus.SUCCESS
+        val open = paymentRepository.findOpenAttempt(orderId)?.takeIf { it.paymentAuthorizationUrl != null } ?: return false
+        return paymentSettlement.settle(open.paymentId!!, paymentGateway.verify(open.paymentReference!!)).paymentStatus == PaymentStatus.SUCCESS
     }
 
     /**
@@ -56,10 +56,10 @@ class OrderCancellation(
     @Transactional
     fun cancelByCustomer(customerId: Long, orderId: Long, reason: String?) {
         val order = orderRepository.lockById(orderId)
-        if (order == null || order.customerId != customerId) throw NotFoundException("Order not found")
+        if (order == null || order.orderCustomerId != customerId) throw UnableToLocateRecordException("Order not found")
         // Checked again under the lock: a payment may have settled since OrderService looked.
-        if (order.status != OrderStatus.PENDING || order.paymentStatus != OrderPaymentStatus.UNPAID) throw notCancellable()
-        OrderStatusRules.ensureCanChange(order.status, OrderStatus.CANCELLED, OrderStatusActor.CUSTOMER)
+        if (order.orderStatus != OrderStatus.PENDING || order.orderPaymentStatus != OrderPaymentStatus.UNPAID) throw notCancellable()
+        OrderStatusRules.ensureCanChange(order.orderStatus!!, OrderStatus.CANCELLED, OrderStatusActor.CUSTOMER)
 
         closeOpenAttempt(orderId, PAYMENT_CLOSED)
         moveToCancelled(order)
@@ -74,11 +74,11 @@ class OrderCancellation(
         )
 
         val customer = customerRepository.findById(customerId)
-            ?: throw IllegalStateException("Customer $customerId of order ${order.reference} does not exist")
+            ?: throw IllegalStateException("Customer $customerId of order ${order.orderReference} does not exist")
         notificationService.queueToCustomer(
             NotificationType.ORDER_CANCELLED,
             customer,
-            NotificationMessages.orderCancelledByCustomer(customer.firstName, order.reference),
+            NotificationMessages.orderCancelledByCustomer(customer.customerFirstName!!, order.orderReference!!),
             orderId = orderId,
         )
     }
@@ -90,33 +90,33 @@ class OrderCancellation(
      */
     @Transactional
     fun cancelByAdmin(adminId: Int, orderId: Long, reason: String) {
-        val order = orderRepository.lockById(orderId) ?: throw NotFoundException("Order not found")
-        if (order.status == OrderStatus.SHIPPED || order.status == OrderStatus.DELIVERED) {
-            throw ConflictException("Shipped or delivered orders cannot be cancelled; use a refund instead")
+        val order = orderRepository.lockById(orderId) ?: throw UnableToLocateRecordException("Order not found")
+        if (order.orderStatus == OrderStatus.SHIPPED || order.orderStatus == OrderStatus.DELIVERED) {
+            throw BadRequestException("Shipped or delivered orders cannot be cancelled; use a refund instead")
         }
-        OrderStatusRules.ensureCanChange(order.status, OrderStatus.CANCELLED, OrderStatusActor.ADMIN)
+        OrderStatusRules.ensureCanChange(order.orderStatus!!, OrderStatus.CANCELLED, OrderStatusActor.ADMIN)
 
-        if (order.status == OrderStatus.PENDING) closeOpenAttempt(orderId, PAYMENT_CLOSED_BY_ADMIN)
+        if (order.orderStatus == OrderStatus.PENDING) closeOpenAttempt(orderId, PAYMENT_CLOSED_BY_ADMIN)
         moveToCancelled(order)
         restoreStock(order, adminId)
         releaseCoupon(order)
 
-        val paid = order.paymentStatus == OrderPaymentStatus.PAID
+        val paid = order.orderPaymentStatus == OrderPaymentStatus.PAID
         statusHistoryRepository.insert(
             orderId = orderId,
-            fromStatus = order.status,
+            fromStatus = order.orderStatus,
             toStatus = OrderStatus.CANCELLED,
             adminId = adminId,
             customerId = null,
             note = "$CANCELLED_BY_ADMIN: $reason" + if (paid) ". $REFUND_NEEDED" else "",
         )
 
-        val customer = customerRepository.findById(order.customerId)
-            ?: throw IllegalStateException("Customer ${order.customerId} of order ${order.reference} does not exist")
+        val customer = customerRepository.findById(order.orderCustomerId!!)
+            ?: throw IllegalStateException("Customer ${order.orderCustomerId} of order ${order.orderReference} does not exist")
         notificationService.queueToCustomer(
             NotificationType.ORDER_CANCELLED,
             customer,
-            NotificationMessages.orderCancelled(customer.firstName, order, reason, paid),
+            NotificationMessages.orderCancelled(customer.customerFirstName!!, order, reason, paid),
             orderId = orderId,
         )
     }
@@ -126,15 +126,15 @@ class OrderCancellation(
     private fun closeOpenAttempt(orderId: Long, note: String) {
         paymentRepository.failStaleStarts(orderId, PaymentService.STALE_START_SECONDS, PaymentService.NOT_STARTED)
         paymentRepository.findOpenAttempt(orderId)?.let { open ->
-            if (open.authorizationUrl == null) {
-                throw ConflictException("A payment for this order is being started, try again in a moment")
+            if (open.paymentAuthorizationUrl == null) {
+                throw BadRequestException("A payment for this order is being started, try again in a moment")
             }
-            paymentRepository.markFailed(open.paymentId, note)
+            paymentRepository.markFailed(open.paymentId!!, note)
         }
     }
 
     private fun moveToCancelled(order: Order) {
-        check(orderRepository.updateStatus(order.orderId, order.status, OrderStatus.CANCELLED) == 1) {
+        check(orderRepository.updateStatus(order.orderId!!, order.orderStatus!!, OrderStatus.CANCELLED) == 1) {
             "Order ${order.orderId} changed while locked"
         }
     }
@@ -142,24 +142,24 @@ class OrderCancellation(
     // An unpaid order gives its coupon use back, exactly once: the order is locked and CANCELLED is final.
     // A paid order keeps it (the coupon was redeemed; a refund returns what was paid). Lock order: order → coupon.
     private fun releaseCoupon(order: Order) {
-        val couponId = order.couponId ?: return
-        if (order.paymentStatus != OrderPaymentStatus.UNPAID) return
-        check(couponRepository.release(couponId) == 1) { "Coupon $couponId of order ${order.reference} has no use to give back" }
+        val couponId = order.orderCouponId ?: return
+        if (order.orderPaymentStatus != OrderPaymentStatus.UNPAID) return
+        check(couponRepository.release(couponId) == 1) { "Coupon $couponId of order ${order.orderReference} has no use to give back" }
     }
 
     // Puts back exactly what the payment took (its SALE movements, by productId), so an order that never took
     // stock (unpaid, or cancelled because stock ran out) puts nothing back.
     private fun restoreStock(order: Order, adminId: Int) {
-        inventoryMovementRepository.findSalesByOrder(order.orderId).forEach { sale ->
+        inventoryMovementRepository.findSalesByOrder(order.orderId!!).forEach { sale ->
             val stockAfter = productRepository.increaseStock(sale.productId, sale.quantity)
-                ?: throw IllegalStateException("Product ${sale.productId} of order ${order.reference} does not exist")
+                ?: throw IllegalStateException("Product ${sale.productId} of order ${order.orderReference} does not exist")
             inventoryMovementRepository.insert(
                 productId = sale.productId,
                 type = InventoryMovementType.ORDER_CANCELLED,
                 quantityChange = sale.quantity,
                 stockAfter = stockAfter,
                 adminId = adminId,
-                note = "Order ${order.reference} cancelled",
+                note = "Order ${order.orderReference} cancelled",
                 orderId = order.orderId,
             )
         }
@@ -172,6 +172,6 @@ class OrderCancellation(
         const val PAYMENT_CLOSED = "Closed: order cancelled by the customer"
         const val PAYMENT_CLOSED_BY_ADMIN = "Closed: order cancelled by an admin"
 
-        fun notCancellable() = ConflictException("Only unpaid pending orders can be cancelled")
+        fun notCancellable() = BadRequestException("Only unpaid pending orders can be cancelled")
     }
 }

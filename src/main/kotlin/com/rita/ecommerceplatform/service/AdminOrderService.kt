@@ -1,28 +1,27 @@
 package com.rita.ecommerceplatform.service
 
-import com.rita.ecommerceplatform.dto.request.AdminCancelOrderRequest
-import com.rita.ecommerceplatform.dto.request.UpdateOrderStatusRequest
-import com.rita.ecommerceplatform.dto.response.AdminOrderResponse
-import com.rita.ecommerceplatform.dto.response.AdminOrderSummaryResponse
-import com.rita.ecommerceplatform.dto.response.PageResponse
 import com.rita.ecommerceplatform.exception.BadRequestException
-import com.rita.ecommerceplatform.exception.ConflictException
-import com.rita.ecommerceplatform.exception.NotFoundException
-import com.rita.ecommerceplatform.model.NotificationType
-import com.rita.ecommerceplatform.model.Order
-import com.rita.ecommerceplatform.model.OrderPaymentStatus
-import com.rita.ecommerceplatform.model.OrderStatus
-import com.rita.ecommerceplatform.model.RefundStatus
-import com.rita.ecommerceplatform.repository.AdminOrderSearch
-import com.rita.ecommerceplatform.repository.CouponRepository
-import com.rita.ecommerceplatform.repository.CustomerRepository
-import com.rita.ecommerceplatform.repository.DeliveryMethodRepository
-import com.rita.ecommerceplatform.repository.OrderItemRepository
-import com.rita.ecommerceplatform.repository.OrderRepository
-import com.rita.ecommerceplatform.repository.OrderStatusHistoryRepository
-import com.rita.ecommerceplatform.repository.OrderWithCustomer
-import com.rita.ecommerceplatform.repository.PaymentRepository
-import com.rita.ecommerceplatform.repository.RefundRepository
+import com.rita.ecommerceplatform.exception.UnableToLocateRecordException
+import com.rita.ecommerceplatform.model.request.AdminCancelOrderRequest
+import com.rita.ecommerceplatform.model.request.UpdateOrderStatusRequest
+import com.rita.ecommerceplatform.model.response.AdminOrderResponse
+import com.rita.ecommerceplatform.model.response.AdminOrderSummaryResponse
+import com.rita.ecommerceplatform.model.response.PageResponse
+import com.rita.ecommerceplatform.model.entity.NotificationType
+import com.rita.ecommerceplatform.model.entity.Order
+import com.rita.ecommerceplatform.model.entity.OrderPaymentStatus
+import com.rita.ecommerceplatform.model.entity.OrderStatus
+import com.rita.ecommerceplatform.model.entity.RefundStatus
+import com.rita.ecommerceplatform.repository.database.AdminOrderSearch
+import com.rita.ecommerceplatform.repository.database.CouponRepository
+import com.rita.ecommerceplatform.repository.database.CustomerRepository
+import com.rita.ecommerceplatform.repository.database.DeliveryMethodRepository
+import com.rita.ecommerceplatform.repository.database.OrderItemRepository
+import com.rita.ecommerceplatform.repository.database.OrderRepository
+import com.rita.ecommerceplatform.repository.database.OrderStatusHistoryRepository
+import com.rita.ecommerceplatform.repository.database.OrderWithCustomer
+import com.rita.ecommerceplatform.repository.database.PaymentRepository
+import com.rita.ecommerceplatform.repository.database.RefundRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDate
@@ -65,7 +64,7 @@ class AdminOrderService(
         val safeSize = Paging.size(size)
         val rows = orderRepository.findAllWithCustomer(search, safeSize, Paging.offset(safePage, safeSize))
         // One grouped query for the whole page, not one per order.
-        val quantities = orderItemRepository.quantitiesByOrderIds(rows.map { it.order.orderId })
+        val quantities = orderItemRepository.quantitiesByOrderIds(rows.map { it.order.orderId!! })
         return PageResponse.of(
             rows.map { AdminOrderSummaryResponse.from(it, quantities[it.order.orderId] ?: 0) },
             safePage,
@@ -79,20 +78,20 @@ class AdminOrderService(
 
     /**
      * Moves the order to the next fulfilment status. The order row is locked first, so two admins changing
-     * the same order take turns: the second sees the new status and is rejected by OrderStatusRules (409).
+     * the same order take turns: the second sees the new status and is rejected by OrderStatusRules (code 106).
      */
     @Transactional
     fun updateStatus(adminId: Int, orderId: Long, request: UpdateOrderStatusRequest): AdminOrderResponse {
         val order = orderRepository.lockById(orderId) ?: throw orderNotFound()
         val to = OrderStatus.valueOf(request.status!!.uppercase())
-        OrderStatusRules.ensureCanChange(order.status, to, OrderStatusActor.ADMIN)
+        OrderStatusRules.ensureCanChange(order.orderStatus!!, to, OrderStatusActor.ADMIN)
 
         // The lock makes this always 1; the WHERE on the old status is a second guard.
-        check(orderRepository.updateStatus(orderId, order.status, to) == 1) { "Order $orderId changed while locked" }
+        check(orderRepository.updateStatus(orderId, order.orderStatus!!, to) == 1) { "Order $orderId changed while locked" }
         val note = request.note?.trim()?.ifEmpty { null }
         statusHistoryRepository.insert(
             orderId = orderId,
-            fromStatus = order.status,
+            fromStatus = order.orderStatus,
             toStatus = to,
             adminId = adminId,
             customerId = null,
@@ -104,13 +103,13 @@ class AdminOrderService(
 
     /**
      * Cancels an order that has not shipped (OrderCancellation.cancelByAdmin). For an unpaid order with an open
-     * payment page, the provider is asked first: if it was just paid, the admin gets 409 and sees the order as it
+     * payment page, the provider is asked first: if it was just paid, the admin gets code 106 and sees the order as it
      * is now (CONFIRMED, stock taken) before deciding again, instead of an unexpected refund case.
      */
     fun cancel(adminId: Int, orderId: Long, request: AdminCancelOrderRequest): AdminOrderResponse {
         val order = orderRepository.findByIdWithCustomer(orderId)?.order ?: throw orderNotFound()
-        if (order.status == OrderStatus.PENDING && orderCancellation.settleOpenPayment(orderId)) {
-            throw ConflictException("This order was just paid; check it and cancel again if needed")
+        if (order.orderStatus == OrderStatus.PENDING && orderCancellation.settleOpenPayment(orderId)) {
+            throw BadRequestException("This order was just paid; check it and cancel again if needed")
         }
         orderCancellation.cancelByAdmin(adminId, orderId, request.reason!!.trim())
         return get(orderId)
@@ -119,38 +118,38 @@ class AdminOrderService(
     // Shipped and delivered tell the customer; PROCESSING has no email (no notification type for it).
     private fun notifyCustomer(order: Order, to: OrderStatus, note: String?) {
         if (to != OrderStatus.SHIPPED && to != OrderStatus.DELIVERED) return
-        val customer = customerRepository.findById(order.customerId)
-            ?: throw IllegalStateException("Customer ${order.customerId} of order ${order.reference} does not exist")
+        val customer = customerRepository.findById(order.orderCustomerId!!)
+            ?: throw IllegalStateException("Customer ${order.orderCustomerId} of order ${order.orderReference} does not exist")
         if (to == OrderStatus.SHIPPED) {
             notificationService.queueToCustomer(
                 NotificationType.ORDER_SHIPPED, customer,
-                NotificationMessages.orderShipped(customer.firstName, order.reference, note), orderId = order.orderId,
+                NotificationMessages.orderShipped(customer.customerFirstName!!, order.orderReference!!, note), orderId = order.orderId,
             )
         } else {
             notificationService.queueToCustomer(
                 NotificationType.ORDER_DELIVERED, customer,
-                NotificationMessages.orderDelivered(customer.firstName, order.reference), orderId = order.orderId,
+                NotificationMessages.orderDelivered(customer.customerFirstName!!, order.orderReference!!), orderId = order.orderId,
             )
         }
     }
 
     private fun toResponse(row: OrderWithCustomer): AdminOrderResponse {
-        val refunds = refundRepository.findByOrder(row.order.orderId)
+        val refunds = refundRepository.findByOrder(row.order.orderId!!)
         return AdminOrderResponse.from(
             row,
-            orderItemRepository.findByOrderId(row.order.orderId),
-            statusHistoryRepository.findByOrderId(row.order.orderId),
-            paymentRepository.findByOrder(row.order.orderId),
+            orderItemRepository.findByOrderId(row.order.orderId!!),
+            statusHistoryRepository.findByOrderId(row.order.orderId!!),
+            paymentRepository.findByOrder(row.order.orderId!!),
             refunds,
-            OrderStatusRules.nextStatuses(row.order.status, OrderStatusActor.ADMIN).filter { it in FULFILMENT_STATUSES },
-            deliveryMethodRepository.findById(row.order.deliveryMethodId)!!,
-            row.order.couponId?.let { couponRepository.findById(it)!!.code },
-            canCancel = OrderStatus.CANCELLED in OrderStatusRules.nextStatuses(row.order.status, OrderStatusActor.ADMIN),
-            canRefund = RefundService.isRefundable(row.order) && refunds.all { it.status == RefundStatus.FAILED },
+            OrderStatusRules.nextStatuses(row.order.orderStatus!!, OrderStatusActor.ADMIN).filter { it in FULFILMENT_STATUSES },
+            deliveryMethodRepository.findById(row.order.orderDeliveryMethodId!!)!!,
+            row.order.orderCouponId?.let { couponRepository.findById(it)!!.couponCode },
+            canCancel = OrderStatus.CANCELLED in OrderStatusRules.nextStatuses(row.order.orderStatus!!, OrderStatusActor.ADMIN),
+            canRefund = RefundService.isRefundable(row.order) && refunds.all { it.refundStatus == RefundStatus.FAILED },
         )
     }
 
-    // Blank text filters are ignored; a bad status or an inverted date range is 400.
+    // Blank text filters are ignored; a bad status or an inverted date range is code 106.
     private fun toSearch(filters: AdminOrderFilters): AdminOrderSearch {
         if (filters.from != null && filters.to != null && filters.from > filters.to) {
             throw BadRequestException("from must not be after to")
@@ -173,7 +172,7 @@ class AdminOrderService(
             ?: throw BadRequestException("$name must be one of ${entries.joinToString()}")
     }
 
-    private fun orderNotFound() = NotFoundException("Order not found")
+    private fun orderNotFound() = UnableToLocateRecordException("Order not found")
 
     companion object {
         // What an admin may set with PATCH .../status (UpdateOrderStatusRequest). Cancel has its own endpoint.
