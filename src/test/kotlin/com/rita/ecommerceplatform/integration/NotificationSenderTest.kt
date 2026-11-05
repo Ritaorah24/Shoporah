@@ -1,9 +1,9 @@
 package com.rita.ecommerceplatform.integration
 
-import com.rita.ecommerceplatform.model.NotificationChannelType
-import com.rita.ecommerceplatform.model.NotificationStatus
-import com.rita.ecommerceplatform.model.NotificationType
-import com.rita.ecommerceplatform.repository.NotificationRepository
+import com.rita.ecommerceplatform.model.entity.NotificationChannelType
+import com.rita.ecommerceplatform.model.entity.NotificationStatus
+import com.rita.ecommerceplatform.model.entity.NotificationType
+import com.rita.ecommerceplatform.repository.database.NotificationRepository
 import com.rita.ecommerceplatform.service.NotificationService
 import com.rita.ecommerceplatform.support.IntegrationTestBase
 import org.junit.jupiter.api.Test

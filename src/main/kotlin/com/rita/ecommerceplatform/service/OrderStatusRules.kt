@@ -2,14 +2,14 @@ package com.rita.ecommerceplatform.service
 
 import com.rita.ecommerceplatform.exception.ConflictException
 import com.rita.ecommerceplatform.exception.ForbiddenException
-import com.rita.ecommerceplatform.model.OrderStatus
-import com.rita.ecommerceplatform.model.OrderStatus.CANCELLED
-import com.rita.ecommerceplatform.model.OrderStatus.CONFIRMED
-import com.rita.ecommerceplatform.model.OrderStatus.DELIVERED
-import com.rita.ecommerceplatform.model.OrderStatus.PENDING
-import com.rita.ecommerceplatform.model.OrderStatus.PROCESSING
-import com.rita.ecommerceplatform.model.OrderStatus.REFUNDED
-import com.rita.ecommerceplatform.model.OrderStatus.SHIPPED
+import com.rita.ecommerceplatform.model.entity.OrderStatus
+import com.rita.ecommerceplatform.model.entity.OrderStatus.CANCELLED
+import com.rita.ecommerceplatform.model.entity.OrderStatus.CONFIRMED
+import com.rita.ecommerceplatform.model.entity.OrderStatus.DELIVERED
+import com.rita.ecommerceplatform.model.entity.OrderStatus.PENDING
+import com.rita.ecommerceplatform.model.entity.OrderStatus.PROCESSING
+import com.rita.ecommerceplatform.model.entity.OrderStatus.REFUNDED
+import com.rita.ecommerceplatform.model.entity.OrderStatus.SHIPPED
 
 /** Who makes a status change. SYSTEM covers automatic changes, e.g. a verified payment. */
 enum class OrderStatusActor { CUSTOMER, ADMIN, SYSTEM }

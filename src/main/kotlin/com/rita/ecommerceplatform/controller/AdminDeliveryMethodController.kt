@@ -1,10 +1,10 @@
 package com.rita.ecommerceplatform.controller
 
 import com.rita.ecommerceplatform.config.OpenApiConfig
-import com.rita.ecommerceplatform.dto.request.CreateDeliveryMethodRequest
-import com.rita.ecommerceplatform.dto.request.UpdateDeliveryMethodRequest
-import com.rita.ecommerceplatform.dto.request.UpdateStatusRequest
-import com.rita.ecommerceplatform.dto.response.AdminDeliveryMethodResponse
+import com.rita.ecommerceplatform.model.request.CreateDeliveryMethodRequest
+import com.rita.ecommerceplatform.model.request.UpdateDeliveryMethodRequest
+import com.rita.ecommerceplatform.model.request.UpdateStatusRequest
+import com.rita.ecommerceplatform.model.response.AdminDeliveryMethodResponse
 import com.rita.ecommerceplatform.service.DeliveryMethodService
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag

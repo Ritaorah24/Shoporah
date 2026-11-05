@@ -1,6 +1,6 @@
 package com.rita.ecommerceplatform.integration
 
-import com.rita.ecommerceplatform.model.NotificationType
+import com.rita.ecommerceplatform.model.entity.NotificationType
 import com.rita.ecommerceplatform.service.NotificationService
 import com.rita.ecommerceplatform.support.IntegrationTestBase
 import org.junit.jupiter.api.BeforeEach

@@ -1,8 +1,8 @@
 package com.rita.ecommerceplatform.controller
 
 import com.rita.ecommerceplatform.config.OpenApiConfig
-import com.rita.ecommerceplatform.dto.request.UpdateProductImageRequest
-import com.rita.ecommerceplatform.dto.response.AdminProductImageResponse
+import com.rita.ecommerceplatform.model.request.UpdateProductImageRequest
+import com.rita.ecommerceplatform.model.response.AdminProductImageResponse
 import com.rita.ecommerceplatform.service.ProductImageService
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag

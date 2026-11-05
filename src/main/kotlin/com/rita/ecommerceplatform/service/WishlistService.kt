@@ -1,17 +1,17 @@
 package com.rita.ecommerceplatform.service
 
-import com.rita.ecommerceplatform.dto.request.AddCartItemRequest
-import com.rita.ecommerceplatform.dto.request.AddWishlistItemRequest
-import com.rita.ecommerceplatform.dto.request.MoveToCartRequest
-import com.rita.ecommerceplatform.dto.response.WishlistItemResponse
-import com.rita.ecommerceplatform.dto.response.WishlistResponse
+import com.rita.ecommerceplatform.model.request.AddCartItemRequest
+import com.rita.ecommerceplatform.model.request.AddWishlistItemRequest
+import com.rita.ecommerceplatform.model.request.MoveToCartRequest
+import com.rita.ecommerceplatform.model.response.WishlistItemResponse
+import com.rita.ecommerceplatform.model.response.WishlistResponse
 import com.rita.ecommerceplatform.exception.ConflictException
 import com.rita.ecommerceplatform.exception.NotFoundException
-import com.rita.ecommerceplatform.model.WishlistItem
-import com.rita.ecommerceplatform.repository.CustomerRepository
-import com.rita.ecommerceplatform.repository.ProductImageRepository
-import com.rita.ecommerceplatform.repository.ProductRepository
-import com.rita.ecommerceplatform.repository.WishlistRepository
+import com.rita.ecommerceplatform.model.entity.WishlistItem
+import com.rita.ecommerceplatform.repository.database.CustomerRepository
+import com.rita.ecommerceplatform.repository.database.ProductImageRepository
+import com.rita.ecommerceplatform.repository.database.ProductRepository
+import com.rita.ecommerceplatform.repository.database.WishlistRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 

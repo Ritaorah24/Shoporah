@@ -1,11 +1,11 @@
 package com.rita.ecommerceplatform.controller
 
 import com.rita.ecommerceplatform.config.OpenApiConfig
-import com.rita.ecommerceplatform.dto.request.CreateCouponRequest
-import com.rita.ecommerceplatform.dto.request.UpdateCouponRequest
-import com.rita.ecommerceplatform.dto.request.UpdateStatusRequest
-import com.rita.ecommerceplatform.dto.response.AdminCouponResponse
-import com.rita.ecommerceplatform.dto.response.PageResponse
+import com.rita.ecommerceplatform.model.request.CreateCouponRequest
+import com.rita.ecommerceplatform.model.request.UpdateCouponRequest
+import com.rita.ecommerceplatform.model.request.UpdateStatusRequest
+import com.rita.ecommerceplatform.model.response.AdminCouponResponse
+import com.rita.ecommerceplatform.model.response.PageResponse
 import com.rita.ecommerceplatform.exception.AccountNotActiveException
 import com.rita.ecommerceplatform.security.CurrentUser
 import com.rita.ecommerceplatform.security.UserType

@@ -1,12 +1,12 @@
 package com.rita.ecommerceplatform.controller
 
-import com.rita.ecommerceplatform.dto.request.ForgotPasswordRequest
-import com.rita.ecommerceplatform.dto.request.LoginRequest
-import com.rita.ecommerceplatform.dto.request.RegisterRequest
-import com.rita.ecommerceplatform.dto.request.ResetPasswordRequest
-import com.rita.ecommerceplatform.dto.response.CustomerProfileResponse
-import com.rita.ecommerceplatform.dto.response.MessageResponse
-import com.rita.ecommerceplatform.dto.response.TokenResponse
+import com.rita.ecommerceplatform.model.request.ForgotPasswordRequest
+import com.rita.ecommerceplatform.model.request.LoginRequest
+import com.rita.ecommerceplatform.model.request.RegisterRequest
+import com.rita.ecommerceplatform.model.request.ResetPasswordRequest
+import com.rita.ecommerceplatform.model.response.CustomerProfileResponse
+import com.rita.ecommerceplatform.model.response.MessageResponse
+import com.rita.ecommerceplatform.model.response.TokenResponse
 import com.rita.ecommerceplatform.service.AuthService
 import com.rita.ecommerceplatform.service.PasswordResetService
 import io.swagger.v3.oas.annotations.tags.Tag

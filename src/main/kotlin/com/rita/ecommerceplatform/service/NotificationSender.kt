@@ -1,6 +1,6 @@
 package com.rita.ecommerceplatform.service
 
-import com.rita.ecommerceplatform.repository.NotificationRepository
+import com.rita.ecommerceplatform.repository.database.NotificationRepository
 import com.rita.ecommerceplatform.repository.api.NotificationChannel
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value

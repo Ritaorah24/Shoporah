@@ -1,9 +1,9 @@
 package com.rita.ecommerceplatform.controller
 
 import com.rita.ecommerceplatform.config.OpenApiConfig
-import com.rita.ecommerceplatform.dto.request.CreateAddressRequest
-import com.rita.ecommerceplatform.dto.request.UpdateAddressRequest
-import com.rita.ecommerceplatform.dto.response.AddressResponse
+import com.rita.ecommerceplatform.model.request.CreateAddressRequest
+import com.rita.ecommerceplatform.model.request.UpdateAddressRequest
+import com.rita.ecommerceplatform.model.response.AddressResponse
 import com.rita.ecommerceplatform.exception.AccountNotActiveException
 import com.rita.ecommerceplatform.security.CurrentUser
 import com.rita.ecommerceplatform.security.UserType

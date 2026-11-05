@@ -1,6 +1,6 @@
 package com.rita.ecommerceplatform.repository.api
 
-import com.rita.ecommerceplatform.model.NotificationChannelType
+import com.rita.ecommerceplatform.model.entity.NotificationChannelType
 
 /**
  * A way of delivering a message to a person (checkpoint 2.1). SmtpEmailChannel is the only one so far;

@@ -1,9 +1,9 @@
 package com.rita.ecommerceplatform.service
 
-import com.rita.ecommerceplatform.model.Customer
-import com.rita.ecommerceplatform.model.NotificationChannelType
-import com.rita.ecommerceplatform.model.NotificationType
-import com.rita.ecommerceplatform.repository.NotificationRepository
+import com.rita.ecommerceplatform.model.entity.Customer
+import com.rita.ecommerceplatform.model.entity.NotificationChannelType
+import com.rita.ecommerceplatform.model.entity.NotificationType
+import com.rita.ecommerceplatform.repository.database.NotificationRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional

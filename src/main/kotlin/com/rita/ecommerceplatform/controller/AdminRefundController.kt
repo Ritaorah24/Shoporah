@@ -1,7 +1,7 @@
 package com.rita.ecommerceplatform.controller
 
 import com.rita.ecommerceplatform.config.OpenApiConfig
-import com.rita.ecommerceplatform.dto.response.AdminOrderResponse
+import com.rita.ecommerceplatform.model.response.AdminOrderResponse
 import com.rita.ecommerceplatform.service.RefundService
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag

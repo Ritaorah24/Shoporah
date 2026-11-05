@@ -1,16 +1,16 @@
 package com.rita.ecommerceplatform.service
 
-import com.rita.ecommerceplatform.dto.request.CreateDeliveryMethodRequest
-import com.rita.ecommerceplatform.dto.request.UpdateDeliveryMethodRequest
-import com.rita.ecommerceplatform.dto.request.UpdateStatusRequest
-import com.rita.ecommerceplatform.dto.response.AdminDeliveryMethodResponse
-import com.rita.ecommerceplatform.dto.response.DeliveryMethodResponse
+import com.rita.ecommerceplatform.model.request.CreateDeliveryMethodRequest
+import com.rita.ecommerceplatform.model.request.UpdateDeliveryMethodRequest
+import com.rita.ecommerceplatform.model.request.UpdateStatusRequest
+import com.rita.ecommerceplatform.model.response.AdminDeliveryMethodResponse
+import com.rita.ecommerceplatform.model.response.DeliveryMethodResponse
 import com.rita.ecommerceplatform.exception.BadRequestException
 import com.rita.ecommerceplatform.exception.ConflictException
 import com.rita.ecommerceplatform.exception.NotFoundException
-import com.rita.ecommerceplatform.model.DeliveryMethod
-import com.rita.ecommerceplatform.model.DeliveryMethodStatus
-import com.rita.ecommerceplatform.repository.DeliveryMethodRepository
+import com.rita.ecommerceplatform.model.entity.DeliveryMethod
+import com.rita.ecommerceplatform.model.entity.DeliveryMethodStatus
+import com.rita.ecommerceplatform.repository.database.DeliveryMethodRepository
 import org.springframework.dao.DuplicateKeyException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional

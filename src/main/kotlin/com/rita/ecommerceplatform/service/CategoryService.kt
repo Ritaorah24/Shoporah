@@ -1,15 +1,15 @@
 package com.rita.ecommerceplatform.service
 
-import com.rita.ecommerceplatform.dto.request.CreateCategoryRequest
-import com.rita.ecommerceplatform.dto.request.UpdateCategoryRequest
-import com.rita.ecommerceplatform.dto.request.UpdateStatusRequest
-import com.rita.ecommerceplatform.dto.response.AdminCategoryResponse
-import com.rita.ecommerceplatform.dto.response.CategoryResponse
+import com.rita.ecommerceplatform.model.request.CreateCategoryRequest
+import com.rita.ecommerceplatform.model.request.UpdateCategoryRequest
+import com.rita.ecommerceplatform.model.request.UpdateStatusRequest
+import com.rita.ecommerceplatform.model.response.AdminCategoryResponse
+import com.rita.ecommerceplatform.model.response.CategoryResponse
 import com.rita.ecommerceplatform.exception.ConflictException
 import com.rita.ecommerceplatform.exception.NotFoundException
-import com.rita.ecommerceplatform.model.Category
-import com.rita.ecommerceplatform.model.CategoryStatus
-import com.rita.ecommerceplatform.repository.CategoryRepository
+import com.rita.ecommerceplatform.model.entity.Category
+import com.rita.ecommerceplatform.model.entity.CategoryStatus
+import com.rita.ecommerceplatform.repository.database.CategoryRepository
 import org.springframework.dao.DuplicateKeyException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional

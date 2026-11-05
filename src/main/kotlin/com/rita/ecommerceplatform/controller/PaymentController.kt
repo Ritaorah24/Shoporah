@@ -1,9 +1,9 @@
 package com.rita.ecommerceplatform.controller
 
 import com.rita.ecommerceplatform.config.OpenApiConfig
-import com.rita.ecommerceplatform.dto.request.InitializePaymentRequest
-import com.rita.ecommerceplatform.dto.response.PaymentInitResponse
-import com.rita.ecommerceplatform.dto.response.PaymentVerifyResponse
+import com.rita.ecommerceplatform.model.request.InitializePaymentRequest
+import com.rita.ecommerceplatform.model.response.PaymentInitResponse
+import com.rita.ecommerceplatform.model.response.PaymentVerifyResponse
 import com.rita.ecommerceplatform.exception.AccountNotActiveException
 import com.rita.ecommerceplatform.security.CurrentUser
 import com.rita.ecommerceplatform.security.UserType

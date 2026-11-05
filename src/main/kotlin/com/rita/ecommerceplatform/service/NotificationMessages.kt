@@ -1,7 +1,7 @@
 package com.rita.ecommerceplatform.service
 
-import com.rita.ecommerceplatform.model.Order
-import com.rita.ecommerceplatform.model.OrderItem
+import com.rita.ecommerceplatform.model.entity.Order
+import com.rita.ecommerceplatform.model.entity.OrderItem
 import java.math.BigDecimal
 import java.util.Locale
 

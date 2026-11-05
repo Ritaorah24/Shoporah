@@ -1,13 +1,13 @@
 package com.rita.ecommerceplatform.controller
 
 import com.rita.ecommerceplatform.config.OpenApiConfig
-import com.rita.ecommerceplatform.dto.request.CreateProductRequest
-import com.rita.ecommerceplatform.dto.request.StockAdjustmentRequest
-import com.rita.ecommerceplatform.dto.request.UpdateProductRequest
-import com.rita.ecommerceplatform.dto.request.UpdateStatusRequest
-import com.rita.ecommerceplatform.dto.response.AdminProductResponse
-import com.rita.ecommerceplatform.dto.response.PageResponse
-import com.rita.ecommerceplatform.dto.response.StockMovementResponse
+import com.rita.ecommerceplatform.model.request.CreateProductRequest
+import com.rita.ecommerceplatform.model.request.StockAdjustmentRequest
+import com.rita.ecommerceplatform.model.request.UpdateProductRequest
+import com.rita.ecommerceplatform.model.request.UpdateStatusRequest
+import com.rita.ecommerceplatform.model.response.AdminProductResponse
+import com.rita.ecommerceplatform.model.response.PageResponse
+import com.rita.ecommerceplatform.model.response.StockMovementResponse
 import com.rita.ecommerceplatform.exception.AccountNotActiveException
 import com.rita.ecommerceplatform.security.CurrentUser
 import com.rita.ecommerceplatform.security.UserType

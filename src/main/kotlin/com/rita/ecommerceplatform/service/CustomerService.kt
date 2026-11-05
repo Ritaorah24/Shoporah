@@ -1,12 +1,12 @@
 package com.rita.ecommerceplatform.service
 
-import com.rita.ecommerceplatform.dto.request.UpdateProfileRequest
-import com.rita.ecommerceplatform.dto.response.CustomerProfileResponse
+import com.rita.ecommerceplatform.model.request.UpdateProfileRequest
+import com.rita.ecommerceplatform.model.response.CustomerProfileResponse
 import com.rita.ecommerceplatform.exception.AccountNotActiveException
 import com.rita.ecommerceplatform.exception.NotFoundException
-import com.rita.ecommerceplatform.model.Customer
-import com.rita.ecommerceplatform.model.CustomerStatus
-import com.rita.ecommerceplatform.repository.CustomerRepository
+import com.rita.ecommerceplatform.model.entity.Customer
+import com.rita.ecommerceplatform.model.entity.CustomerStatus
+import com.rita.ecommerceplatform.repository.database.CustomerRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 

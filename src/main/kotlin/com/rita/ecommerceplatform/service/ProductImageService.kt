@@ -1,15 +1,15 @@
 package com.rita.ecommerceplatform.service
 
-import com.rita.ecommerceplatform.dto.request.UpdateProductImageRequest
-import com.rita.ecommerceplatform.dto.response.AdminProductImageResponse
+import com.rita.ecommerceplatform.model.request.UpdateProductImageRequest
+import com.rita.ecommerceplatform.model.response.AdminProductImageResponse
 import com.rita.ecommerceplatform.exception.BadRequestException
 import com.rita.ecommerceplatform.exception.ConflictException
 import com.rita.ecommerceplatform.exception.NotFoundException
 import com.rita.ecommerceplatform.exception.PayloadTooLargeException
-import com.rita.ecommerceplatform.model.ProductImage
-import com.rita.ecommerceplatform.model.ProductStatus
-import com.rita.ecommerceplatform.repository.ProductImageRepository
-import com.rita.ecommerceplatform.repository.ProductRepository
+import com.rita.ecommerceplatform.model.entity.ProductImage
+import com.rita.ecommerceplatform.model.entity.ProductStatus
+import com.rita.ecommerceplatform.repository.database.ProductImageRepository
+import com.rita.ecommerceplatform.repository.database.ProductRepository
 import com.rita.ecommerceplatform.repository.api.ImageStorage
 import com.rita.ecommerceplatform.repository.api.StoredImage
 import org.slf4j.LoggerFactory

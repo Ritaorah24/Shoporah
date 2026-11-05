@@ -1,9 +1,9 @@
 package com.rita.ecommerceplatform.controller
 
 import com.rita.ecommerceplatform.config.OpenApiConfig
-import com.rita.ecommerceplatform.dto.request.ChangePasswordRequest
-import com.rita.ecommerceplatform.dto.request.LoginRequest
-import com.rita.ecommerceplatform.dto.response.TokenResponse
+import com.rita.ecommerceplatform.model.request.ChangePasswordRequest
+import com.rita.ecommerceplatform.model.request.LoginRequest
+import com.rita.ecommerceplatform.model.response.TokenResponse
 import com.rita.ecommerceplatform.exception.AccountNotActiveException
 import com.rita.ecommerceplatform.security.CurrentUser
 import com.rita.ecommerceplatform.security.UserType

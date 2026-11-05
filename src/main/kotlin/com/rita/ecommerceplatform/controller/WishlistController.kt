@@ -1,9 +1,9 @@
 package com.rita.ecommerceplatform.controller
 
 import com.rita.ecommerceplatform.config.OpenApiConfig
-import com.rita.ecommerceplatform.dto.request.AddWishlistItemRequest
-import com.rita.ecommerceplatform.dto.request.MoveToCartRequest
-import com.rita.ecommerceplatform.dto.response.WishlistResponse
+import com.rita.ecommerceplatform.model.request.AddWishlistItemRequest
+import com.rita.ecommerceplatform.model.request.MoveToCartRequest
+import com.rita.ecommerceplatform.model.response.WishlistResponse
 import com.rita.ecommerceplatform.exception.AccountNotActiveException
 import com.rita.ecommerceplatform.security.CurrentUser
 import com.rita.ecommerceplatform.security.UserType

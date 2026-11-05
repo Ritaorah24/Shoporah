@@ -1,7 +1,7 @@
 package com.rita.ecommerceplatform.controller
 
-import com.rita.ecommerceplatform.dto.response.PageResponse
-import com.rita.ecommerceplatform.dto.response.ProductResponse
+import com.rita.ecommerceplatform.model.response.PageResponse
+import com.rita.ecommerceplatform.model.response.ProductResponse
 import com.rita.ecommerceplatform.service.Paging
 import com.rita.ecommerceplatform.service.ProductFilters
 import com.rita.ecommerceplatform.service.ProductService

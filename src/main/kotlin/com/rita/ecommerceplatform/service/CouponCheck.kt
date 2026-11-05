@@ -1,10 +1,10 @@
 package com.rita.ecommerceplatform.service
 
 import com.rita.ecommerceplatform.exception.BadRequestException
-import com.rita.ecommerceplatform.model.Coupon
-import com.rita.ecommerceplatform.model.CouponDiscountType
-import com.rita.ecommerceplatform.model.CouponState
-import com.rita.ecommerceplatform.model.CouponStatus
+import com.rita.ecommerceplatform.model.entity.Coupon
+import com.rita.ecommerceplatform.model.entity.CouponDiscountType
+import com.rita.ecommerceplatform.model.entity.CouponState
+import com.rita.ecommerceplatform.model.entity.CouponStatus
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.time.LocalDateTime

@@ -1,9 +1,9 @@
 package com.rita.ecommerceplatform.controller
 
 import com.rita.ecommerceplatform.config.OpenApiConfig
-import com.rita.ecommerceplatform.dto.request.AddCartItemRequest
-import com.rita.ecommerceplatform.dto.request.UpdateCartItemRequest
-import com.rita.ecommerceplatform.dto.response.CartResponse
+import com.rita.ecommerceplatform.model.request.AddCartItemRequest
+import com.rita.ecommerceplatform.model.request.UpdateCartItemRequest
+import com.rita.ecommerceplatform.model.response.CartResponse
 import com.rita.ecommerceplatform.exception.AccountNotActiveException
 import com.rita.ecommerceplatform.security.CurrentUser
 import com.rita.ecommerceplatform.security.UserType

@@ -1,14 +1,14 @@
 package com.rita.ecommerceplatform.service
 
-import com.rita.ecommerceplatform.dto.request.CreateAddressRequest
-import com.rita.ecommerceplatform.dto.request.UpdateAddressRequest
-import com.rita.ecommerceplatform.dto.response.AddressResponse
+import com.rita.ecommerceplatform.model.request.CreateAddressRequest
+import com.rita.ecommerceplatform.model.request.UpdateAddressRequest
+import com.rita.ecommerceplatform.model.response.AddressResponse
 import com.rita.ecommerceplatform.exception.ConflictException
 import com.rita.ecommerceplatform.exception.NotFoundException
-import com.rita.ecommerceplatform.model.AddressDetails
-import com.rita.ecommerceplatform.model.CustomerAddress
-import com.rita.ecommerceplatform.repository.CustomerAddressRepository
-import com.rita.ecommerceplatform.repository.CustomerRepository
+import com.rita.ecommerceplatform.model.entity.AddressDetails
+import com.rita.ecommerceplatform.model.entity.CustomerAddress
+import com.rita.ecommerceplatform.repository.database.CustomerAddressRepository
+import com.rita.ecommerceplatform.repository.database.CustomerRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 

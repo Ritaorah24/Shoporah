@@ -1,10 +1,10 @@
 package com.rita.ecommerceplatform.controller
 
 import com.rita.ecommerceplatform.config.OpenApiConfig
-import com.rita.ecommerceplatform.dto.request.CreateCategoryRequest
-import com.rita.ecommerceplatform.dto.request.UpdateCategoryRequest
-import com.rita.ecommerceplatform.dto.request.UpdateStatusRequest
-import com.rita.ecommerceplatform.dto.response.AdminCategoryResponse
+import com.rita.ecommerceplatform.model.request.CreateCategoryRequest
+import com.rita.ecommerceplatform.model.request.UpdateCategoryRequest
+import com.rita.ecommerceplatform.model.request.UpdateStatusRequest
+import com.rita.ecommerceplatform.model.response.AdminCategoryResponse
 import com.rita.ecommerceplatform.exception.AccountNotActiveException
 import com.rita.ecommerceplatform.security.CurrentUser
 import com.rita.ecommerceplatform.security.UserType

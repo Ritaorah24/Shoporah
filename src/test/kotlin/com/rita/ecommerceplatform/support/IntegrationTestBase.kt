@@ -1,7 +1,7 @@
 package com.rita.ecommerceplatform.support
 
-import com.rita.ecommerceplatform.repository.CartRepository
-import com.rita.ecommerceplatform.repository.ProductImageRepository
+import com.rita.ecommerceplatform.repository.database.CartRepository
+import com.rita.ecommerceplatform.repository.database.ProductImageRepository
 import com.rita.ecommerceplatform.service.NotificationSender
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Value

@@ -1,6 +1,6 @@
 package com.rita.ecommerceplatform.controller
 
-import com.rita.ecommerceplatform.dto.response.CategoryResponse
+import com.rita.ecommerceplatform.model.response.CategoryResponse
 import com.rita.ecommerceplatform.service.CategoryService
 import io.swagger.v3.oas.annotations.tags.Tag
 import org.springframework.web.bind.annotation.GetMapping

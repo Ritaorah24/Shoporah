@@ -1,9 +1,9 @@
 package com.rita.ecommerceplatform.controller
 
 import com.rita.ecommerceplatform.config.OpenApiConfig
-import com.rita.ecommerceplatform.dto.response.AdminCustomerResponse
-import com.rita.ecommerceplatform.dto.response.AdminCustomerSummaryResponse
-import com.rita.ecommerceplatform.dto.response.PageResponse
+import com.rita.ecommerceplatform.model.response.AdminCustomerResponse
+import com.rita.ecommerceplatform.model.response.AdminCustomerSummaryResponse
+import com.rita.ecommerceplatform.model.response.PageResponse
 import com.rita.ecommerceplatform.service.AdminCustomerService
 import com.rita.ecommerceplatform.service.Paging
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
