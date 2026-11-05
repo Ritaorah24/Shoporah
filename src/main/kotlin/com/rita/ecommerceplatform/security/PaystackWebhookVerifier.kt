@@ -1,6 +1,6 @@
 package com.rita.ecommerceplatform.security
 
-import org.springframework.beans.factory.annotation.Value
+import com.rita.ecommerceplatform.config.PaystackProps
 import org.springframework.stereotype.Component
 import java.security.MessageDigest
 import java.util.HexFormat
@@ -13,9 +13,9 @@ import javax.crypto.spec.SecretKeySpec
  * our secret key, in hex. Only Paystack and we know the key, so nobody else can produce a matching signature.
  */
 @Component
-class PaystackWebhookVerifier(@Value("\${app.paystack.secret-key}") secretKey: String) {
+class PaystackWebhookVerifier(paystackProps: PaystackProps) {
 
-    private val key = SecretKeySpec(secretKey.toByteArray(Charsets.UTF_8), ALGORITHM)
+    private val key = SecretKeySpec(paystackProps.secretKey.toByteArray(Charsets.UTF_8), ALGORITHM)
 
     /** True only if the signature matches the body byte for byte. A missing signature is never valid. */
     fun isValid(body: ByteArray, signature: String?): Boolean {

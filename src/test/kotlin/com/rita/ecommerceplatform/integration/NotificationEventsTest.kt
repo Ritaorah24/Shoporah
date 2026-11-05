@@ -31,7 +31,7 @@ class NotificationEventsTest : IntegrationTestBase() {
     @Autowired
     private lateinit var transactionTemplate: TransactionTemplate
 
-    @Value("\${app.paystack.secret-key}")
+    @Value("\${paystack.secret-key}")
     private lateinit var secretKey: String
 
     private lateinit var adminToken: String

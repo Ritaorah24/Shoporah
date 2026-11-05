@@ -1,7 +1,10 @@
 package com.rita.ecommerceplatform.config
 
+import com.zaxxer.hikari.HikariConfig
+import com.zaxxer.hikari.HikariDataSource
 import org.jdbi.v3.core.Jdbi
 import org.jdbi.v3.core.kotlin.KotlinPlugin
+import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.dao.DataAccessException
@@ -12,7 +15,27 @@ import java.sql.SQLException
 import javax.sql.DataSource
 
 @Configuration
-class DatabaseConfig {
+@EnableConfigurationProperties(DatasourceProperties::class)
+class DatabaseConfig(
+    private val datasourceProperties: DatasourceProperties,
+) {
+
+    @Bean
+    fun dataSource(): DataSource {
+        val hikariConfig = HikariConfig().apply {
+            jdbcUrl = datasourceProperties.url
+            username = datasourceProperties.username
+            password = datasourceProperties.password
+            driverClassName = datasourceProperties.driverClassName
+            isAutoCommit = datasourceProperties.defaultAutoCommit
+            connectionTestQuery = datasourceProperties.hikari.connectionTestQuery
+            transactionIsolation = datasourceProperties.hikari.transactionIsolation
+            maximumPoolSize = datasourceProperties.hikari.maximumPoolSize
+            minimumIdle = datasourceProperties.hikari.minimumIdle
+            poolName = "ShoporahHikariPool"
+        }
+        return HikariDataSource(hikariConfig)
+    }
 
     /**
      * Differs from the template on purpose. The proxy puts JDBI on the connection of the surrounding @Transactional,

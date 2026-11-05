@@ -1,5 +1,6 @@
 package com.rita.ecommerceplatform.service
 
+import com.rita.ecommerceplatform.config.PasswordResetProps
 import com.rita.ecommerceplatform.exception.AccessNotAllowedException
 import com.rita.ecommerceplatform.exception.BadRequestException
 import com.rita.ecommerceplatform.config.EmailExecutorConfig
@@ -16,7 +17,6 @@ import com.rita.ecommerceplatform.repository.database.NotificationRepository
 import com.rita.ecommerceplatform.repository.api.NotificationChannel
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.core.task.TaskExecutor
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
@@ -41,9 +41,7 @@ class PasswordResetService(
     private val channel: NotificationChannel,
     private val passwordEncoder: PasswordEncoder,
     @Qualifier(EmailExecutorConfig.EMAIL_EXECUTOR) private val emailExecutor: TaskExecutor,
-    @Value("\${app.password-reset.token-minutes}") private val tokenMinutes: Int,
-    @Value("\${app.password-reset.cooldown-seconds}") private val cooldownSeconds: Int,
-    @Value("\${app.password-reset.url}") private val resetUrl: String,
+    private val passwordResetProps: PasswordResetProps,
 ) {
 
     private val log = LoggerFactory.getLogger(PasswordResetService::class.java)
@@ -60,7 +58,7 @@ class PasswordResetService(
         if (customer.customerStatus != CustomerStatus.ACTIVE || auth.customerAuthStatus != CustomerAuthStatus.ACTIVE) return
 
         val token = newToken()
-        if (customerAuthRepository.saveResetToken(customer.customerId!!, hash(token), tokenMinutes, cooldownSeconds) == 0) {
+        if (customerAuthRepository.saveResetToken(customer.customerId!!, hash(token), passwordResetProps.tokenMinutes, passwordResetProps.cooldownSeconds) == 0) {
             return // a link was sent less than cooldownSeconds ago
         }
         emailExecutor.execute { sendResetEmail(customer, token) }
@@ -90,8 +88,8 @@ class PasswordResetService(
         val body = """
             Hi ${customer.customerFirstName},
 
-            We received a request to reset your password. Use this link within $tokenMinutes minutes:
-            $resetUrl?token=$token
+            We received a request to reset your password. Use this link within ${passwordResetProps.tokenMinutes} minutes:
+            ${passwordResetProps.url}?token=$token
 
             If you didn't ask for this, ignore this email; your password stays the same.
         """.trimIndent()

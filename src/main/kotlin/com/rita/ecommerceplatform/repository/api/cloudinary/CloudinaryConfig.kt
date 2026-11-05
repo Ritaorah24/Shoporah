@@ -1,6 +1,6 @@
 package com.rita.ecommerceplatform.repository.api.cloudinary
 
-import org.springframework.beans.factory.annotation.Value
+import com.rita.ecommerceplatform.config.CloudinaryProps
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.http.client.JdkClientHttpRequestFactory
@@ -20,22 +20,22 @@ data class CloudinaryProperties(val cloudName: String, val apiKey: String, val a
  */
 @Configuration
 class CloudinaryConfig(
-    @Value("\${app.cloudinary.base-url}") private val baseUrl: String,
+    private val cloudinaryProps: CloudinaryProps,
 ) {
 
     @Bean
-    fun cloudinaryProperties(
-        @Value("\${app.cloudinary.cloud-name:}") cloudName: String,
-        @Value("\${app.cloudinary.api-key:}") apiKey: String,
-        @Value("\${app.cloudinary.api-secret:}") apiSecret: String,
-    ) = CloudinaryProperties(cloudName.trim(), apiKey.trim(), apiSecret.trim())
+    fun cloudinaryProperties() = CloudinaryProperties(
+        cloudinaryProps.cloudName.trim(),
+        cloudinaryProps.apiKey.trim(),
+        cloudinaryProps.apiSecret.trim(),
+    )
 
     @Bean
     fun cloudinaryRestClient(): RestClient {
         val httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build()
         val requestFactory = JdkClientHttpRequestFactory(httpClient).apply { setReadTimeout(Duration.ofSeconds(30)) }
         return RestClient.builder()
-            .baseUrl(baseUrl)
+            .baseUrl(cloudinaryProps.baseUrl)
             .requestFactory(requestFactory)
             .build()
     }

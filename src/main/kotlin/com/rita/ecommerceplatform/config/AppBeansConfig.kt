@@ -6,5 +6,10 @@ import org.springframework.context.annotation.Configuration
 @Configuration
 @EnableConfigurationProperties(
     AppProps::class,
+    JwtProps::class,
+    PaystackProps::class,
+    CloudinaryProps::class,
+    NotificationProps::class,
+    PasswordResetProps::class,
 )
 class AppBeansConfig

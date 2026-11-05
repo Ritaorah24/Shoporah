@@ -1,5 +1,6 @@
 package com.rita.ecommerceplatform.security
 
+import com.rita.ecommerceplatform.config.PaystackProps
 import com.rita.ecommerceplatform.model.request.paystack.PaystackWebhookEvent
 import org.junit.jupiter.api.Test
 import tools.jackson.databind.json.JsonMapper
@@ -14,7 +15,7 @@ import kotlin.test.assertTrue
  */
 class PaystackWebhookVerifierTest {
 
-    private val verifier = PaystackWebhookVerifier("sk_test_example")
+    private val verifier = PaystackWebhookVerifier(PaystackProps(secretKey = "sk_test_example", baseUrl = ""))
     private val body = """{"event":"charge.success","data":{"reference":"PAY-1"}}""".toByteArray()
     private val signature =
         "ed9c4eb583679f94c4e41cf7930da0362269924b95d7f124e5314c63f355118d98a63508fc5d661f73d1b8382da724d34e809a5d2c9a365efe4a3dad411f33b3"
@@ -33,7 +34,7 @@ class PaystackWebhookVerifierTest {
         assertFalse(verifier.isValid("""{"event":"charge.success","data":{"reference":"PAY-2"}}""".toByteArray(), signature))
         // Same content, different spacing: different bytes, so a re-written body does not pass either.
         assertFalse(verifier.isValid("""{"event": "charge.success","data":{"reference":"PAY-1"}}""".toByteArray(), signature))
-        assertFalse(PaystackWebhookVerifier("sk_test_other").isValid(body, signature))
+        assertFalse(PaystackWebhookVerifier(PaystackProps(secretKey = "sk_test_other", baseUrl = "")).isValid(body, signature))
     }
 
     @Test

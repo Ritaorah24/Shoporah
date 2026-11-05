@@ -1,6 +1,6 @@
 package com.rita.ecommerceplatform.repository.api.paystack
 
-import org.springframework.beans.factory.annotation.Value
+import com.rita.ecommerceplatform.config.PaystackProps
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.http.HttpHeaders
@@ -15,12 +15,11 @@ import java.time.Duration
  */
 @Configuration
 class PaystackConfig(
-    @Value("\${app.paystack.secret-key}") private val secretKey: String,
-    @Value("\${app.paystack.base-url}") private val baseUrl: String,
+    private val paystackProps: PaystackProps,
 ) {
 
     init {
-        require(secretKey.isNotBlank()) { "PAYSTACK_SECRET_KEY must be set" }
+        require(paystackProps.secretKey.isNotBlank()) { "paystack.secret-key must be set" }
     }
 
     // A plain RestClient.builder(): bodies are sent and read as JSON strings, so Boot's preconfigured
@@ -30,8 +29,8 @@ class PaystackConfig(
         val httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build()
         val requestFactory = JdkClientHttpRequestFactory(httpClient).apply { setReadTimeout(Duration.ofSeconds(10)) }
         return RestClient.builder()
-            .baseUrl(baseUrl)
-            .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer $secretKey")
+            .baseUrl(paystackProps.baseUrl)
+            .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer ${paystackProps.secretKey}")
             .requestFactory(requestFactory)
             .build()
     }

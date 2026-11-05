@@ -1,5 +1,6 @@
 package com.rita.ecommerceplatform.service
 
+import com.rita.ecommerceplatform.config.PaystackProps
 import com.rita.ecommerceplatform.exception.BadRequestException
 import com.rita.ecommerceplatform.exception.IncorrectPasswordException
 import com.rita.ecommerceplatform.exception.UnableToLocateRecordException
@@ -18,7 +19,6 @@ import com.rita.ecommerceplatform.repository.api.PaymentGateway
 import com.rita.ecommerceplatform.model.request.paystack.PaystackWebhookEvent
 import com.rita.ecommerceplatform.security.PaystackWebhookVerifier
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.support.TransactionTemplate
 import tools.jackson.databind.json.JsonMapper
@@ -42,7 +42,7 @@ class PaymentService(
     // initialize must run outside any transaction, and @Transactional on a method called from inside
     // this same class would be ignored (Spring applies it through a proxy that such calls bypass).
     private val transactionTemplate: TransactionTemplate,
-    @Value("\${app.paystack.callback-url}") private val callbackUrl: String,
+    private val paystackProps: PaystackProps,
 ) {
 
     private val log = LoggerFactory.getLogger(PaymentService::class.java)
@@ -64,7 +64,7 @@ class PaymentService(
                     email = start.email!!,
                     amountKobo = toKobo(start.payment.paymentAmount!!),
                     currency = start.payment.paymentCurrency!!,
-                    callbackUrl = callbackUrl.ifBlank { null },
+                    callbackUrl = paystackProps.callbackUrl.ifBlank { null },
                 ),
             )
         } catch (e: Exception) {

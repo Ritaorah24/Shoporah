@@ -22,7 +22,7 @@ import kotlin.test.assertTrue
  */
 class RefundWebhookTest : IntegrationTestBase() {
 
-    @Value("\${app.paystack.secret-key}")
+    @Value("\${paystack.secret-key}")
     private lateinit var secretKey: String
 
     private lateinit var adminToken: String

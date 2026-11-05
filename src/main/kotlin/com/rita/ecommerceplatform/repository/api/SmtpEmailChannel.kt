@@ -1,5 +1,6 @@
 package com.rita.ecommerceplatform.repository.api
 
+import com.rita.ecommerceplatform.config.NotificationProps
 import com.rita.ecommerceplatform.model.entity.NotificationChannelType
 import com.rita.ecommerceplatform.repository.api.NotificationChannel
 import org.slf4j.LoggerFactory
@@ -18,7 +19,7 @@ import org.springframework.stereotype.Component
 class SmtpEmailChannel(
     private val mailSender: ObjectProvider<JavaMailSender>,
     @Value("\${spring.mail.host:}") private val host: String,
-    @Value("\${app.notifications.from}") private val from: String,
+    private val notificationProps: NotificationProps,
 ) : NotificationChannel {
 
     private val log = LoggerFactory.getLogger(SmtpEmailChannel::class.java)
@@ -33,7 +34,7 @@ class SmtpEmailChannel(
         if (host.isBlank()) throw IllegalStateException(NOT_CONFIGURED)
         val sender = mailSender.ifAvailable ?: throw IllegalStateException(NOT_CONFIGURED)
         val message = SimpleMailMessage().apply {
-            setFrom(from)
+            setFrom(notificationProps.from)
             setTo(recipient)
             setSubject(subject)
             setText(body)
