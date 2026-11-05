@@ -2,7 +2,7 @@ package com.rita.ecommerceplatform.controller
 
 import com.rita.ecommerceplatform.model.response.BaseDataResponse
 import com.rita.ecommerceplatform.exception.AccessNotAllowedException
-import com.rita.ecommerceplatform.config.OpenApiConfig
+import com.rita.ecommerceplatform.config.SwaggerConfig
 import com.rita.ecommerceplatform.model.request.ValidateCouponRequest
 import com.rita.ecommerceplatform.security.CurrentUser
 import com.rita.ecommerceplatform.security.UserType
@@ -19,7 +19,7 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 
 @Tag(name = "Coupons", description = "Check a coupon code against the logged-in customer's cart")
-@SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+@SecurityRequirement(name = SwaggerConfig.BEARER_AUTH)
 @RestController
 @RequestMapping("/{stage}/customer/coupons")
 class CustomerCouponController(private val couponService: CouponService) {

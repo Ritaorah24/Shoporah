@@ -3,7 +3,7 @@ package com.rita.ecommerceplatform.controller
 import com.rita.ecommerceplatform.model.response.BaseDataResponse
 import com.rita.ecommerceplatform.model.response.BaseResponse
 import com.rita.ecommerceplatform.exception.AccessNotAllowedException
-import com.rita.ecommerceplatform.config.OpenApiConfig
+import com.rita.ecommerceplatform.config.SwaggerConfig
 import com.rita.ecommerceplatform.model.request.CreateCategoryRequest
 import com.rita.ecommerceplatform.model.request.UpdateCategoryRequest
 import com.rita.ecommerceplatform.model.request.UpdateStatusRequest
@@ -26,7 +26,7 @@ import org.springframework.web.bind.annotation.RestController
 
 /** Category management. SecurityConfig restricts every /{stage}/admin URL to admins who have changed their password. */
 @Tag(name = "Admin categories", description = "Create, edit, activate/deactivate and delete categories")
-@SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+@SecurityRequirement(name = SwaggerConfig.BEARER_AUTH)
 @RestController
 @RequestMapping("/{stage}/admin/categories")
 class AdminCategoryController(private val categoryService: CategoryService) {

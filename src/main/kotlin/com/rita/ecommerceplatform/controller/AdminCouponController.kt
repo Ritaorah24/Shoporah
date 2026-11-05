@@ -3,7 +3,7 @@ package com.rita.ecommerceplatform.controller
 import com.rita.ecommerceplatform.model.response.BaseDataResponse
 import com.rita.ecommerceplatform.model.response.BaseResponse
 import com.rita.ecommerceplatform.exception.AccessNotAllowedException
-import com.rita.ecommerceplatform.config.OpenApiConfig
+import com.rita.ecommerceplatform.config.SwaggerConfig
 import com.rita.ecommerceplatform.model.request.CreateCouponRequest
 import com.rita.ecommerceplatform.model.request.UpdateCouponRequest
 import com.rita.ecommerceplatform.model.request.UpdateStatusRequest
@@ -28,7 +28,7 @@ import org.springframework.web.bind.annotation.RestController
 
 /** Coupon management. SecurityConfig restricts every /{stage}/admin URL to admins who have changed their password. */
 @Tag(name = "Admin coupons", description = "Create, edit, activate/deactivate and delete discount coupons")
-@SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+@SecurityRequirement(name = SwaggerConfig.BEARER_AUTH)
 @RestController
 @RequestMapping("/{stage}/admin/coupons")
 class AdminCouponController(private val couponService: CouponService) {

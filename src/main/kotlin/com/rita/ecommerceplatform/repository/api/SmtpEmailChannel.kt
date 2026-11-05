@@ -1,14 +1,16 @@
 package com.rita.ecommerceplatform.repository.api
 
+import io.github.oshai.kotlinlogging.KotlinLogging
 import com.rita.ecommerceplatform.config.NotificationProps
 import com.rita.ecommerceplatform.model.entity.NotificationChannelType
 import com.rita.ecommerceplatform.repository.api.NotificationChannel
-import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.mail.SimpleMailMessage
 import org.springframework.mail.javamail.JavaMailSender
 import org.springframework.stereotype.Component
+
+private val logger = KotlinLogging.logger {}
 
 /**
  * Plain-text email over SMTP (spring.mail.* settings; Mailtrap's sandbox in development).
@@ -22,10 +24,8 @@ class SmtpEmailChannel(
     private val notificationProps: NotificationProps,
 ) : NotificationChannel {
 
-    private val log = LoggerFactory.getLogger(SmtpEmailChannel::class.java)
-
     init {
-        if (host.isBlank()) log.warn("MAIL_HOST is not set: emails will not be sent")
+        if (host.isBlank()) logger.warn { "MAIL_HOST is not set: emails will not be sent" }
     }
 
     override val type = NotificationChannelType.EMAIL

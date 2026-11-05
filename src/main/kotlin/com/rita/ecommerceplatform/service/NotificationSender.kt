@@ -1,12 +1,14 @@
 package com.rita.ecommerceplatform.service
 
+import io.github.oshai.kotlinlogging.KotlinLogging
 import com.rita.ecommerceplatform.config.NotificationProps
 import com.rita.ecommerceplatform.repository.database.NotificationRepository
 import com.rita.ecommerceplatform.repository.api.NotificationChannel
-import org.slf4j.LoggerFactory
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.transaction.support.TransactionTemplate
+
+private val logger = KotlinLogging.logger {}
 
 /**
  * Delivers the outbox in the background (SchedulingConfig switches the schedule on; tests call sendDue directly).
@@ -22,8 +24,6 @@ class NotificationSender(
     private val transactionTemplate: TransactionTemplate,
     private val notificationProps: NotificationProps,
 ) {
-
-    private val log = LoggerFactory.getLogger(NotificationSender::class.java)
 
     /** Sends due rows until none are left or batch-size is reached; returns how many rows were tried. */
     @Scheduled(fixedDelayString = "\${notifications.poll-delay-ms}")
@@ -44,8 +44,7 @@ class NotificationSender(
             notificationRepository.markSent(notification.notificationId!!)
         } catch (e: Exception) {
             // The reason is saved for support; the body is not logged (it can hold personal details).
-            log.warn("Notification {} ({}) failed on attempt {}: {}",
-                notification.notificationId, notification.notificationType, notification.notificationAttemptCount!! + 1, e.message)
+            logger.warn { "Notification ${notification.notificationId} (${notification.notificationType}) failed on attempt ${notification.notificationAttemptCount!! + 1}: ${e.message}" }
             notificationRepository.markAttemptFailed(notification.notificationId!!, e.message ?: e.javaClass.simpleName, notificationProps.maxAttempts)
         }
         true

@@ -2,7 +2,7 @@ package com.rita.ecommerceplatform.controller
 
 import com.rita.ecommerceplatform.model.response.BaseDataResponse
 import com.rita.ecommerceplatform.exception.AccessNotAllowedException
-import com.rita.ecommerceplatform.config.OpenApiConfig
+import com.rita.ecommerceplatform.config.SwaggerConfig
 import com.rita.ecommerceplatform.model.request.InitializePaymentRequest
 import com.rita.ecommerceplatform.security.CurrentUser
 import com.rita.ecommerceplatform.security.UserType
@@ -21,7 +21,7 @@ import org.springframework.web.bind.annotation.RestController
 
 /** Paying for the logged-in customer's orders. */
 @Tag(name = "Payments", description = "Paying for the logged-in customer's orders")
-@SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+@SecurityRequirement(name = SwaggerConfig.BEARER_AUTH)
 @RestController
 @RequestMapping("/{stage}/customer/payments")
 class PaymentController(private val paymentService: PaymentService) {

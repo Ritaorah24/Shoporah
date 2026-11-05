@@ -3,7 +3,7 @@ package com.rita.ecommerceplatform.controller
 import com.rita.ecommerceplatform.model.response.BaseDataResponse
 import com.rita.ecommerceplatform.model.response.BaseResponse
 import com.rita.ecommerceplatform.exception.AccessNotAllowedException
-import com.rita.ecommerceplatform.config.OpenApiConfig
+import com.rita.ecommerceplatform.config.SwaggerConfig
 import com.rita.ecommerceplatform.model.request.AddCartItemRequest
 import com.rita.ecommerceplatform.model.request.UpdateCartItemRequest
 import com.rita.ecommerceplatform.security.CurrentUser
@@ -25,7 +25,7 @@ import org.springframework.web.bind.annotation.RestController
 
 /** The logged-in customer's cart. Changes return the whole cart, so the client never computes totals itself. */
 @Tag(name = "Cart", description = "The logged-in customer's shopping cart")
-@SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+@SecurityRequirement(name = SwaggerConfig.BEARER_AUTH)
 @RestController
 @RequestMapping("/{stage}/customer/cart")
 class CartController(private val cartService: CartService) {

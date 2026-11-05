@@ -3,7 +3,7 @@ package com.rita.ecommerceplatform.controller
 import com.rita.ecommerceplatform.model.response.BaseDataResponse
 import com.rita.ecommerceplatform.model.response.BaseResponse
 import com.rita.ecommerceplatform.exception.AccessNotAllowedException
-import com.rita.ecommerceplatform.config.OpenApiConfig
+import com.rita.ecommerceplatform.config.SwaggerConfig
 import com.rita.ecommerceplatform.model.request.AddWishlistItemRequest
 import com.rita.ecommerceplatform.model.request.MoveToCartRequest
 import com.rita.ecommerceplatform.security.CurrentUser
@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.RestController
 
 /** The logged-in customer's wishlist. Changes return the whole wishlist. */
 @Tag(name = "Wishlist", description = "Products the logged-in customer saved for later")
-@SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+@SecurityRequirement(name = SwaggerConfig.BEARER_AUTH)
 @RestController
 @RequestMapping("/{stage}/customer/wishlist")
 class WishlistController(private val wishlistService: WishlistService) {

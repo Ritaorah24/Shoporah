@@ -1,5 +1,6 @@
 package com.rita.ecommerceplatform.service
 
+import io.github.oshai.kotlinlogging.KotlinLogging
 import com.rita.ecommerceplatform.exception.BadRequestException
 import com.rita.ecommerceplatform.exception.UnableToLocateRecordException
 import com.rita.ecommerceplatform.model.request.UpdateProductImageRequest
@@ -10,10 +11,11 @@ import com.rita.ecommerceplatform.repository.database.ProductImageRepository
 import com.rita.ecommerceplatform.repository.database.ProductRepository
 import com.rita.ecommerceplatform.repository.api.ImageStorage
 import com.rita.ecommerceplatform.repository.api.StoredImage
-import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.web.multipart.MultipartFile
+
+private val logger = KotlinLogging.logger {}
 
 /**
  * Product images (checkpoint 2.2, Step 8). The file goes to the image storage outside any transaction (it can take
@@ -28,8 +30,6 @@ class ProductImageService(
     // Transactions are opened in code, like PaymentService: the storage call must run outside any transaction.
     private val transactionTemplate: TransactionTemplate,
 ) {
-
-    private val log = LoggerFactory.getLogger(ProductImageService::class.java)
 
     /**
      * Checks the file (size, and its real type from its first bytes), stores it, and records it. The product's first
@@ -127,7 +127,7 @@ class ProductImageService(
         try {
             imageStorage.delete(storageKey)
         } catch (e: Exception) {
-            log.warn("Could not remove stored image {}; it is left over in the image storage", storageKey, e)
+            logger.warn(e) { "Could not remove stored image $storageKey; it is left over in the image storage" }
         }
     }
 

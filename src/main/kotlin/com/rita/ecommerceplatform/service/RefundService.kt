@@ -1,5 +1,6 @@
 package com.rita.ecommerceplatform.service
 
+import io.github.oshai.kotlinlogging.KotlinLogging
 import com.rita.ecommerceplatform.exception.ApiErrorException
 import com.rita.ecommerceplatform.exception.BadRequestException
 import com.rita.ecommerceplatform.exception.UnableToLocateRecordException
@@ -18,10 +19,11 @@ import com.rita.ecommerceplatform.repository.api.GatewayRefundRequest
 import com.rita.ecommerceplatform.repository.api.GatewayRefundStart
 import com.rita.ecommerceplatform.repository.api.PaymentGateway
 import com.rita.ecommerceplatform.model.request.paystack.PaystackWebhookEvent
-import org.slf4j.LoggerFactory
 import org.springframework.dao.DuplicateKeyException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.support.TransactionTemplate
+
+private val logger = KotlinLogging.logger {}
 
 /**
  * Admin refunds through the payment provider (checkpoint 2.2, Step 5). Only whole orders are refunded: the
@@ -39,8 +41,6 @@ class RefundService(
     // Transactions are opened in code, like PaymentService: the provider call must run outside any transaction.
     private val transactionTemplate: TransactionTemplate,
 ) {
-
-    private val log = LoggerFactory.getLogger(RefundService::class.java)
 
     /**
      * Starts refunding a paid order that is CANCELLED or DELIVERED. If the provider refuses, the refund is FAILED
@@ -62,7 +62,7 @@ class RefundService(
                 ),
             )
         } catch (e: ApiErrorException) {
-            log.warn("Refund {} of order {}: the provider could not be reached; left PENDING until refreshed", refund.refundId, orderId)
+            logger.warn { "Refund ${refund.refundId} of order $orderId: the provider could not be reached; left PENDING until refreshed" }
             null
         }
         when (answer) {
@@ -82,7 +82,7 @@ class RefundService(
         if (refund.refundStatus == RefundStatus.PENDING) {
             if (refund.refundProviderRefundId != null) {
                 paymentGateway.fetchRefund(refund.refundProviderRefundId!!)?.let { refundSettlement.settle(refundId, it) }
-                    ?: log.warn("Refund {}: the provider does not know refund id {}", refundId, refund.refundProviderRefundId)
+                    ?: logger.warn { "Refund $refundId: the provider does not know refund id ${refund.refundProviderRefundId}" }
             } else {
                 findUnconfirmed(refund)
             }
@@ -98,7 +98,7 @@ class RefundService(
      */
     fun handleWebhook(event: PaystackWebhookEvent) {
         if (!event.isRefundFinal) {
-            log.info("Ignored Paystack webhook {} for refund {}", event.event, event.refundId)
+            logger.info { "Ignored Paystack webhook ${event.event} for refund ${event.refundId}" }
             return
         }
 
@@ -107,11 +107,11 @@ class RefundService(
         if (known != null) {
             if (known.refundStatus != RefundStatus.PENDING) return
             val result = paymentGateway.fetchRefund(known.refundProviderRefundId!!) ?: run {
-                log.warn("Paystack webhook {}: the provider does not know refund id {}", event.event, known.refundProviderRefundId)
+                logger.warn { "Paystack webhook ${event.event}: the provider does not know refund id ${known.refundProviderRefundId}" }
                 return
             }
             val settled = refundSettlement.settle(known.refundId!!, result)
-            log.info("Paystack webhook {} settled refund {} as {}", event.event, settled.refundId, settled.refundStatus)
+            logger.info { "Paystack webhook ${event.event} settled refund ${settled.refundId} as ${settled.refundStatus}" }
             return
         }
 
@@ -121,14 +121,11 @@ class RefundService(
             ?.let(paymentRepository::findByReference)
             ?.let { refundRepository.findUnconfirmedForPayment(it.paymentId!!) }
             ?: run {
-                log.warn(
-                    "Paystack webhook {} for a refund we do not know: id {}, payment {}",
-                    event.event, event.refundId, event.transactionReference,
-                )
+                logger.warn { "Paystack webhook ${event.event} for a refund we do not know: id ${event.refundId}, payment ${event.transactionReference}" }
                 return
             }
         findUnconfirmed(unconfirmed)
-        log.info("Paystack webhook {} checked unconfirmed refund {}", event.event, unconfirmed.refundId)
+        logger.info { "Paystack webhook ${event.event} checked unconfirmed refund ${unconfirmed.refundId}" }
     }
 
     // The start never heard back from the provider. A refund for this payment that none of our rows claims yet
@@ -141,7 +138,7 @@ class RefundService(
         if (found != null) {
             refundSettlement.settle(refund.refundId!!, found)
         } else if (refundRepository.failUnconfirmed(refund.refundId!!, UNCONFIRMED_GRACE_SECONDS, NOT_RECEIVED) == 1) {
-            log.warn("Refund {}: the provider has no record of it; marked FAILED", refund.refundId)
+            logger.warn { "Refund ${refund.refundId}: the provider has no record of it; marked FAILED" }
         }
     }
 

@@ -3,7 +3,7 @@ package com.rita.ecommerceplatform.controller
 import com.rita.ecommerceplatform.model.response.BaseDataResponse
 import com.rita.ecommerceplatform.model.response.BaseResponse
 import com.rita.ecommerceplatform.exception.AccessNotAllowedException
-import com.rita.ecommerceplatform.config.OpenApiConfig
+import com.rita.ecommerceplatform.config.SwaggerConfig
 import com.rita.ecommerceplatform.model.request.CreateAddressRequest
 import com.rita.ecommerceplatform.model.request.UpdateAddressRequest
 import com.rita.ecommerceplatform.security.CurrentUser
@@ -25,7 +25,7 @@ import org.springframework.web.bind.annotation.RestController
 
 /** The logged-in customer's addresses: the customer always comes from the token, never from the request. */
 @Tag(name = "Customer addresses", description = "The logged-in customer's delivery addresses")
-@SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+@SecurityRequirement(name = SwaggerConfig.BEARER_AUTH)
 @RestController
 @RequestMapping("/{stage}/customer/addresses")
 class AddressController(private val addressService: AddressService) {

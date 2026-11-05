@@ -1,9 +1,9 @@
 package com.rita.ecommerceplatform.service
 
+import io.github.oshai.kotlinlogging.KotlinLogging
 import com.rita.ecommerceplatform.config.PasswordResetProps
 import com.rita.ecommerceplatform.exception.AccessNotAllowedException
 import com.rita.ecommerceplatform.exception.BadRequestException
-import com.rita.ecommerceplatform.config.EmailExecutorConfig
 import com.rita.ecommerceplatform.model.request.ForgotPasswordRequest
 import com.rita.ecommerceplatform.model.request.ResetPasswordRequest
 import com.rita.ecommerceplatform.model.entity.Customer
@@ -15,8 +15,6 @@ import com.rita.ecommerceplatform.repository.database.CustomerAuthRepository
 import com.rita.ecommerceplatform.repository.database.CustomerRepository
 import com.rita.ecommerceplatform.repository.database.NotificationRepository
 import com.rita.ecommerceplatform.repository.api.NotificationChannel
-import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.core.task.TaskExecutor
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
@@ -25,6 +23,8 @@ import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.Base64
 import java.util.HexFormat
+
+private val logger = KotlinLogging.logger {}
 
 /**
  * Forgot / reset password for customers (checkpoint 2.1).
@@ -40,11 +40,10 @@ class PasswordResetService(
     private val notificationService: NotificationService,
     private val channel: NotificationChannel,
     private val passwordEncoder: PasswordEncoder,
-    @Qualifier(EmailExecutorConfig.EMAIL_EXECUTOR) private val emailExecutor: TaskExecutor,
+    private val taskExecutor: TaskExecutor,
     private val passwordResetProps: PasswordResetProps,
 ) {
 
-    private val log = LoggerFactory.getLogger(PasswordResetService::class.java)
     private val random = SecureRandom()
 
     /**
@@ -61,7 +60,7 @@ class PasswordResetService(
         if (customerAuthRepository.saveResetToken(customer.customerId!!, hash(token), passwordResetProps.tokenMinutes, passwordResetProps.cooldownSeconds) == 0) {
             return // a link was sent less than cooldownSeconds ago
         }
-        emailExecutor.execute { sendResetEmail(customer, token) }
+        taskExecutor.execute { sendResetEmail(customer, token) }
     }
 
     /**
@@ -98,7 +97,7 @@ class PasswordResetService(
             channel.send(customer.customerEmail!!, subject, body)
             NotificationStatus.SENT to null
         } catch (e: Exception) {
-            log.warn("Password reset email for customer {} failed: {}", customer.customerId, e.message)
+            logger.warn { "Password reset email for customer ${customer.customerId} failed: ${e.message}" }
             NotificationStatus.FAILED to (e.message ?: e.javaClass.simpleName)
         }
         try {
@@ -114,7 +113,7 @@ class PasswordResetService(
                 adminId = null,
             )
         } catch (e: Exception) {
-            log.error("Could not record the password reset email for customer {}", customer.customerId, e)
+            logger.error(e) { "Could not record the password reset email for customer ${customer.customerId}" }
         }
     }
 

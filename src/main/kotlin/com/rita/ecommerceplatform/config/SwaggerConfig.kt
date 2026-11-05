@@ -13,7 +13,7 @@ import org.springframework.context.annotation.Configuration
  * token to the login and register endpoints (an invalid token there would cause a 401).
  */
 @Configuration
-class OpenApiConfig {
+class SwaggerConfig {
 
     @Bean
     fun openApi(): OpenAPI =

@@ -2,7 +2,7 @@ package com.rita.ecommerceplatform.controller
 
 import com.rita.ecommerceplatform.model.response.BaseDataResponse
 import com.rita.ecommerceplatform.exception.AccessNotAllowedException
-import com.rita.ecommerceplatform.config.OpenApiConfig
+import com.rita.ecommerceplatform.config.SwaggerConfig
 import com.rita.ecommerceplatform.model.request.ChangePasswordRequest
 import com.rita.ecommerceplatform.model.request.LoginRequest
 import com.rita.ecommerceplatform.security.CurrentUser
@@ -31,7 +31,7 @@ class AdminAuthController(private val authService: AuthService) {
     }
 
     /** The admin is identified by the token, never by an ID in the request. */
-    @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+    @SecurityRequirement(name = SwaggerConfig.BEARER_AUTH)
     @PatchMapping("/password")
     fun changePassword(
         @AuthenticationPrincipal jwt: Jwt,

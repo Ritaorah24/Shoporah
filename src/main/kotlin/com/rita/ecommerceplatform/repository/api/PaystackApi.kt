@@ -1,14 +1,15 @@
 package com.rita.ecommerceplatform.repository.api
 
+import io.github.oshai.kotlinlogging.KotlinLogging
 import com.rita.ecommerceplatform.config.PaystackProps
 import com.rita.ecommerceplatform.exception.ApiErrorException
 import com.rita.ecommerceplatform.utility.ApiUtil
+import okhttp3.ConnectionPool
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Repository
 import tools.jackson.core.JacksonException
 import tools.jackson.databind.JsonNode
@@ -16,6 +17,8 @@ import tools.jackson.databind.json.JsonMapper
 import java.io.IOException
 import java.time.OffsetDateTime
 import java.util.concurrent.TimeUnit
+
+private val logger = KotlinLogging.logger {}
 
 /**
  * PaymentGateway backed by Paystack's REST API (https://paystack.com/docs/api/transaction/).
@@ -30,15 +33,19 @@ class PaystackApi(
     private val jsonMapper: JsonMapper,
 ) : PaymentGateway {
 
-    private val log = LoggerFactory.getLogger(PaystackApi::class.java)
-
     // The shared client's pool, with this integration's own limits. PaymentService.STALE_START_SECONDS and
-    // RefundService.UNCONFIRMED_GRACE_SECONDS rely on a call ending within 15 s, and a POST is never re-sent by itself.
+    // RefundService.UNCONFIRMED_GRACE_SECONDS rely on a call ending within 15 s.
     private val httpClient = okHttpClient.newBuilder()
         .connectTimeout(5, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
         .callTimeout(15, TimeUnit.SECONDS)
+        .build()
+
+    // A refund is never re-sent by the client: only findRefunds decides whether one was created. Keeping no idle
+    // connections means it always starts on a fresh one, so a connection the server closed cannot fail it.
+    private val refundClient = httpClient.newBuilder()
         .retryOnConnectionFailure(false)
+        .connectionPool(ConnectionPool(0, 1, TimeUnit.SECONDS))
         .build()
 
     // Bodies carry customer details, so only failures are logged (below).
@@ -107,14 +114,14 @@ class PaystackApi(
             .post(jsonMapper.writeValueAsString(body).toRequestBody(JSON))
             .build()
         val (status, responseBody) = send(what) {
-            httpClient.newCall(httpRequest).execute().use { it.code to it.body.string() }
+            refundClient.newCall(httpRequest).execute().use { it.code to it.body.string() }
         }
         rejectionOf(status, responseBody)?.let { message ->
-            log.warn("Paystack {} was refused: HTTP {} {}", what, status, message)
+            logger.warn { "Paystack $what was refused: HTTP $status $message" }
             return GatewayRefundStart.Rejected(message)
         }
         if (status !in 200..299) {
-            log.error("Paystack {} failed: HTTP {} {}", what, status, responseBody)
+            logger.error { "Paystack $what failed: HTTP $status $responseBody" }
             throw ApiErrorException(PROVIDER_ERROR)
         }
         return GatewayRefundStart.Accepted(refundOf(dataOf(responseBody, what), responseBody, what))
@@ -183,7 +190,7 @@ class PaystackApi(
         try {
             request()
         } catch (ex: IOException) {
-            log.error("Paystack {} failed: could not reach Paystack", what, ex)
+            logger.error(ex) { "Paystack $what failed: could not reach Paystack" }
             throw ApiErrorException(PROVIDER_ERROR)
         }
 
@@ -193,7 +200,7 @@ class PaystackApi(
         val data = json?.get("data")
         val shapeOk = data != null && if (expectArray) data.isArray else data.isObject
         if (json?.get("status")?.asBoolean() != true || !shapeOk) {
-            log.error("Paystack {} failed: {}", what, body)
+            logger.error { "Paystack $what failed: $body" }
             throw ApiErrorException(PROVIDER_ERROR)
         }
         return data!!
@@ -211,12 +218,12 @@ class PaystackApi(
         try {
             jsonMapper.readTree(body)
         } catch (ex: JacksonException) {
-            log.error("Paystack {} answered with a body that is not JSON: {}", what, body.take(500))
+            logger.error { "Paystack $what answered with a body that is not JSON: ${body.take(500)}" }
             null
         }
 
     private fun unreadable(what: String, cause: Exception? = null): ApiErrorException {
-        log.error("Paystack {} answered without the expected fields", what, cause)
+        logger.error(cause) { "Paystack $what answered without the expected fields" }
         return ApiErrorException(PROVIDER_ERROR)
     }
 

@@ -1,5 +1,6 @@
 package com.rita.ecommerceplatform.repository.api
 
+import io.github.oshai.kotlinlogging.KotlinLogging
 import com.rita.ecommerceplatform.config.CloudinaryProps
 import com.rita.ecommerceplatform.exception.ApiErrorException
 import com.rita.ecommerceplatform.utility.ApiUtil
@@ -8,7 +9,6 @@ import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Repository
 import tools.jackson.core.JacksonException
 import tools.jackson.databind.JsonNode
@@ -19,6 +19,8 @@ import java.security.MessageDigest
 import java.time.Instant
 import java.util.HexFormat
 import java.util.UUID
+
+private val logger = KotlinLogging.logger {}
 
 /**
  * ImageStorage backed by Cloudinary's REST upload API (https://cloudinary.com/documentation/image_upload_api_reference).
@@ -33,15 +35,13 @@ class CloudinaryApi(
     private val jsonMapper: JsonMapper,
 ) : ImageStorage {
 
-    private val log = LoggerFactory.getLogger(CloudinaryApi::class.java)
-
     private val cloudName = cloudinaryProps.cloudName.trim()
     private val apiKey = cloudinaryProps.apiKey.trim()
     private val apiSecret = cloudinaryProps.apiSecret.trim()
     private val isConfigured = cloudName.isNotBlank() && apiKey.isNotBlank() && apiSecret.isNotBlank()
 
     init {
-        if (!isConfigured) log.warn("cloudinary.* is not set: product image uploads will be refused")
+        if (!isConfigured) logger.warn { "cloudinary.* is not set: product image uploads will be refused" }
     }
 
     override fun upload(content: ByteArray, contentType: String, folder: String): StoredImage {
@@ -57,7 +57,7 @@ class CloudinaryApi(
         // Not through ApiUtil, whose request body is a String: that would corrupt the image's bytes.
         val (status, body) = send(what) { okHttpClient.newCall(request).execute().use { it.code to it.body.string() } }
         if (status !in 200..299) {
-            log.error("Cloudinary {} failed: HTTP {} {}", what, status, errorOf(body))
+            logger.error { "Cloudinary $what failed: HTTP $status ${errorOf(body)}" }
             throw ApiErrorException(STORAGE_ERROR)
         }
         val data = dataOf(body, what)
@@ -77,7 +77,7 @@ class CloudinaryApi(
         val result = dataOf(body, what).text("result")
         // "not found" means it is already gone, which is what we wanted.
         if (result != "ok" && result != "not found") {
-            log.error("Cloudinary destroy {} answered result {}", storageKey, result)
+            logger.error { "Cloudinary destroy $storageKey answered result $result" }
             throw ApiErrorException(STORAGE_ERROR)
         }
     }
@@ -101,14 +101,14 @@ class CloudinaryApi(
         try {
             request()
         } catch (ex: IOException) {
-            log.error("Cloudinary {} failed: could not reach Cloudinary", what, ex)
+            logger.error(ex) { "Cloudinary $what failed: could not reach Cloudinary" }
             throw ApiErrorException(STORAGE_ERROR)
         }
 
     private fun dataOf(body: String, what: String): JsonNode {
         val json = parse(body, what)
         if (json == null || !json.isObject || json.has("error")) {
-            log.error("Cloudinary {} failed: {}", what, errorOf(body))
+            logger.error { "Cloudinary $what failed: ${errorOf(body)}" }
             throw ApiErrorException(STORAGE_ERROR)
         }
         return json
@@ -122,12 +122,12 @@ class CloudinaryApi(
         try {
             jsonMapper.readTree(body)
         } catch (ex: JacksonException) {
-            log.error("Cloudinary {} answered with a body that is not JSON: {}", what, body.take(500))
+            logger.error { "Cloudinary $what answered with a body that is not JSON: ${body.take(500)}" }
             null
         }
 
     private fun unreadable(what: String): ApiErrorException {
-        log.error("Cloudinary {} answered without the expected fields", what)
+        logger.error { "Cloudinary $what answered without the expected fields" }
         return ApiErrorException(STORAGE_ERROR)
     }
 

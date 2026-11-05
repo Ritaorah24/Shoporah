@@ -10,10 +10,10 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
  * for the mail server, so its response time does not reveal whether the email exists.
  */
 @Configuration
-class EmailExecutorConfig {
+class AsyncConfig {
 
-    @Bean(EMAIL_EXECUTOR)
-    fun emailExecutor() = ThreadPoolTaskExecutor().apply {
+    @Bean("taskExecutor")
+    fun taskExecutor() = ThreadPoolTaskExecutor().apply {
         corePoolSize = 1
         maxPoolSize = 2
         queueCapacity = 100
@@ -21,9 +21,5 @@ class EmailExecutorConfig {
         // On shutdown, finish the emails already handed over instead of dropping them.
         setWaitForTasksToCompleteOnShutdown(true)
         setAwaitTerminationSeconds(15)
-    }
-
-    companion object {
-        const val EMAIL_EXECUTOR = "emailExecutor"
     }
 }

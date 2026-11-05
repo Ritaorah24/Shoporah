@@ -1,5 +1,6 @@
 package com.rita.ecommerceplatform.service
 
+import io.github.oshai.kotlinlogging.KotlinLogging
 import com.rita.ecommerceplatform.config.PaystackProps
 import com.rita.ecommerceplatform.exception.BadRequestException
 import com.rita.ecommerceplatform.exception.IncorrectPasswordException
@@ -18,12 +19,13 @@ import com.rita.ecommerceplatform.repository.api.GatewayInitRequest
 import com.rita.ecommerceplatform.repository.api.PaymentGateway
 import com.rita.ecommerceplatform.model.request.paystack.PaystackWebhookEvent
 import com.rita.ecommerceplatform.security.PaystackWebhookVerifier
-import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.support.TransactionTemplate
 import tools.jackson.databind.json.JsonMapper
 import java.math.BigDecimal
 import java.util.UUID
+
+private val logger = KotlinLogging.logger {}
 
 /** The payment and whether this request started it (201) or found an attempt already open for the order (200). */
 data class PaymentInitResult(val payment: PaymentInitResponse, val created: Boolean)
@@ -44,8 +46,6 @@ class PaymentService(
     private val transactionTemplate: TransactionTemplate,
     private val paystackProps: PaystackProps,
 ) {
-
-    private val log = LoggerFactory.getLogger(PaymentService::class.java)
 
     /**
      * Starts paying for one of the customer's PENDING, UNPAID orders and returns the provider's payment page.
@@ -106,11 +106,11 @@ class PaymentService(
      */
     fun handleWebhook(body: ByteArray, signature: String?) {
         if (!webhookVerifier.isValid(body, signature)) {
-            log.warn("Rejected a Paystack webhook with a missing or wrong signature")
+            logger.warn { "Rejected a Paystack webhook with a missing or wrong signature" }
             throw IncorrectPasswordException("Invalid webhook signature")
         }
         val event = PaystackWebhookEvent.parse(jsonMapper, body) ?: run {
-            log.error("Paystack webhook has a valid signature but an unreadable body: {}", body.toString(Charsets.UTF_8).take(500))
+            logger.error { "Paystack webhook has a valid signature but an unreadable body: ${body.toString(Charsets.UTF_8).take(500)}" }
             throw BadRequestException("Unreadable webhook body")
         }
         if (event.isRefundEvent) {
@@ -118,13 +118,13 @@ class PaymentService(
             return
         }
         if (!event.isChargeSuccess || event.reference == null) {
-            log.info("Ignored Paystack webhook {} for {}", event.event, event.reference)
+            logger.info { "Ignored Paystack webhook ${event.event} for ${event.reference}" }
             return
         }
 
         // Not ours (e.g. another app on the same Paystack account): retrying would not help, so it is not an error.
         val payment = paymentRepository.findByReference(event.reference) ?: run {
-            log.warn("Paystack webhook {} for unknown reference {}", event.event, event.reference)
+            logger.warn { "Paystack webhook ${event.event} for unknown reference ${event.reference}" }
             return
         }
         if (payment.paymentStatus != PaymentStatus.PENDING) return
@@ -132,7 +132,7 @@ class PaymentService(
         // Outside any transaction, like verify. If Paystack cannot be reached this is a 502 and Paystack retries.
         val result = paymentGateway.verify(payment.paymentReference!!)
         val settled = paymentSettlement.settle(payment.paymentId!!, result)
-        log.info("Paystack webhook {} settled payment {} as {}", event.event, settled.paymentReference, settled.paymentStatus)
+        logger.info { "Paystack webhook ${event.event} settled payment ${settled.paymentReference} as ${settled.paymentStatus}" }
     }
 
     /** Runs in one short transaction: checks the order and returns its open attempt or a new PENDING one. */

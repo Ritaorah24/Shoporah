@@ -1,5 +1,6 @@
 package com.rita.ecommerceplatform.service
 
+import io.github.oshai.kotlinlogging.KotlinLogging
 import com.rita.ecommerceplatform.model.entity.InventoryMovementType
 import com.rita.ecommerceplatform.model.entity.NotificationType
 import com.rita.ecommerceplatform.model.entity.Order
@@ -16,9 +17,10 @@ import com.rita.ecommerceplatform.repository.database.RefundProviderDetails
 import com.rita.ecommerceplatform.repository.database.RefundRepository
 import com.rita.ecommerceplatform.repository.api.GatewayRefund
 import com.rita.ecommerceplatform.repository.api.GatewayRefundStatus
-import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+
+private val logger = KotlinLogging.logger {}
 
 /**
  * Applies what the provider says about a refund, exactly once. Shared by the refund start, refresh and the
@@ -35,8 +37,6 @@ class RefundSettlement(
     private val customerRepository: CustomerRepository,
     private val notificationService: NotificationService,
 ) {
-
-    private val log = LoggerFactory.getLogger(RefundSettlement::class.java)
 
     /**
      * Settles a refund with the provider's answer and returns it as now stored. Whoever comes second finds it
@@ -55,7 +55,7 @@ class RefundSettlement(
             GatewayRefundStatus.PENDING -> refundRepository.saveProviderDetails(refundId, details)
             GatewayRefundStatus.FAILED -> {
                 val reason = result.failureReason ?: "The payment provider could not complete the refund (${result.providerStatus})"
-                log.warn("Refund {} of order {} failed at the provider: {}", refundId, order.orderReference, reason)
+                logger.warn { "Refund $refundId of order ${order.orderReference} failed at the provider: $reason" }
                 refundRepository.markFailed(refundId, reason, details)
             }
             GatewayRefundStatus.PROCESSED -> process(order, refund, details)
@@ -70,7 +70,7 @@ class RefundSettlement(
         if (order.orderPaymentStatus != OrderPaymentStatus.PAID ||
             (order.orderStatus != OrderStatus.CANCELLED && order.orderStatus != OrderStatus.DELIVERED)
         ) {
-            log.error("Refund {} was processed but order {} is {} / {}; order left unchanged", refund.refundId, order.orderReference, order.orderStatus, order.orderPaymentStatus)
+            logger.error { "Refund ${refund.refundId} was processed but order ${order.orderReference} is ${order.orderStatus} / ${order.orderPaymentStatus}; order left unchanged" }
             return
         }
 

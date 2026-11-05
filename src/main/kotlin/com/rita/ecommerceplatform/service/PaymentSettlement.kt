@@ -1,5 +1,6 @@
 package com.rita.ecommerceplatform.service
 
+import io.github.oshai.kotlinlogging.KotlinLogging
 import com.rita.ecommerceplatform.model.entity.InventoryMovementType
 import com.rita.ecommerceplatform.model.entity.NotificationType
 import com.rita.ecommerceplatform.model.entity.Order
@@ -17,12 +18,13 @@ import com.rita.ecommerceplatform.repository.database.ProductRepository
 import com.rita.ecommerceplatform.repository.database.VerifiedDetails
 import com.rita.ecommerceplatform.repository.api.GatewayPaymentStatus
 import com.rita.ecommerceplatform.repository.api.GatewayVerifyResult
-import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDateTime
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
+
+private val logger = KotlinLogging.logger {}
 
 /**
  * Applies what the provider says about a payment, exactly once. Shared by verify (Step 3) and the webhook
@@ -44,8 +46,6 @@ class PaymentSettlement(
     private val notificationService: NotificationService,
 ) {
 
-    private val log = LoggerFactory.getLogger(PaymentSettlement::class.java)
-
     /**
      * Settles a payment with the provider's answer (null when the provider does not know the reference) and
      * returns it as now stored. Whoever comes second (verify or webhook) finds it no longer PENDING and changes
@@ -61,7 +61,7 @@ class PaymentSettlement(
 
         if (result == null) {
             // Can happen for a moment right after initialize; the customer can verify again later.
-            log.warn("Payment {}: the provider does not know this reference yet; left PENDING", payment.paymentReference)
+            logger.warn { "Payment ${payment.paymentReference}: the provider does not know this reference yet; left PENDING" }
             return payment
         }
 
@@ -82,10 +82,7 @@ class PaymentSettlement(
             result.amountKobo != expectedKobo ||
             !result.currency.equals(payment.paymentCurrency, ignoreCase = true)
         ) {
-            log.error(
-                "Payment {} succeeded at the provider but does not match: paid {} {} kobo (reference {}), expected {} {} kobo; refund needed",
-                payment.paymentReference, result.currency, result.amountKobo, result.reference, payment.paymentCurrency, expectedKobo,
-            )
+            logger.error { "Payment ${payment.paymentReference} succeeded at the provider but does not match: paid ${result.currency} ${result.amountKobo} kobo (reference ${result.reference}), expected ${payment.paymentCurrency} $expectedKobo kobo; refund needed" }
             paymentRepository.markUnsuccessful(payment.paymentId!!, PaymentStatus.FAILED, details, MISMATCH)
             return
         }
@@ -97,7 +94,7 @@ class PaymentSettlement(
             } else {
                 "Order was ${order.orderStatus} when the payment succeeded, refund needed"
             }
-            log.error("Payment {} for order {}: {}", payment.paymentReference, order.orderReference, note)
+            logger.error { "Payment ${payment.paymentReference} for order ${order.orderReference}: $note" }
             paymentRepository.markUnsuccessful(payment.paymentId!!, PaymentStatus.FAILED, details, note)
             return
         }
@@ -117,7 +114,7 @@ class PaymentSettlement(
         if (shortItems.isNotEmpty()) {
             // The 1.3 race: another order took the last units first. Record the payment and cancel, so the refund is visible.
             val note = "Out of stock after payment, refund needed: ${shortItems.joinToString(", ") { it.orderItemProductName!! }}"
-            log.error("Order {} paid by {}: {}", order.orderReference, payment.paymentReference, note)
+            logger.error { "Order ${order.orderReference} paid by ${payment.paymentReference}: $note" }
             changeStatus(order, OrderStatus.CANCELLED, paidAt, note)
             notifyCustomer(order, NotificationType.ORDER_CANCELLED) { firstName ->
                 NotificationMessages.orderCancelled(

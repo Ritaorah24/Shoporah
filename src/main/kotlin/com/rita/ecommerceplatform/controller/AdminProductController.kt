@@ -3,7 +3,7 @@ package com.rita.ecommerceplatform.controller
 import com.rita.ecommerceplatform.model.response.BaseDataResponse
 import com.rita.ecommerceplatform.model.response.BaseResponse
 import com.rita.ecommerceplatform.exception.AccessNotAllowedException
-import com.rita.ecommerceplatform.config.OpenApiConfig
+import com.rita.ecommerceplatform.config.SwaggerConfig
 import com.rita.ecommerceplatform.model.request.CreateProductRequest
 import com.rita.ecommerceplatform.model.request.StockAdjustmentRequest
 import com.rita.ecommerceplatform.model.request.UpdateProductRequest
@@ -31,7 +31,7 @@ import java.math.BigDecimal
 
 /** Product management. SecurityConfig restricts every /{stage}/admin URL to admins who have changed their password. */
 @Tag(name = "Admin products", description = "Create, edit, activate/deactivate and delete products")
-@SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+@SecurityRequirement(name = SwaggerConfig.BEARER_AUTH)
 @RestController
 @RequestMapping("/{stage}/admin/products")
 class AdminProductController(private val productService: ProductService) {

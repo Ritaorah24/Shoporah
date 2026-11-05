@@ -2,7 +2,7 @@ package com.rita.ecommerceplatform.controller
 
 import com.rita.ecommerceplatform.model.response.BaseDataResponse
 import com.rita.ecommerceplatform.exception.AccessNotAllowedException
-import com.rita.ecommerceplatform.config.OpenApiConfig
+import com.rita.ecommerceplatform.config.SwaggerConfig
 import com.rita.ecommerceplatform.model.request.AdminCancelOrderRequest
 import com.rita.ecommerceplatform.model.request.RefundOrderRequest
 import com.rita.ecommerceplatform.model.request.UpdateOrderStatusRequest
@@ -30,7 +30,7 @@ import java.time.LocalDate
 
 /** Order fulfilment. SecurityConfig restricts every /{stage}/admin URL to admins who have changed their password. */
 @Tag(name = "Admin orders", description = "List every customer's orders and move paid orders through fulfilment")
-@SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+@SecurityRequirement(name = SwaggerConfig.BEARER_AUTH)
 @RestController
 @RequestMapping("/{stage}/admin/orders")
 class AdminOrderController(

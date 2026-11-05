@@ -2,7 +2,7 @@ package com.rita.ecommerceplatform.controller
 
 import com.rita.ecommerceplatform.model.response.BaseDataResponse
 import com.rita.ecommerceplatform.model.response.BaseResponse
-import com.rita.ecommerceplatform.config.OpenApiConfig
+import com.rita.ecommerceplatform.config.SwaggerConfig
 import com.rita.ecommerceplatform.model.request.UpdateProductImageRequest
 import com.rita.ecommerceplatform.service.ProductImageService
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
@@ -22,7 +22,7 @@ import org.springframework.web.multipart.MultipartFile
 
 /** Product images. SecurityConfig restricts every /{stage}/admin URL to admins who have changed their password. */
 @Tag(name = "Admin product images", description = "Upload, order and remove product images (stored on Cloudinary)")
-@SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+@SecurityRequirement(name = SwaggerConfig.BEARER_AUTH)
 @RestController
 @RequestMapping("/{stage}/admin/products/{productId}/images")
 class AdminProductImageController(private val productImageService: ProductImageService) {
