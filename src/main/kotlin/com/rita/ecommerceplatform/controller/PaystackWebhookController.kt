@@ -24,7 +24,7 @@ private val logger = KotlinLogging.logger {}
  */
 @Hidden
 @RestController
-@RequestMapping("/api/webhooks")
+@RequestMapping("/webhook")
 class PaystackWebhookController(private val paymentService: PaymentService) {
 
     /**

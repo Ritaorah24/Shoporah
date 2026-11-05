@@ -13,7 +13,7 @@ import java.math.BigDecimal
 import java.time.LocalDateTime
 
 /**
- * Body of PATCH /api/admin/coupons/{id}. Every field is optional: a field that is not sent (null) keeps its
+ * Body of PATCH /{stage}/admin/coupons/{id}. Every field is optional: a field that is not sent (null) keeps its
  * current value. The code never changes; status has its own endpoint. Orders already placed keep their discount.
  * The optional numbers and dates have no "empty" value, so each has a clear... flag to remove it.
  */

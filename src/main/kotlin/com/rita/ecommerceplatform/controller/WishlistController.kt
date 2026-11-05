@@ -26,12 +26,12 @@ import org.springframework.web.bind.annotation.RestController
 @Tag(name = "Wishlist", description = "Products the logged-in customer saved for later")
 @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
 @RestController
-@RequestMapping("/api/customer/wishlist")
+@RequestMapping("/{stage}/customer/wishlist")
 class WishlistController(private val wishlistService: WishlistService) {
 
     /** Newest first, with current prices and availability. */
     @GetMapping
-    fun get(@AuthenticationPrincipal jwt: Jwt): BaseDataResponse {
+    fun get(@AuthenticationPrincipal jwt: Jwt, @PathVariable stage: String): BaseDataResponse {
         return BaseDataResponse("00", "Successful", wishlistService.get(customerId(jwt)))
     }
 
@@ -40,12 +40,13 @@ class WishlistController(private val wishlistService: WishlistService) {
     fun addItem(
         @AuthenticationPrincipal jwt: Jwt,
         @Valid @RequestBody request: AddWishlistItemRequest,
+        @PathVariable stage: String,
     ): BaseDataResponse {
         return BaseDataResponse("00", "Successful", wishlistService.addItem(customerId(jwt), request))
     }
 
     @DeleteMapping("/items/{productId}")
-    fun removeItem(@AuthenticationPrincipal jwt: Jwt, @PathVariable productId: Long): BaseResponse {
+    fun removeItem(@AuthenticationPrincipal jwt: Jwt, @PathVariable productId: Long, @PathVariable stage: String): BaseResponse {
         wishlistService.removeItem(customerId(jwt), productId)
         return BaseResponse()
     }
@@ -59,11 +60,12 @@ class WishlistController(private val wishlistService: WishlistService) {
         @AuthenticationPrincipal jwt: Jwt,
         @PathVariable productId: Long,
         @Valid @RequestBody(required = false) request: MoveToCartRequest?,
+        @PathVariable stage: String,
     ): BaseDataResponse {
         return BaseDataResponse("00", "Successful", wishlistService.moveToCart(customerId(jwt), productId, request))
     }
 
-    // Roles already restrict /api/customer/** to customer tokens; this guards against a mis-issued token.
+    // Roles already restrict /{stage}/customer/** to customer tokens; this guards against a mis-issued token.
     private fun customerId(jwt: Jwt): Long {
         val currentUser = CurrentUser.from(jwt)
         if (currentUser.userType != UserType.CUSTOMER) throw AccessNotAllowedException("Account is not active")

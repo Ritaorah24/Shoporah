@@ -12,6 +12,7 @@ import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.security.oauth2.jwt.Jwt
+import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
@@ -20,7 +21,7 @@ import org.springframework.web.bind.annotation.RestController
 @Tag(name = "Coupons", description = "Check a coupon code against the logged-in customer's cart")
 @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
 @RestController
-@RequestMapping("/api/customer/coupons")
+@RequestMapping("/{stage}/customer/coupons")
 class CustomerCouponController(private val couponService: CouponService) {
 
     /**
@@ -31,6 +32,7 @@ class CustomerCouponController(private val couponService: CouponService) {
     fun validate(
         @AuthenticationPrincipal jwt: Jwt,
         @Valid @RequestBody request: ValidateCouponRequest,
+        @PathVariable stage: String,
     ): BaseDataResponse {
         return BaseDataResponse("00", "Successful", couponService.preview(customerId(jwt), request.code!!))
     }

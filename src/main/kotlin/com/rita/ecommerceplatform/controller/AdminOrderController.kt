@@ -28,11 +28,11 @@ import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import java.time.LocalDate
 
-/** Order fulfilment. SecurityConfig restricts every /api/admin URL to admins who have changed their password. */
+/** Order fulfilment. SecurityConfig restricts every /{stage}/admin URL to admins who have changed their password. */
 @Tag(name = "Admin orders", description = "List every customer's orders and move paid orders through fulfilment")
 @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
 @RestController
-@RequestMapping("/api/admin/orders")
+@RequestMapping("/{stage}/admin/orders")
 class AdminOrderController(
     private val adminOrderService: AdminOrderService,
     private val refundService: RefundService,
@@ -55,12 +55,13 @@ class AdminOrderController(
         @RequestParam(required = false) customer: String?,
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) from: LocalDate?,
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) to: LocalDate?,
+        @PathVariable stage: String,
     ): BaseDataResponse {
         return BaseDataResponse("00", "Successful", adminOrderService.list(page, size, AdminOrderFilters(status, paymentStatus, reference, customerId, customer, from, to)))
     }
 
     @GetMapping("/{orderId}")
-    fun get(@PathVariable orderId: Long): BaseDataResponse {
+    fun get(@PathVariable orderId: Long, @PathVariable stage: String): BaseDataResponse {
         return BaseDataResponse("00", "Successful", adminOrderService.get(orderId))
     }
 
@@ -73,6 +74,7 @@ class AdminOrderController(
         @AuthenticationPrincipal jwt: Jwt,
         @PathVariable orderId: Long,
         @Valid @RequestBody request: UpdateOrderStatusRequest,
+        @PathVariable stage: String,
     ): BaseDataResponse {
         return BaseDataResponse("00", "Successful", adminOrderService.updateStatus(adminId(jwt), orderId, request))
     }
@@ -86,6 +88,7 @@ class AdminOrderController(
         @AuthenticationPrincipal jwt: Jwt,
         @PathVariable orderId: Long,
         @Valid @RequestBody request: AdminCancelOrderRequest,
+        @PathVariable stage: String,
     ): BaseDataResponse {
         return BaseDataResponse("00", "Successful", adminOrderService.cancel(adminId(jwt), orderId, request))
     }
@@ -93,13 +96,14 @@ class AdminOrderController(
     /**
      * Refunds the whole order total to the customer through Paystack: a paid order that is CANCELLED, or DELIVERED
      * (optionally putting the returned items back in stock). 202: the refund is started, Paystack finishes it later;
-     * see refunds[] on the order, and POST /api/admin/refunds/{refundId}/refresh to check on it.
+     * see refunds[] on the order, and POST /{stage}/admin/refunds/{refundId}/refresh to check on it.
      */
     @PostMapping("/{orderId}/refund")
     fun refund(
         @AuthenticationPrincipal jwt: Jwt,
         @PathVariable orderId: Long,
         @Valid @RequestBody request: RefundOrderRequest,
+        @PathVariable stage: String,
     ): BaseDataResponse {
         return BaseDataResponse("00", "Successful", refundService.start(adminId(jwt), orderId, request))
     }

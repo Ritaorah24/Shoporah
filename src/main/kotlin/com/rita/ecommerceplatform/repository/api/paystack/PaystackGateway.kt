@@ -23,7 +23,7 @@ import tools.jackson.databind.json.JsonMapper
 import java.time.OffsetDateTime
 
 /**
- * PaymentGateway backed by Paystack's REST API (https://paystack.com/docs/api/transaction/).
+ * PaymentGateway backed by Paystack's REST API (https://paystack.com/docs/{stage}/transaction/).
  * Paystack answers { "status": true|false, "message": ..., "data": {...} }.
  * Every failure (network, timeout, 4xx, 5xx, unreadable body) is logged and becomes a 502;
  * the secret key itself is never logged.
@@ -80,7 +80,7 @@ class PaystackGateway(
         }
     }
 
-    // https://paystack.com/docs/api/refund/ : `transaction` takes the payment's reference.
+    // https://paystack.com/docs/{stage}/refund/ : `transaction` takes the payment's reference.
     override fun refund(request: GatewayRefundRequest): GatewayRefundStart {
         val what = "refund ${request.transactionReference}"
         val body = buildMap {

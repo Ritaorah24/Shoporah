@@ -4,7 +4,7 @@ import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.NotNull
 
 /**
- * Body of POST /api/customer/cart/items. There is deliberately no price field: prices always come
+ * Body of POST /{stage}/customer/cart/items. There is deliberately no price field: prices always come
  * from the database, and any extra field a client sends (e.g. "price") is ignored.
  */
 data class AddCartItemRequest(

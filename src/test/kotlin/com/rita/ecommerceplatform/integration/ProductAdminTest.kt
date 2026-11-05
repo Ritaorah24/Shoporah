@@ -30,7 +30,7 @@ class ProductAdminTest : IntegrationTestBase() {
     private fun unique(prefix: String) = "$prefix-${UUID.randomUUID().toString().take(8)}"
 
     private fun createCategory(): Int {
-        val result = mockMvc.post("/api/admin/categories") {
+        val result = mockMvc.post("/dev/admin/categories") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to unique("Cat"))
@@ -50,7 +50,7 @@ class ProductAdminTest : IntegrationTestBase() {
         return jsonMapper.writeValueAsString(fields)
     }
 
-    private fun postProduct(body: String) = mockMvc.post("/api/admin/products") {
+    private fun postProduct(body: String) = mockMvc.post("/dev/admin/products") {
         header("Authorization", "Bearer $adminToken")
         contentType = MediaType.APPLICATION_JSON
         content = body
@@ -61,7 +61,7 @@ class ProductAdminTest : IntegrationTestBase() {
         return readJson(result)["productId"].asLong()
     }
 
-    private fun patchProduct(productId: Long, body: String) = mockMvc.patch("/api/admin/products/$productId") {
+    private fun patchProduct(productId: Long, body: String) = mockMvc.patch("/dev/admin/products/$productId") {
         header("Authorization", "Bearer $adminToken")
         contentType = MediaType.APPLICATION_JSON
         content = body
@@ -82,7 +82,7 @@ class ProductAdminTest : IntegrationTestBase() {
             .list()
 
     private fun listedProductIds(vararg params: Pair<String, Any>): List<Long> {
-        val result = mockMvc.get("/api/admin/products") {
+        val result = mockMvc.get("/dev/admin/products") {
             header("Authorization", "Bearer $adminToken")
             params.forEach { (name, value) -> param(name, value.toString()) }
         }.andExpect { responseCode("00") }.andReturn()
@@ -172,12 +172,12 @@ class ProductAdminTest : IntegrationTestBase() {
         }
 
         val deletedCategory = createCategory()
-        mockMvc.delete("/api/admin/categories/$deletedCategory") {
+        mockMvc.delete("/dev/admin/categories/$deletedCategory") {
             header("Authorization", "Bearer $adminToken")
         }.andExpect { responseCode("00") }
         postProduct(productBody("categoryId" to deletedCategory)).andExpect { responseCode("106") }
 
-        mockMvc.patch("/api/admin/categories/$categoryId/status") {
+        mockMvc.patch("/dev/admin/categories/$categoryId/status") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("status" to "INACTIVE")
@@ -270,7 +270,7 @@ class ProductAdminTest : IntegrationTestBase() {
     fun `status changes and the admin list status filter`() {
         val activeId = createProduct()
         val inactiveId = createProduct()
-        mockMvc.patch("/api/admin/products/$inactiveId/status") {
+        mockMvc.patch("/dev/admin/products/$inactiveId/status") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("status" to "inactive")
@@ -283,7 +283,7 @@ class ProductAdminTest : IntegrationTestBase() {
         assertEquals(listOf(activeId), listedProductIds("categoryId" to categoryId, "status" to "ACTIVE"))
         assertEquals(listOf(inactiveId), listedProductIds("categoryId" to categoryId, "status" to "inactive"))
 
-        mockMvc.get("/api/admin/products?status=DELETED") {
+        mockMvc.get("/dev/admin/products?status=DELETED") {
             header("Authorization", "Bearer $adminToken")
         }.andExpect { responseCode("106") }
     }
@@ -293,18 +293,18 @@ class ProductAdminTest : IntegrationTestBase() {
         val sku = unique("gone")
         val productId = createProduct("sku" to sku)
 
-        mockMvc.delete("/api/admin/products/$productId") {
+        mockMvc.delete("/dev/admin/products/$productId") {
             header("Authorization", "Bearer $adminToken")
         }.andExpect { responseCode("00") }
 
-        mockMvc.get("/api/admin/products/$productId") {
+        mockMvc.get("/dev/admin/products/$productId") {
             header("Authorization", "Bearer $adminToken")
         }.andExpect {
             responseCode("25")
             jsonPath("$.responseMessage") { value("Product not found") }
         }
         patchProduct(productId, json("name" to "Back?")).andExpect { responseCode("25") }
-        mockMvc.delete("/api/admin/products/$productId") {
+        mockMvc.delete("/dev/admin/products/$productId") {
             header("Authorization", "Bearer $adminToken")
         }.andExpect { responseCode("25") }
 
@@ -312,7 +312,7 @@ class ProductAdminTest : IntegrationTestBase() {
         postProduct(productBody("sku" to sku)).andExpect { responseCode("117") }
 
         // With its only product deleted, the category can now be deleted (D2).
-        mockMvc.delete("/api/admin/categories/$categoryId") {
+        mockMvc.delete("/dev/admin/categories/$categoryId") {
             header("Authorization", "Bearer $adminToken")
         }.andExpect { responseCode("00") }
     }
@@ -321,7 +321,7 @@ class ProductAdminTest : IntegrationTestBase() {
     fun `the list is paged, newest first, with the page size capped at 50`() {
         val ids = (1..3).map { createProduct() }
 
-        val result = mockMvc.get("/api/admin/products?categoryId=$categoryId&page=0&size=2") {
+        val result = mockMvc.get("/dev/admin/products?categoryId=$categoryId&page=0&size=2") {
             header("Authorization", "Bearer $adminToken")
         }.andExpect {
             responseCode("00")
@@ -333,7 +333,7 @@ class ProductAdminTest : IntegrationTestBase() {
         assertEquals(listOf(ids[2], ids[1]), readJson(result)["content"].toList().map { it["productId"].asLong() })
         assertEquals(listOf(ids[0]), listedProductIds("categoryId" to categoryId, "page" to "1", "size" to "2"))
 
-        mockMvc.get("/api/admin/products?size=1000&page=-3") {
+        mockMvc.get("/dev/admin/products?size=1000&page=-3") {
             header("Authorization", "Bearer $adminToken")
         }.andExpect {
             jsonPath("$.data.size") { value(50) }
@@ -353,13 +353,13 @@ class ProductAdminTest : IntegrationTestBase() {
 
     @Test
     fun `customers cannot manage products`() {
-        mockMvc.post("/api/admin/products") {
+        mockMvc.post("/dev/admin/products") {
             header("Authorization", "Bearer ${newCustomerToken()}")
             contentType = MediaType.APPLICATION_JSON
             content = productBody()
         }.andExpect { responseCode("107") }
 
-        mockMvc.get("/api/admin/products").andExpect { responseCode("115") }
+        mockMvc.get("/dev/admin/products").andExpect { responseCode("115") }
     }
 
     // Acceptance check 1.2: "price and stock cannot be negative", on create and on edit.
@@ -383,7 +383,7 @@ class ProductAdminTest : IntegrationTestBase() {
         }
 
         // Nothing was changed by the rejected requests.
-        mockMvc.get("/api/admin/products/$productId") {
+        mockMvc.get("/dev/admin/products/$productId") {
             header("Authorization", "Bearer $adminToken")
         }.andExpect {
             responseCode("00")
@@ -400,21 +400,21 @@ class ProductAdminTest : IntegrationTestBase() {
         val productId = createProduct()
         val customerToken = newCustomerToken()
 
-        mockMvc.patch("/api/admin/products/$productId") {
+        mockMvc.patch("/dev/admin/products/$productId") {
             header("Authorization", "Bearer $customerToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to "Hacked")
         }.andExpect { responseCode("107") }
-        mockMvc.patch("/api/admin/products/$productId/status") {
+        mockMvc.patch("/dev/admin/products/$productId/status") {
             header("Authorization", "Bearer $customerToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("status" to "INACTIVE")
         }.andExpect { responseCode("107") }
-        mockMvc.delete("/api/admin/products/$productId") {
+        mockMvc.delete("/dev/admin/products/$productId") {
             header("Authorization", "Bearer $customerToken")
         }.andExpect { responseCode("107") }
 
-        mockMvc.get("/api/admin/products/$productId") {
+        mockMvc.get("/dev/admin/products/$productId") {
             header("Authorization", "Bearer $adminToken")
         }.andExpect {
             responseCode("00")

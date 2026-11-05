@@ -27,11 +27,11 @@ import org.springframework.web.bind.annotation.RestController
 @Tag(name = "Cart", description = "The logged-in customer's shopping cart")
 @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
 @RestController
-@RequestMapping("/api/customer/cart")
+@RequestMapping("/{stage}/customer/cart")
 class CartController(private val cartService: CartService) {
 
     @GetMapping
-    fun get(@AuthenticationPrincipal jwt: Jwt): BaseDataResponse {
+    fun get(@AuthenticationPrincipal jwt: Jwt, @PathVariable stage: String): BaseDataResponse {
         return BaseDataResponse("00", "Successful", cartService.getCart(customerId(jwt)))
     }
 
@@ -40,6 +40,7 @@ class CartController(private val cartService: CartService) {
     fun addItem(
         @AuthenticationPrincipal jwt: Jwt,
         @Valid @RequestBody request: AddCartItemRequest,
+        @PathVariable stage: String,
     ): BaseDataResponse {
         return BaseDataResponse("00", "Successful", cartService.addItem(customerId(jwt), request))
     }
@@ -50,23 +51,24 @@ class CartController(private val cartService: CartService) {
         @AuthenticationPrincipal jwt: Jwt,
         @PathVariable productId: Long,
         @Valid @RequestBody request: UpdateCartItemRequest,
+        @PathVariable stage: String,
     ): BaseDataResponse {
         return BaseDataResponse("00", "Successful", cartService.updateItem(customerId(jwt), productId, request))
     }
 
     @DeleteMapping("/items/{productId}")
-    fun removeItem(@AuthenticationPrincipal jwt: Jwt, @PathVariable productId: Long): BaseResponse {
+    fun removeItem(@AuthenticationPrincipal jwt: Jwt, @PathVariable productId: Long, @PathVariable stage: String): BaseResponse {
         cartService.removeItem(customerId(jwt), productId)
         return BaseResponse()
     }
 
     @DeleteMapping
-    fun clear(@AuthenticationPrincipal jwt: Jwt): BaseResponse {
+    fun clear(@AuthenticationPrincipal jwt: Jwt, @PathVariable stage: String): BaseResponse {
         cartService.clear(customerId(jwt))
         return BaseResponse()
     }
 
-    // Roles already restrict /api/customer/** to customer tokens; this guards against a mis-issued token.
+    // Roles already restrict /{stage}/customer/** to customer tokens; this guards against a mis-issued token.
     private fun customerId(jwt: Jwt): Long {
         val currentUser = CurrentUser.from(jwt)
         if (currentUser.userType != UserType.CUSTOMER) throw AccessNotAllowedException("Account is not active")

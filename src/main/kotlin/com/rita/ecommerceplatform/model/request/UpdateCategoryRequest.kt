@@ -8,7 +8,7 @@ import jakarta.validation.constraints.Size
 import tools.jackson.databind.annotation.JsonDeserialize
 
 /**
- * Body of PATCH /api/admin/categories/{id}. Every field is optional: a field that is not sent
+ * Body of PATCH /{stage}/admin/categories/{id}. Every field is optional: a field that is not sent
  * (null) keeps its current value. Status is changed through its own endpoint, not here.
  */
 data class UpdateCategoryRequest(

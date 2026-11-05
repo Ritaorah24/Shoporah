@@ -28,7 +28,7 @@ class OrderHistoryTest : IntegrationTestBase() {
     private fun unique(prefix: String) = "$prefix-${UUID.randomUUID().toString().take(8)}"
 
     private fun createCategory(): Int {
-        val result = mockMvc.post("/api/admin/categories") {
+        val result = mockMvc.post("/dev/admin/categories") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to unique("Cat"))
@@ -37,7 +37,7 @@ class OrderHistoryTest : IntegrationTestBase() {
     }
 
     private fun createProduct(price: Int): Long {
-        val result = mockMvc.post("/api/admin/products") {
+        val result = mockMvc.post("/dev/admin/products") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json(
@@ -52,7 +52,7 @@ class OrderHistoryTest : IntegrationTestBase() {
     }
 
     private fun createAddress(withToken: String) {
-        mockMvc.post("/api/customer/addresses") {
+        mockMvc.post("/dev/customer/addresses") {
             header("Authorization", "Bearer $withToken")
             contentType = MediaType.APPLICATION_JSON
             content = json(
@@ -68,12 +68,12 @@ class OrderHistoryTest : IntegrationTestBase() {
 
     /** Fills the cart with `quantity` of a new product and checks out; returns the checkout response. */
     private fun placeOrder(price: Int = 1000, quantity: Int = 1): JsonNode {
-        mockMvc.post("/api/customer/cart/items") {
+        mockMvc.post("/dev/customer/cart/items") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json("productId" to createProduct(price), "quantity" to quantity)
         }.andExpect { responseCode("00") }
-        val result = mockMvc.post("/api/customer/orders") {
+        val result = mockMvc.post("/dev/customer/orders") {
             header("Authorization", "Bearer $token")
             header("Idempotency-Key", UUID.randomUUID().toString())
         }.andExpect { responseCode("00") }.andReturn()
@@ -81,7 +81,7 @@ class OrderHistoryTest : IntegrationTestBase() {
     }
 
     private fun listOrders(vararg params: Pair<String, Any>, withToken: String = token) =
-        mockMvc.get("/api/customer/orders") {
+        mockMvc.get("/dev/customer/orders") {
             header("Authorization", "Bearer $withToken")
             params.forEach { (name, value) -> param(name, value.toString()) }
         }
@@ -149,7 +149,7 @@ class OrderHistoryTest : IntegrationTestBase() {
         assertEquals("PENDING", placed["statusHistory"][0]["status"].asString())
         assertEquals("Order placed", placed["statusHistory"][0]["note"].asString())
 
-        val result = mockMvc.get("/api/customer/orders/$orderId") {
+        val result = mockMvc.get("/dev/customer/orders/$orderId") {
             header("Authorization", "Bearer $token")
         }.andExpect {
             responseCode("00")
@@ -167,7 +167,7 @@ class OrderHistoryTest : IntegrationTestBase() {
         val orderId = placeOrder()["orderId"].asLong()
         val other = newCustomerToken()
 
-        mockMvc.get("/api/customer/orders/$orderId") {
+        mockMvc.get("/dev/customer/orders/$orderId") {
             header("Authorization", "Bearer $other")
         }.andExpect {
             responseCode("25")
@@ -178,14 +178,14 @@ class OrderHistoryTest : IntegrationTestBase() {
 
     @Test
     fun `an unknown order returns 404`() {
-        mockMvc.get("/api/customer/orders/999999") {
+        mockMvc.get("/dev/customer/orders/999999") {
             header("Authorization", "Bearer $token")
         }.andExpect { responseCode("25") }
     }
 
     @Test
     fun `order history needs a customer token`() {
-        mockMvc.get("/api/customer/orders").andExpect { responseCode("115") }
+        mockMvc.get("/dev/customer/orders").andExpect { responseCode("115") }
         listOrders(withToken = adminToken).andExpect { responseCode("107") }
     }
 }

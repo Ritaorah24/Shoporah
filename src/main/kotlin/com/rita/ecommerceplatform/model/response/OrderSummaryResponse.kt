@@ -4,7 +4,7 @@ import com.rita.ecommerceplatform.model.entity.Order
 import java.math.BigDecimal
 import java.time.LocalDateTime
 
-/** One order in the customer's order list (H1). GET /api/customer/orders/{orderId} has the full order. */
+/** One order in the customer's order list (H1). GET /{stage}/customer/orders/{orderId} has the full order. */
 data class OrderSummaryResponse(
     val orderId: Long,
     val reference: String,

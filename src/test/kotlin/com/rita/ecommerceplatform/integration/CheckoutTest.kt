@@ -37,7 +37,7 @@ class CheckoutTest : IntegrationTestBase() {
     private fun unique(prefix: String) = "$prefix-${UUID.randomUUID().toString().take(8)}"
 
     private fun createCategory(): Int {
-        val result = mockMvc.post("/api/admin/categories") {
+        val result = mockMvc.post("/dev/admin/categories") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to unique("Cat"))
@@ -46,7 +46,7 @@ class CheckoutTest : IntegrationTestBase() {
     }
 
     private fun createProduct(name: String = unique("Phone"), price: Int = 1000, discountPrice: Int? = null, stock: Int = 10): Long {
-        val result = mockMvc.post("/api/admin/products") {
+        val result = mockMvc.post("/dev/admin/products") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json(
@@ -70,7 +70,7 @@ class CheckoutTest : IntegrationTestBase() {
     }
 
     private fun createAddress(withToken: String = token, city: String = "Ikeja", isDefault: Boolean? = null): Long {
-        val result = mockMvc.post("/api/customer/addresses") {
+        val result = mockMvc.post("/dev/customer/addresses") {
             header("Authorization", "Bearer $withToken")
             contentType = MediaType.APPLICATION_JSON
             content = json(
@@ -87,7 +87,7 @@ class CheckoutTest : IntegrationTestBase() {
     }
 
     private fun addToCart(productId: Long, quantity: Int = 1) {
-        mockMvc.post("/api/customer/cart/items") {
+        mockMvc.post("/dev/customer/cart/items") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json("productId" to productId, "quantity" to quantity)
@@ -95,7 +95,7 @@ class CheckoutTest : IntegrationTestBase() {
     }
 
     private fun checkout(key: String? = UUID.randomUUID().toString(), body: String? = null, withToken: String = token): ResultActionsDsl =
-        mockMvc.post("/api/customer/orders") {
+        mockMvc.post("/dev/customer/orders") {
             header("Authorization", "Bearer $withToken")
             key?.let { header("Idempotency-Key", it) }
             body?.let {
@@ -111,7 +111,7 @@ class CheckoutTest : IntegrationTestBase() {
             .single()
 
     private fun cartQuantities(): List<Int> {
-        val result = mockMvc.get("/api/customer/cart") {
+        val result = mockMvc.get("/dev/customer/cart") {
             header("Authorization", "Bearer $token")
         }.andExpect { responseCode("00") }.andReturn()
         return readJson(result)["items"].toList().map { it["quantity"].asInt() }
@@ -227,7 +227,7 @@ class CheckoutTest : IntegrationTestBase() {
 
         val otherToken = newCustomerToken()
         createAddress(withToken = otherToken)
-        mockMvc.post("/api/customer/cart/items") {
+        mockMvc.post("/dev/customer/cart/items") {
             header("Authorization", "Bearer $otherToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("productId" to createProduct())
@@ -243,8 +243,8 @@ class CheckoutTest : IntegrationTestBase() {
         val key = UUID.randomUUID().toString()
         checkout(key).andExpect { responseCode("00"); jsonPath("$.responseMessage") { value("Order created") } }
 
-        adminPatch("/api/admin/products/$productId", json("price" to 5000, "name" to "Renamed"))
-        mockMvc.patch("/api/customer/addresses/$addressId") {
+        adminPatch("/dev/admin/products/$productId", json("price" to 5000, "name" to "Renamed"))
+        mockMvc.patch("/dev/customer/addresses/$addressId") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json("city" to "Yaba")
@@ -260,7 +260,7 @@ class CheckoutTest : IntegrationTestBase() {
         }
 
         // Deleting the address does not touch the order either.
-        mockMvc.delete("/api/customer/addresses/$addressId") {
+        mockMvc.delete("/dev/customer/addresses/$addressId") {
             header("Authorization", "Bearer $token")
         }.andExpect { responseCode("00") }
         checkout(key).andExpect { jsonPath("$.data.deliveryAddress.city") { value("Ikeja") } }
@@ -315,8 +315,8 @@ class CheckoutTest : IntegrationTestBase() {
         addToCart(deactivated)
         addToCart(fine)
 
-        adminPatch("/api/admin/products/$lowered", json("stockQuantity" to 3))
-        adminPatch("/api/admin/products/$deactivated/status", json("status" to "INACTIVE"))
+        adminPatch("/dev/admin/products/$lowered", json("stockQuantity" to 3))
+        adminPatch("/dev/admin/products/$deactivated/status", json("status" to "INACTIVE"))
 
         checkout().andExpect {
             responseCode("106")
@@ -348,7 +348,7 @@ class CheckoutTest : IntegrationTestBase() {
 
     @Test
     fun `checkout needs a customer token`() {
-        mockMvc.post("/api/customer/orders") {
+        mockMvc.post("/dev/customer/orders") {
             header("Idempotency-Key", UUID.randomUUID().toString())
         }.andExpect { responseCode("115") }
         checkout(withToken = adminToken).andExpect { responseCode("107") }

@@ -34,7 +34,7 @@ class AddressTest : IntegrationTestBase() {
         return jsonMapper.writeValueAsString(fields)
     }
 
-    private fun postAddress(body: String, withToken: String = token) = mockMvc.post("/api/customer/addresses") {
+    private fun postAddress(body: String, withToken: String = token) = mockMvc.post("/dev/customer/addresses") {
         header("Authorization", "Bearer $withToken")
         contentType = MediaType.APPLICATION_JSON
         content = body
@@ -45,7 +45,7 @@ class AddressTest : IntegrationTestBase() {
         return readJson(result)["addressId"].asLong()
     }
 
-    private fun patchAddress(addressId: Long, body: String) = mockMvc.patch("/api/customer/addresses/$addressId") {
+    private fun patchAddress(addressId: Long, body: String) = mockMvc.patch("/dev/customer/addresses/$addressId") {
         header("Authorization", "Bearer $token")
         contentType = MediaType.APPLICATION_JSON
         content = body
@@ -53,7 +53,7 @@ class AddressTest : IntegrationTestBase() {
 
     /** The customer's addresses in list order, as "id:isDefault". */
     private fun listed(): List<String> {
-        val result = mockMvc.get("/api/customer/addresses") {
+        val result = mockMvc.get("/dev/customer/addresses") {
             header("Authorization", "Bearer $token")
         }.andExpect { responseCode("00") }.andReturn()
         return readJson(result).toList().map { "${it["addressId"].asLong()}:${it["isDefault"].asBoolean()}" }
@@ -122,7 +122,7 @@ class AddressTest : IntegrationTestBase() {
             jsonPath("$.data.fieldErrors.length()") { value(1) }
             jsonPath("$.data.fieldErrors[0].message") { value(containsString("PATCH .../default")) }
         }
-        mockMvc.get("/api/customer/addresses/$addressId") {
+        mockMvc.get("/dev/customer/addresses/$addressId") {
             header("Authorization", "Bearer $token")
         }.andExpect {
             jsonPath("$.data.city") { value("Ikeja") }
@@ -140,7 +140,7 @@ class AddressTest : IntegrationTestBase() {
         val second = createAddress("isDefault" to true)
         assertEquals(listOf("$second:true", "$first:false"), listed())
 
-        mockMvc.patch("/api/customer/addresses/$first/default") {
+        mockMvc.patch("/dev/customer/addresses/$first/default") {
             header("Authorization", "Bearer $token")
         }.andExpect {
             responseCode("00")
@@ -149,7 +149,7 @@ class AddressTest : IntegrationTestBase() {
         assertEquals(listOf("$first:true", "$second:false"), listed())
 
         // Setting the current default again changes nothing.
-        mockMvc.patch("/api/customer/addresses/$first/default") {
+        mockMvc.patch("/dev/customer/addresses/$first/default") {
             header("Authorization", "Bearer $token")
         }.andExpect { responseCode("00") }
         assertEquals(listOf("$first:true", "$second:false"), listed())
@@ -160,12 +160,12 @@ class AddressTest : IntegrationTestBase() {
         val first = createAddress()
         val second = createAddress()
 
-        mockMvc.delete("/api/customer/addresses/$first") {
+        mockMvc.delete("/dev/customer/addresses/$first") {
             header("Authorization", "Bearer $token")
         }.andExpect { responseCode("00") }
 
         assertEquals(listOf("$second:false"), listed())
-        mockMvc.get("/api/customer/addresses/$first") {
+        mockMvc.get("/dev/customer/addresses/$first") {
             header("Authorization", "Bearer $token")
         }.andExpect { responseCode("25") }
     }
@@ -175,29 +175,29 @@ class AddressTest : IntegrationTestBase() {
         val addressId = createAddress()
         val other = newCustomerToken()
 
-        mockMvc.get("/api/customer/addresses/$addressId") {
+        mockMvc.get("/dev/customer/addresses/$addressId") {
             header("Authorization", "Bearer $other")
         }.andExpect {
             responseCode("25")
             jsonPath("$.responseMessage") { value("Address not found") }
         }
-        mockMvc.patch("/api/customer/addresses/$addressId") {
+        mockMvc.patch("/dev/customer/addresses/$addressId") {
             header("Authorization", "Bearer $other")
             contentType = MediaType.APPLICATION_JSON
             content = json("city" to "Stolen")
         }.andExpect { responseCode("25") }
-        mockMvc.patch("/api/customer/addresses/$addressId/default") {
+        mockMvc.patch("/dev/customer/addresses/$addressId/default") {
             header("Authorization", "Bearer $other")
         }.andExpect { responseCode("25") }
-        mockMvc.delete("/api/customer/addresses/$addressId") {
+        mockMvc.delete("/dev/customer/addresses/$addressId") {
             header("Authorization", "Bearer $other")
         }.andExpect { responseCode("25") }
 
         // The other customer's own list is empty, and the owner's address is untouched.
-        mockMvc.get("/api/customer/addresses") {
+        mockMvc.get("/dev/customer/addresses") {
             header("Authorization", "Bearer $other")
         }.andExpect { jsonPath("$.data.length()") { value(0) } }
-        mockMvc.get("/api/customer/addresses/$addressId") {
+        mockMvc.get("/dev/customer/addresses/$addressId") {
             header("Authorization", "Bearer $token")
         }.andExpect {
             responseCode("00")
@@ -208,10 +208,10 @@ class AddressTest : IntegrationTestBase() {
 
     @Test
     fun `an unknown address returns 404`() {
-        mockMvc.get("/api/customer/addresses/999999") {
+        mockMvc.get("/dev/customer/addresses/999999") {
             header("Authorization", "Bearer $token")
         }.andExpect { responseCode("25") }
-        mockMvc.delete("/api/customer/addresses/999999") {
+        mockMvc.delete("/dev/customer/addresses/999999") {
             header("Authorization", "Bearer $token")
         }.andExpect { responseCode("25") }
     }
@@ -229,7 +229,7 @@ class AddressTest : IntegrationTestBase() {
 
     @Test
     fun `addresses need a customer token`() {
-        mockMvc.get("/api/customer/addresses").andExpect { responseCode("115") }
+        mockMvc.get("/dev/customer/addresses").andExpect { responseCode("115") }
         postAddress(addressBody(), withToken = loginActiveAdmin()).andExpect { responseCode("107") }
     }
 }

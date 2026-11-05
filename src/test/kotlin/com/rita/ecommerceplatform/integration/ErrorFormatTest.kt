@@ -21,14 +21,14 @@ class ErrorFormatTest : IntegrationTestBase() {
 
     @Test
     fun `unknown URL returns 404`() {
-        mockMvc.get("/api/customer/nothing") {
+        mockMvc.get("/dev/customer/nothing") {
             header("Authorization", "Bearer ${newCustomerToken()}")
         }.expectError("25", "No endpoint found for this URL")
     }
 
     @Test
     fun `unsupported method returns 405 with the Allow header`() {
-        mockMvc.delete("/api/customer/me") {
+        mockMvc.delete("/dev/customer/me") {
             header("Authorization", "Bearer ${newCustomerToken()}")
         }.expectError("106", "HTTP method DELETE is not supported for this URL")
             .andExpect { header { string("Allow", containsString("GET")) } }
@@ -36,7 +36,7 @@ class ErrorFormatTest : IntegrationTestBase() {
 
     @Test
     fun `wrong content type returns 415`() {
-        mockMvc.patch("/api/customer/me") {
+        mockMvc.patch("/dev/customer/me") {
             header("Authorization", "Bearer ${newCustomerToken()}")
             contentType = MediaType.TEXT_PLAIN
             content = "hello"
@@ -45,7 +45,7 @@ class ErrorFormatTest : IntegrationTestBase() {
 
     @Test
     fun `malformed JSON returns 400`() {
-        mockMvc.post("/api/auth/register") {
+        mockMvc.post("/dev/auth/register") {
             contentType = MediaType.APPLICATION_JSON
             content = """{"firstName":"""
         }.expectError("106", "Malformed or unreadable JSON request body")

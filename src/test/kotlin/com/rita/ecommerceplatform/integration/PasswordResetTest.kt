@@ -17,19 +17,19 @@ import kotlin.test.fail
 class PasswordResetTest : IntegrationTestBase() {
 
     private fun forgot(email: String) =
-        mockMvc.post("/api/auth/forgot-password") {
+        mockMvc.post("/dev/auth/forgot-password") {
             contentType = MediaType.APPLICATION_JSON
             content = json("email" to email)
         }
 
     private fun reset(token: String?, newPassword: String?) =
-        mockMvc.post("/api/auth/reset-password") {
+        mockMvc.post("/dev/auth/reset-password") {
             contentType = MediaType.APPLICATION_JSON
             content = json("token" to token, "newPassword" to newPassword)
         }
 
     private fun login(email: String, password: String) =
-        mockMvc.post("/api/auth/login") {
+        mockMvc.post("/dev/auth/login") {
             contentType = MediaType.APPLICATION_JSON
             content = json("email" to email, "password" to password)
         }

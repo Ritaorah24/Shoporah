@@ -12,7 +12,7 @@ import tools.jackson.databind.annotation.JsonDeserialize
 import java.math.BigDecimal
 
 /**
- * Body of PATCH /api/admin/products/{id}. Every field is optional: a field that is not sent
+ * Body of PATCH /{stage}/admin/products/{id}. Every field is optional: a field that is not sent
  * (null) keeps its current value. Status is changed through its own endpoint, not here.
  */
 data class UpdateProductRequest(

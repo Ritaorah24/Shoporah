@@ -12,7 +12,7 @@ import tools.jackson.databind.annotation.JsonDeserialize
 import java.math.BigDecimal
 
 /**
- * Body of POST /api/admin/delivery-methods. The fee limit matches the NUMERIC(12, 2) column.
+ * Body of POST /{stage}/admin/delivery-methods. The fee limit matches the NUMERIC(12, 2) column.
  * "estimatedMaxDays must not be less than estimatedMinDays" involves two fields, so DeliveryMethodService checks it.
  */
 data class CreateDeliveryMethodRequest(

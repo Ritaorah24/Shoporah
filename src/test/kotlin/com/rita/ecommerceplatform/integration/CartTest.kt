@@ -27,7 +27,7 @@ class CartTest : IntegrationTestBase() {
     private fun unique(prefix: String) = "$prefix-${UUID.randomUUID().toString().take(8)}"
 
     private fun createCategory(): Int {
-        val result = mockMvc.post("/api/admin/categories") {
+        val result = mockMvc.post("/dev/admin/categories") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to unique("Cat"))
@@ -36,7 +36,7 @@ class CartTest : IntegrationTestBase() {
     }
 
     private fun createProduct(price: Int = 1000, discountPrice: Int? = null, stock: Int = 10): Long {
-        val result = mockMvc.post("/api/admin/products") {
+        val result = mockMvc.post("/dev/admin/products") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json(
@@ -63,19 +63,19 @@ class CartTest : IntegrationTestBase() {
         }.andExpect { responseCode("00") }
     }
 
-    private fun addItem(body: String, withToken: String = token) = mockMvc.post("/api/customer/cart/items") {
+    private fun addItem(body: String, withToken: String = token) = mockMvc.post("/dev/customer/cart/items") {
         header("Authorization", "Bearer $withToken")
         contentType = MediaType.APPLICATION_JSON
         content = body
     }
 
-    private fun patchItem(productId: Long, body: String) = mockMvc.patch("/api/customer/cart/items/$productId") {
+    private fun patchItem(productId: Long, body: String) = mockMvc.patch("/dev/customer/cart/items/$productId") {
         header("Authorization", "Bearer $token")
         contentType = MediaType.APPLICATION_JSON
         content = body
     }
 
-    private fun getCart(withToken: String = token) = mockMvc.get("/api/customer/cart") {
+    private fun getCart(withToken: String = token) = mockMvc.get("/dev/customer/cart") {
         header("Authorization", "Bearer $withToken")
     }
 
@@ -160,9 +160,9 @@ class CartTest : IntegrationTestBase() {
     @Test
     fun `hidden and unknown products cannot be added`() {
         val inactive = createProduct()
-        admin("PATCH", "/api/admin/products/$inactive/status", json("status" to "INACTIVE"))
+        admin("PATCH", "/dev/admin/products/$inactive/status", json("status" to "INACTIVE"))
         val deleted = createProduct()
-        admin("DELETE", "/api/admin/products/$deleted")
+        admin("DELETE", "/dev/admin/products/$deleted")
 
         listOf(inactive, deleted, 999999L).forEach { productId ->
             addItem(json("productId" to productId)).andExpect {
@@ -217,7 +217,7 @@ class CartTest : IntegrationTestBase() {
             responseCode("25")
             jsonPath("$.responseMessage") { value("Item not in cart") }
         }
-        mockMvc.delete("/api/customer/cart/items/$productId") {
+        mockMvc.delete("/dev/customer/cart/items/$productId") {
             header("Authorization", "Bearer $token")
         }.andExpect { responseCode("25") }
     }
@@ -229,7 +229,7 @@ class CartTest : IntegrationTestBase() {
         val third = createProduct()
         listOf(first, second, third).forEach { addItem(json("productId" to it)) }
 
-        mockMvc.delete("/api/customer/cart/items/$first") {
+        mockMvc.delete("/dev/customer/cart/items/$first") {
             header("Authorization", "Bearer $token")
         }.andExpect { responseCode("00") }
         getCart().andExpect {
@@ -237,7 +237,7 @@ class CartTest : IntegrationTestBase() {
             jsonPath("$.data.items[0].productId") { value(second) }
         }
 
-        mockMvc.delete("/api/customer/cart") {
+        mockMvc.delete("/dev/customer/cart") {
             header("Authorization", "Bearer $token")
         }.andExpect { responseCode("00") }
         getCart().andExpect {
@@ -259,10 +259,10 @@ class CartTest : IntegrationTestBase() {
         addItem(json("productId" to lowered, "quantity" to 4))
         addItem(json("productId" to soldOut))
 
-        admin("PATCH", "/api/admin/products/$deactivated/status", json("status" to "INACTIVE"))
-        admin("DELETE", "/api/admin/products/$deleted")
-        admin("PATCH", "/api/admin/products/$lowered", json("stockQuantity" to 3))
-        admin("PATCH", "/api/admin/products/$soldOut", json("stockQuantity" to 0))
+        admin("PATCH", "/dev/admin/products/$deactivated/status", json("status" to "INACTIVE"))
+        admin("DELETE", "/dev/admin/products/$deleted")
+        admin("PATCH", "/dev/admin/products/$lowered", json("stockQuantity" to 3))
+        admin("PATCH", "/dev/admin/products/$soldOut", json("stockQuantity" to 0))
 
         getCart().andExpect {
             responseCode("00")
@@ -283,7 +283,7 @@ class CartTest : IntegrationTestBase() {
         // Fixing the cart makes it checkable again.
         patchItem(lowered, json("quantity" to 3)).andExpect { responseCode("00") }
         listOf(deactivated, deleted, soldOut).forEach {
-            mockMvc.delete("/api/customer/cart/items/$it") { header("Authorization", "Bearer $token") }
+            mockMvc.delete("/dev/customer/cart/items/$it") { header("Authorization", "Bearer $token") }
         }
         getCart().andExpect {
             jsonPath("$.data.items.length()") { value(2) }
@@ -296,7 +296,7 @@ class CartTest : IntegrationTestBase() {
     fun `deactivating the category flags its products in the cart`() {
         val productId = createProduct()
         addItem(json("productId" to productId))
-        admin("PATCH", "/api/admin/categories/$categoryId/status", json("status" to "INACTIVE"))
+        admin("PATCH", "/dev/admin/categories/$categoryId/status", json("status" to "INACTIVE"))
 
         getCart().andExpect {
             jsonPath("$.data.items[0].issue") { value("PRODUCT_UNAVAILABLE") }
@@ -315,7 +315,7 @@ class CartTest : IntegrationTestBase() {
 
     @Test
     fun `the cart needs a customer token`() {
-        mockMvc.get("/api/customer/cart").andExpect { responseCode("115") }
+        mockMvc.get("/dev/customer/cart").andExpect { responseCode("115") }
         addItem(json("productId" to createProduct()), withToken = adminToken).andExpect { responseCode("107") }
     }
 }

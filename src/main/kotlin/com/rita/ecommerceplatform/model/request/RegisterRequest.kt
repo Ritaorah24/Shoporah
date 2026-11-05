@@ -7,7 +7,7 @@ import jakarta.validation.constraints.Size
 import tools.jackson.databind.annotation.JsonDeserialize
 
 /**
- * Body of POST /api/auth/register.
+ * Body of POST /{stage}/auth/register.
  * Fields are nullable so a missing field reaches validation (clear 400 message)
  * instead of failing earlier in JSON parsing.
  */

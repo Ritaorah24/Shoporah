@@ -17,25 +17,25 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 
-/** Delivery method management. SecurityConfig restricts every /api/admin URL to admins who have changed their password. */
+/** Delivery method management. SecurityConfig restricts every /{stage}/admin URL to admins who have changed their password. */
 @Tag(name = "Admin delivery methods", description = "Create, edit and activate/deactivate delivery methods and their fees")
 @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
 @RestController
-@RequestMapping("/api/admin/delivery-methods")
+@RequestMapping("/{stage}/admin/delivery-methods")
 class AdminDeliveryMethodController(private val deliveryMethodService: DeliveryMethodService) {
 
     @GetMapping
-    fun list(): BaseDataResponse {
+    fun list(@PathVariable stage: String): BaseDataResponse {
         return BaseDataResponse("00", "Successful", deliveryMethodService.listForAdmin())
     }
 
     @GetMapping("/{deliveryMethodId}")
-    fun get(@PathVariable deliveryMethodId: Int): BaseDataResponse {
+    fun get(@PathVariable deliveryMethodId: Int, @PathVariable stage: String): BaseDataResponse {
         return BaseDataResponse("00", "Successful", deliveryMethodService.getForAdmin(deliveryMethodId))
     }
 
     @PostMapping
-    fun create(@Valid @RequestBody request: CreateDeliveryMethodRequest): BaseDataResponse {
+    fun create(@Valid @RequestBody request: CreateDeliveryMethodRequest, @PathVariable stage: String): BaseDataResponse {
         return BaseDataResponse("00", "Successful", deliveryMethodService.create(request))
     }
 
@@ -43,6 +43,7 @@ class AdminDeliveryMethodController(private val deliveryMethodService: DeliveryM
     fun update(
         @PathVariable deliveryMethodId: Int,
         @Valid @RequestBody request: UpdateDeliveryMethodRequest,
+        @PathVariable stage: String,
     ): BaseDataResponse {
         return BaseDataResponse("00", "Successful", deliveryMethodService.update(deliveryMethodId, request))
     }
@@ -51,6 +52,7 @@ class AdminDeliveryMethodController(private val deliveryMethodService: DeliveryM
     fun updateStatus(
         @PathVariable deliveryMethodId: Int,
         @Valid @RequestBody request: UpdateStatusRequest,
+        @PathVariable stage: String,
     ): BaseDataResponse {
         return BaseDataResponse("00", "Successful", deliveryMethodService.updateStatus(deliveryMethodId, request))
     }

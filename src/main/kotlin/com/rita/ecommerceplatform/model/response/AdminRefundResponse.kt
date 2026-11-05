@@ -6,7 +6,7 @@ import java.time.LocalDateTime
 
 /**
  * One refund attempt, as admins see it on the order. A PENDING refund with providerRefundId null has not been
- * confirmed by the provider yet: POST /api/admin/refunds/{refundId}/refresh finds out.
+ * confirmed by the provider yet: POST /{stage}/admin/refunds/{refundId}/refresh finds out.
  * providerStatus is the provider's own word (e.g. needs-attention); failureReason says why a FAILED one failed.
  */
 data class AdminRefundResponse(

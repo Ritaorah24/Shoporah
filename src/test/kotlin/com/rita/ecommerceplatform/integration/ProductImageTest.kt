@@ -30,7 +30,7 @@ class ProductImageTest : IntegrationTestBase() {
     fun setUp() {
         adminToken = loginActiveAdmin()
         categoryId = readJson(
-            mockMvc.post("/api/admin/categories") {
+            mockMvc.post("/dev/admin/categories") {
                 header("Authorization", "Bearer $adminToken")
                 contentType = MediaType.APPLICATION_JSON
                 content = json("name" to "Cat-${UUID.randomUUID().toString().take(8)}")
@@ -39,7 +39,7 @@ class ProductImageTest : IntegrationTestBase() {
     }
 
     private fun createProduct(): Long = readJson(
-        mockMvc.post("/api/admin/products") {
+        mockMvc.post("/dev/admin/products") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json(
@@ -59,7 +59,7 @@ class ProductImageTest : IntegrationTestBase() {
         altText: String? = null,
         withToken: String = adminToken,
     ): ResultActionsDsl =
-        mockMvc.multipart("/api/admin/products/$productId/images") {
+        mockMvc.multipart("/dev/admin/products/$productId/images") {
             header("Authorization", "Bearer $withToken")
             file(MockMultipartFile("file", fileName, contentType, content))
             altText?.let { param("altText", it) }
@@ -69,7 +69,7 @@ class ProductImageTest : IntegrationTestBase() {
         readJson(upload(productId, content).andExpect { responseCode("00") }.andReturn())["imageId"].asLong()
 
     private fun deleteImage(productId: Long, imageId: Long): ResultActionsDsl =
-        mockMvc.delete("/api/admin/products/$productId/images/$imageId") { header("Authorization", "Bearer $adminToken") }
+        mockMvc.delete("/dev/admin/products/$productId/images/$imageId") { header("Authorization", "Bearer $adminToken") }
 
     private fun folder(productId: Long) = "shoporah/products/$productId"
 
@@ -129,7 +129,7 @@ class ProductImageTest : IntegrationTestBase() {
             jsonPath("$.responseMessage") { value("The image file is empty") }
         }
         upload(productId, altText = "x".repeat(201)).andExpect { responseCode("106") }
-        mockMvc.multipart("/api/admin/products/$productId/images") { header("Authorization", "Bearer $adminToken") }
+        mockMvc.multipart("/dev/admin/products/$productId/images") { header("Authorization", "Bearer $adminToken") }
             .andExpect {
                 responseCode("106")
                 jsonPath("$.responseMessage") { value("The 'file' file is required") }
@@ -239,7 +239,7 @@ class ProductImageTest : IntegrationTestBase() {
         deleteImage(other, imageId).andExpect { responseCode("25") }
         upload(999_999_999).andExpect { responseCode("25") }
 
-        mockMvc.delete("/api/admin/products/$productId") { header("Authorization", "Bearer $adminToken") }
+        mockMvc.delete("/dev/admin/products/$productId") { header("Authorization", "Bearer $adminToken") }
             .andExpect { responseCode("00") }
         upload(productId).andExpect { responseCode("25") }
         deleteImage(productId, imageId).andExpect { responseCode("25") }

@@ -7,7 +7,7 @@ import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Size
 
 /**
- * Body of POST /api/admin/products/{productId}/stock-adjustments. `change` is how much to add (negative to remove),
+ * Body of POST /{stage}/admin/products/{productId}/stock-adjustments. `change` is how much to add (negative to remove),
  * not the new total, so a sale made meanwhile is never overwritten. 0 is refused by the service.
  * The reason is required: it is saved as the note of the inventory movement.
  */

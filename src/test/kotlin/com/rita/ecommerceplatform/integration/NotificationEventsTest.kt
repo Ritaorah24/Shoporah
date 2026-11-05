@@ -53,7 +53,7 @@ class NotificationEventsTest : IntegrationTestBase() {
         val email = uniqueEmail()
         val customerId = registerCustomer(email)
         val shopper = Shopper(customerId, email, loginCustomer(email))
-        mockMvc.post("/api/customer/addresses") {
+        mockMvc.post("/dev/customer/addresses") {
             header("Authorization", "Bearer ${shopper.token}")
             contentType = MediaType.APPLICATION_JSON
             content = json(
@@ -69,7 +69,7 @@ class NotificationEventsTest : IntegrationTestBase() {
     }
 
     private fun createCategory(): Int {
-        val result = mockMvc.post("/api/admin/categories") {
+        val result = mockMvc.post("/dev/admin/categories") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to unique("Cat"))
@@ -79,12 +79,12 @@ class NotificationEventsTest : IntegrationTestBase() {
 
     /** Puts 2 units of a new 1,000 product in the cart. */
     private fun fillCart(shopper: Shopper) {
-        val product = mockMvc.post("/api/admin/products") {
+        val product = mockMvc.post("/dev/admin/products") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to unique("Phone"), "sku" to unique("sku"), "categoryId" to categoryId, "price" to 1000, "stockQuantity" to 10)
         }.andExpect { responseCode("00") }.andReturn()
-        mockMvc.post("/api/customer/cart/items") {
+        mockMvc.post("/dev/customer/cart/items") {
             header("Authorization", "Bearer ${shopper.token}")
             contentType = MediaType.APPLICATION_JSON
             content = json("productId" to readJson(product)["productId"].asLong(), "quantity" to 2)
@@ -92,7 +92,7 @@ class NotificationEventsTest : IntegrationTestBase() {
     }
 
     private fun checkout(shopper: Shopper, key: UUID = UUID.randomUUID()): ResultActionsDsl =
-        mockMvc.post("/api/customer/orders") {
+        mockMvc.post("/dev/customer/orders") {
             header("Authorization", "Bearer ${shopper.token}")
             header("Idempotency-Key", key.toString())
         }
@@ -105,7 +105,7 @@ class NotificationEventsTest : IntegrationTestBase() {
     }
 
     private fun initialize(shopper: Shopper, orderReference: String): String {
-        val result = mockMvc.post("/api/customer/payments/initialize") {
+        val result = mockMvc.post("/dev/customer/payments/initialize") {
             header("Authorization", "Bearer ${shopper.token}")
             contentType = MediaType.APPLICATION_JSON
             content = json("orderReference" to orderReference)
@@ -114,7 +114,7 @@ class NotificationEventsTest : IntegrationTestBase() {
     }
 
     private fun verify(shopper: Shopper, paymentReference: String) {
-        mockMvc.get("/api/customer/payments/verify/$paymentReference") { header("Authorization", "Bearer ${shopper.token}") }
+        mockMvc.get("/dev/customer/payments/verify/$paymentReference") { header("Authorization", "Bearer ${shopper.token}") }
             .andExpect { responseCode("00") }
     }
 
@@ -123,7 +123,7 @@ class NotificationEventsTest : IntegrationTestBase() {
         val signature = HexFormat.of().formatHex(
             Mac.getInstance("HmacSHA512").apply { init(SecretKeySpec(secretKey.toByteArray(), "HmacSHA512")) }.doFinal(body.toByteArray())
         )
-        mockMvc.post("/api/webhooks/paystack") {
+        mockMvc.post("/webhook/paystack") {
             contentType = MediaType.APPLICATION_JSON
             content = body
             header("x-paystack-signature", signature)
@@ -131,7 +131,7 @@ class NotificationEventsTest : IntegrationTestBase() {
     }
 
     private fun move(orderId: Long, status: String, note: String? = null) {
-        mockMvc.patch("/api/admin/orders/$orderId/status") {
+        mockMvc.patch("/dev/admin/orders/$orderId/status") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("status" to status, "note" to note)
@@ -250,19 +250,19 @@ class NotificationEventsTest : IntegrationTestBase() {
     fun `changing and resetting the password each send a password changed email`() {
         val shopper = newShopper()
 
-        mockMvc.patch("/api/customer/me/password") {
+        mockMvc.patch("/dev/customer/me/password") {
             header("Authorization", "Bearer ${shopper.token}")
             contentType = MediaType.APPLICATION_JSON
             content = json("currentPassword" to DEFAULT_PASSWORD, "newPassword" to "changed456")
         }.andExpect { responseCode("00") }
         assertEquals(1, rows(shopper.email, NotificationType.PASSWORD_CHANGED).size)
 
-        mockMvc.post("/api/auth/forgot-password") {
+        mockMvc.post("/dev/auth/forgot-password") {
             contentType = MediaType.APPLICATION_JSON
             content = json("email" to shopper.email)
         }.andExpect { responseCode("00") }
         val token = awaitResetToken(shopper.email)
-        mockMvc.post("/api/auth/reset-password") {
+        mockMvc.post("/dev/auth/reset-password") {
             contentType = MediaType.APPLICATION_JSON
             content = json("token" to token, "newPassword" to "reset789x")
         }.andExpect { responseCode("00") }

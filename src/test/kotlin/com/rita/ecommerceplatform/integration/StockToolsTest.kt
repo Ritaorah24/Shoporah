@@ -32,7 +32,7 @@ class StockToolsTest : IntegrationTestBase() {
     private fun unique(prefix: String) = "$prefix-${UUID.randomUUID().toString().take(8)}"
 
     private fun createCategory(): Int {
-        val result = mockMvc.post("/api/admin/categories") {
+        val result = mockMvc.post("/dev/admin/categories") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to unique("Cat"))
@@ -41,7 +41,7 @@ class StockToolsTest : IntegrationTestBase() {
     }
 
     private fun createProduct(stock: Int, threshold: Int? = null, name: String = "Stock phone"): Long {
-        val result = mockMvc.post("/api/admin/products") {
+        val result = mockMvc.post("/dev/admin/products") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json(
@@ -57,7 +57,7 @@ class StockToolsTest : IntegrationTestBase() {
     }
 
     private fun adminList(vararg params: Pair<String, String>): JsonNode = readJson(
-        mockMvc.get("/api/admin/products") {
+        mockMvc.get("/dev/admin/products") {
             header("Authorization", "Bearer $adminToken")
             param("categoryId", categoryId.toString())
             params.forEach { (name, value) -> param(name, value) }
@@ -68,14 +68,14 @@ class StockToolsTest : IntegrationTestBase() {
         adminList(*params)["content"].toList().map { it["productId"].asLong() }.toSet()
 
     private fun adjust(productId: Long, change: Int?, reason: String? = "Delivery from supplier", withToken: String = adminToken): ResultActionsDsl =
-        mockMvc.post("/api/admin/products/$productId/stock-adjustments") {
+        mockMvc.post("/dev/admin/products/$productId/stock-adjustments") {
             header("Authorization", "Bearer $withToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("change" to change, "reason" to reason)
         }
 
     private fun movements(productId: Long, vararg params: Pair<String, String>): JsonNode = readJson(
-        mockMvc.get("/api/admin/products/$productId/stock-movements") {
+        mockMvc.get("/dev/admin/products/$productId/stock-movements") {
             header("Authorization", "Bearer $adminToken")
             params.forEach { (name, value) -> param(name, value) }
         }.andExpect { responseCode("00") }.andReturn(),
@@ -113,7 +113,7 @@ class StockToolsTest : IntegrationTestBase() {
         val lowPhone = createProduct(stock = 2, threshold = 5, name = "Low phone")
         createProduct(stock = 2, threshold = 5, name = "Low cable")
         val inactive = createProduct(stock = 0)
-        mockMvc.patch("/api/admin/products/$inactive/status") {
+        mockMvc.patch("/dev/admin/products/$inactive/status") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("status" to "INACTIVE")
@@ -124,7 +124,7 @@ class StockToolsTest : IntegrationTestBase() {
         assertEquals(emptySet(), ids("stock" to "OUT", "status" to "ACTIVE"))
         assertEquals(1, adminList("stock" to "LOW", "search" to "phone")["totalElements"].asInt())
 
-        mockMvc.get("/api/admin/products") {
+        mockMvc.get("/dev/admin/products") {
             header("Authorization", "Bearer $adminToken")
             param("stock", "EMPTY")
         }.andExpect {
@@ -211,7 +211,7 @@ class StockToolsTest : IntegrationTestBase() {
     @Test
     fun `the stock history shows sales with their order reference, newest first, in pages`() {
         val productId = createProduct(stock = 10)
-        mockMvc.patch("/api/admin/products/$productId") {
+        mockMvc.patch("/dev/admin/products/$productId") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("stockQuantity" to 12)
@@ -236,7 +236,7 @@ class StockToolsTest : IntegrationTestBase() {
     // A customer buys 2 and pays (the fake Paystack says success): a SALE movement of -2.
     private fun buyTwo(productId: Long): String {
         val token = newCustomerToken()
-        mockMvc.post("/api/customer/addresses") {
+        mockMvc.post("/dev/customer/addresses") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json(
@@ -248,26 +248,26 @@ class StockToolsTest : IntegrationTestBase() {
                 "country" to "Nigeria",
             )
         }.andExpect { responseCode("00") }
-        mockMvc.post("/api/customer/cart/items") {
+        mockMvc.post("/dev/customer/cart/items") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json("productId" to productId, "quantity" to 2)
         }.andExpect { responseCode("00") }
         val reference = readJson(
-            mockMvc.post("/api/customer/orders") {
+            mockMvc.post("/dev/customer/orders") {
                 header("Authorization", "Bearer $token")
                 header("Idempotency-Key", UUID.randomUUID().toString())
             }.andExpect { responseCode("00") }.andReturn(),
         )["reference"].asString()
         val paymentReference = readJson(
-            mockMvc.post("/api/customer/payments/initialize") {
+            mockMvc.post("/dev/customer/payments/initialize") {
                 header("Authorization", "Bearer $token")
                 contentType = MediaType.APPLICATION_JSON
                 content = json("orderReference" to reference)
             }.andExpect { responseCode("00") }.andReturn(),
         )["paymentReference"].asString()
         paymentGateway.pay(paymentReference)
-        mockMvc.get("/api/customer/payments/verify/$paymentReference") { header("Authorization", "Bearer $token") }
+        mockMvc.get("/dev/customer/payments/verify/$paymentReference") { header("Authorization", "Bearer $token") }
             .andExpect { responseCode("00") }
         return reference
     }
@@ -275,11 +275,11 @@ class StockToolsTest : IntegrationTestBase() {
     @Test
     fun `deleted or unknown products are 404 and customers are refused`() {
         val productId = createProduct(stock = 5)
-        mockMvc.delete("/api/admin/products/$productId") { header("Authorization", "Bearer $adminToken") }
+        mockMvc.delete("/dev/admin/products/$productId") { header("Authorization", "Bearer $adminToken") }
             .andExpect { responseCode("00") }
 
         adjust(productId, 1).andExpect { responseCode("25") }
-        mockMvc.get("/api/admin/products/$productId/stock-movements") { header("Authorization", "Bearer $adminToken") }
+        mockMvc.get("/dev/admin/products/$productId/stock-movements") { header("Authorization", "Bearer $adminToken") }
             .andExpect { responseCode("25") }
         adjust(999_999_999, 1).andExpect { responseCode("25") }
         assertEquals(5, stock(productId))
@@ -287,9 +287,9 @@ class StockToolsTest : IntegrationTestBase() {
         val customerToken = newCustomerToken()
         val other = createProduct(stock = 5)
         adjust(other, 1, withToken = customerToken).andExpect { responseCode("107") }
-        mockMvc.get("/api/admin/products/$other/stock-movements") { header("Authorization", "Bearer $customerToken") }
+        mockMvc.get("/dev/admin/products/$other/stock-movements") { header("Authorization", "Bearer $customerToken") }
             .andExpect { responseCode("107") }
-        mockMvc.get("/api/admin/products") {
+        mockMvc.get("/dev/admin/products") {
             header("Authorization", "Bearer $customerToken")
             param("stock", "LOW")
         }.andExpect { responseCode("107") }

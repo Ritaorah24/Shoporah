@@ -5,7 +5,7 @@ import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
 import tools.jackson.databind.annotation.JsonDeserialize
 
-/** Body of POST /api/auth/forgot-password. Same email rule as RegisterRequest. */
+/** Body of POST /{stage}/auth/forgot-password. Same email rule as RegisterRequest. */
 data class ForgotPasswordRequest(
     @JsonDeserialize(using = TrimStringDeserializer::class)
     @field:NotBlank

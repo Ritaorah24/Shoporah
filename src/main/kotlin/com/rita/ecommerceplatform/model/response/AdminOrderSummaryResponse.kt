@@ -4,7 +4,7 @@ import com.rita.ecommerceplatform.repository.database.OrderWithCustomer
 import java.math.BigDecimal
 import java.time.LocalDateTime
 
-/** One order in the admin order list, with who placed it. GET /api/admin/orders/{orderId} has the full order. */
+/** One order in the admin order list, with who placed it. GET /{stage}/admin/orders/{orderId} has the full order. */
 data class AdminOrderSummaryResponse(
     val orderId: Long,
     val reference: String,

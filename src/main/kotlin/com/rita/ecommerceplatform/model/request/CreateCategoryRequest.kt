@@ -4,7 +4,7 @@ import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
 import tools.jackson.databind.annotation.JsonDeserialize
 
-/** Body of POST /api/admin/categories. */
+/** Body of POST /{stage}/admin/categories. */
 data class CreateCategoryRequest(
     // Trimmed before validation, so " Phones " is stored (and checked for duplicates) as "Phones".
     @JsonDeserialize(using = TrimStringDeserializer::class)

@@ -32,7 +32,7 @@ class PaymentInitializeTest : IntegrationTestBase() {
     private fun unique(prefix: String) = "$prefix-${UUID.randomUUID().toString().take(8)}"
 
     private fun createCategory(): Int {
-        val result = mockMvc.post("/api/admin/categories") {
+        val result = mockMvc.post("/dev/admin/categories") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to unique("Cat"))
@@ -41,7 +41,7 @@ class PaymentInitializeTest : IntegrationTestBase() {
     }
 
     private fun createProduct(price: Any): Long {
-        val result = mockMvc.post("/api/admin/products") {
+        val result = mockMvc.post("/dev/admin/products") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json(
@@ -56,7 +56,7 @@ class PaymentInitializeTest : IntegrationTestBase() {
     }
 
     private fun createAddress(withToken: String) {
-        mockMvc.post("/api/customer/addresses") {
+        mockMvc.post("/dev/customer/addresses") {
             header("Authorization", "Bearer $withToken")
             contentType = MediaType.APPLICATION_JSON
             content = json(
@@ -72,12 +72,12 @@ class PaymentInitializeTest : IntegrationTestBase() {
 
     /** Puts one new product in the cart and checks out; returns the checkout response (the order). */
     private fun placeOrder(price: Any = 1000, withToken: String = token): JsonNode {
-        mockMvc.post("/api/customer/cart/items") {
+        mockMvc.post("/dev/customer/cart/items") {
             header("Authorization", "Bearer $withToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("productId" to createProduct(price), "quantity" to 1)
         }.andExpect { responseCode("00") }
-        val result = mockMvc.post("/api/customer/orders") {
+        val result = mockMvc.post("/dev/customer/orders") {
             header("Authorization", "Bearer $withToken")
             header("Idempotency-Key", UUID.randomUUID().toString())
         }.andExpect { responseCode("00") }.andReturn()
@@ -85,7 +85,7 @@ class PaymentInitializeTest : IntegrationTestBase() {
     }
 
     private fun initialize(orderReference: String?, withToken: String? = token): ResultActionsDsl =
-        mockMvc.post("/api/customer/payments/initialize") {
+        mockMvc.post("/dev/customer/payments/initialize") {
             withToken?.let { header("Authorization", "Bearer $it") }
             contentType = MediaType.APPLICATION_JSON
             content = json("orderReference" to orderReference)

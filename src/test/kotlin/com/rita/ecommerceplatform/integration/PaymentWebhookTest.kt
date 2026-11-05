@@ -48,7 +48,7 @@ class PaymentWebhookTest : IntegrationTestBase() {
     private fun unique(prefix: String) = "$prefix-${UUID.randomUUID().toString().take(8)}"
 
     private fun createCategory(): Int {
-        val result = mockMvc.post("/api/admin/categories") {
+        val result = mockMvc.post("/dev/admin/categories") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to unique("Cat"))
@@ -57,7 +57,7 @@ class PaymentWebhookTest : IntegrationTestBase() {
     }
 
     private fun createProduct(stock: Int): Long {
-        val result = mockMvc.post("/api/admin/products") {
+        val result = mockMvc.post("/dev/admin/products") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json(
@@ -72,7 +72,7 @@ class PaymentWebhookTest : IntegrationTestBase() {
     }
 
     private fun createAddress() {
-        mockMvc.post("/api/customer/addresses") {
+        mockMvc.post("/dev/customer/addresses") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json(
@@ -89,12 +89,12 @@ class PaymentWebhookTest : IntegrationTestBase() {
     /** One new product (stock 10), quantity 2 in the cart, then checkout. */
     private fun placeOrder(): Placed {
         val productId = createProduct(stock = 10)
-        mockMvc.post("/api/customer/cart/items") {
+        mockMvc.post("/dev/customer/cart/items") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json("productId" to productId, "quantity" to 2)
         }.andExpect { responseCode("00") }
-        val result = mockMvc.post("/api/customer/orders") {
+        val result = mockMvc.post("/dev/customer/orders") {
             header("Authorization", "Bearer $token")
             header("Idempotency-Key", UUID.randomUUID().toString())
         }.andExpect { responseCode("00") }.andReturn()
@@ -103,7 +103,7 @@ class PaymentWebhookTest : IntegrationTestBase() {
 
     /** Starts a payment for the order and returns its reference. */
     private fun initialize(placed: Placed): String {
-        val result = mockMvc.post("/api/customer/payments/initialize") {
+        val result = mockMvc.post("/dev/customer/payments/initialize") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json("orderReference" to placed.reference)
@@ -122,7 +122,7 @@ class PaymentWebhookTest : IntegrationTestBase() {
 
     /** Sends the body to the webhook, signed correctly unless another signature (or none) is given. */
     private fun webhook(body: String, signature: String? = sign(body), bearer: String? = null): ResultActionsDsl =
-        mockMvc.post("/api/webhooks/paystack") {
+        mockMvc.post("/webhook/paystack") {
             contentType = MediaType.APPLICATION_JSON
             content = body
             signature?.let { header("x-paystack-signature", it) }
@@ -130,7 +130,7 @@ class PaymentWebhookTest : IntegrationTestBase() {
         }
 
     private fun verify(paymentReference: String): ResultActionsDsl =
-        mockMvc.get("/api/customer/payments/verify/$paymentReference") { header("Authorization", "Bearer $token") }
+        mockMvc.get("/dev/customer/payments/verify/$paymentReference") { header("Authorization", "Bearer $token") }
 
     private fun stock(productId: Long): Int =
         jdbcClient.sql("SELECT productstockquantity FROM public.ec_product WHERE productid = :id")

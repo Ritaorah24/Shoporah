@@ -36,7 +36,7 @@ class AdminOrderTest : IntegrationTestBase() {
         val email = uniqueEmail()
         registerCustomer(email)
         val shopper = Shopper(email, loginCustomer(email))
-        mockMvc.post("/api/customer/addresses") {
+        mockMvc.post("/dev/customer/addresses") {
             header("Authorization", "Bearer ${shopper.token}")
             contentType = MediaType.APPLICATION_JSON
             content = json(
@@ -52,7 +52,7 @@ class AdminOrderTest : IntegrationTestBase() {
     }
 
     private fun createCategory(): Int {
-        val result = mockMvc.post("/api/admin/categories") {
+        val result = mockMvc.post("/dev/admin/categories") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to unique("Cat"))
@@ -62,17 +62,17 @@ class AdminOrderTest : IntegrationTestBase() {
 
     /** A PENDING, UNPAID order of 2 units of a new product. Returns the orderId. */
     private fun placeOrder(shopper: Shopper): Long {
-        val product = mockMvc.post("/api/admin/products") {
+        val product = mockMvc.post("/dev/admin/products") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to unique("Phone"), "sku" to unique("sku"), "categoryId" to categoryId, "price" to 1000, "stockQuantity" to 10)
         }.andExpect { responseCode("00") }.andReturn()
-        mockMvc.post("/api/customer/cart/items") {
+        mockMvc.post("/dev/customer/cart/items") {
             header("Authorization", "Bearer ${shopper.token}")
             contentType = MediaType.APPLICATION_JSON
             content = json("productId" to readJson(product)["productId"].asLong(), "quantity" to 2)
         }.andExpect { responseCode("00") }
-        val order = mockMvc.post("/api/customer/orders") {
+        val order = mockMvc.post("/dev/customer/orders") {
             header("Authorization", "Bearer ${shopper.token}")
             header("Idempotency-Key", UUID.randomUUID().toString())
         }.andExpect { responseCode("00") }.andReturn()
@@ -85,14 +85,14 @@ class AdminOrderTest : IntegrationTestBase() {
 
     /** Starts a payment, lets "Paystack" answer with `outcome`, and verifies it. Returns the payment reference. */
     private fun pay(shopper: Shopper, orderId: Long, outcome: (String) -> Unit = paymentGateway::pay): String {
-        val result = mockMvc.post("/api/customer/payments/initialize") {
+        val result = mockMvc.post("/dev/customer/payments/initialize") {
             header("Authorization", "Bearer ${shopper.token}")
             contentType = MediaType.APPLICATION_JSON
             content = json("orderReference" to orderReference(orderId))
         }.andExpect { responseCode("00") }.andReturn()
         val reference = readJson(result)["paymentReference"].asString()
         outcome(reference)
-        mockMvc.get("/api/customer/payments/verify/$reference") { header("Authorization", "Bearer ${shopper.token}") }
+        mockMvc.get("/dev/customer/payments/verify/$reference") { header("Authorization", "Bearer ${shopper.token}") }
             .andExpect { responseCode("00") }
         return reference
     }
@@ -101,18 +101,18 @@ class AdminOrderTest : IntegrationTestBase() {
     private fun confirmedOrder(shopper: Shopper = newShopper()): Long = placeOrder(shopper).also { pay(shopper, it) }
 
     private fun move(orderId: Long, status: String?, note: String? = null, token: String? = adminToken): ResultActionsDsl =
-        mockMvc.patch("/api/admin/orders/$orderId/status") {
+        mockMvc.patch("/dev/admin/orders/$orderId/status") {
             token?.let { header("Authorization", "Bearer $it") }
             contentType = MediaType.APPLICATION_JSON
             content = json("status" to status, "note" to note)
         }
 
     private fun detail(orderId: Long): JsonNode =
-        readJson(mockMvc.get("/api/admin/orders/$orderId") { header("Authorization", "Bearer $adminToken") }
+        readJson(mockMvc.get("/dev/admin/orders/$orderId") { header("Authorization", "Bearer $adminToken") }
             .andExpect { responseCode("00") }.andReturn())
 
     private fun list(query: String): JsonNode =
-        readJson(mockMvc.get("/api/admin/orders?$query") { header("Authorization", "Bearer $adminToken") }
+        readJson(mockMvc.get("/dev/admin/orders?$query") { header("Authorization", "Bearer $adminToken") }
             .andExpect { responseCode("00") }.andReturn())
 
     private fun status(orderId: Long): String =
@@ -254,7 +254,7 @@ class AdminOrderTest : IntegrationTestBase() {
             .query(Long::class.javaObjectType).single()
         assertEquals(confirmedCount, confirmed["totalElements"].asLong())
 
-        mockMvc.get("/api/admin/orders?status=LOST") { header("Authorization", "Bearer $adminToken") }.andExpect {
+        mockMvc.get("/dev/admin/orders?status=LOST") { header("Authorization", "Bearer $adminToken") }.andExpect {
             responseCode("106")
             jsonPath("$.responseMessage") { value("status must be one of PENDING, CONFIRMED, PROCESSING, SHIPPED, DELIVERED, CANCELLED, REFUNDED") }
         }
@@ -290,7 +290,7 @@ class AdminOrderTest : IntegrationTestBase() {
 
     @Test
     fun `an unknown order is a 404`() {
-        mockMvc.get("/api/admin/orders/999999999") { header("Authorization", "Bearer $adminToken") }.andExpect {
+        mockMvc.get("/dev/admin/orders/999999999") { header("Authorization", "Bearer $adminToken") }.andExpect {
             responseCode("25")
             jsonPath("$.responseMessage") { value("Order not found") }
         }
@@ -302,13 +302,13 @@ class AdminOrderTest : IntegrationTestBase() {
         val shopper = newShopper()
         val orderId = confirmedOrder(shopper)
 
-        mockMvc.get("/api/admin/orders").andExpect { responseCode("115") }
-        mockMvc.get("/api/admin/orders") { header("Authorization", "Bearer ${shopper.token}") }.andExpect { responseCode("107") }
+        mockMvc.get("/dev/admin/orders").andExpect { responseCode("115") }
+        mockMvc.get("/dev/admin/orders") { header("Authorization", "Bearer ${shopper.token}") }.andExpect { responseCode("107") }
         move(orderId, "PROCESSING", token = null).andExpect { responseCode("115") }
         move(orderId, "PROCESSING", token = shopper.token).andExpect { responseCode("107") }
 
         val mustChangeToken = loginSeedAdmin()
-        mockMvc.get("/api/admin/orders/$orderId") { header("Authorization", "Bearer $mustChangeToken") }.andExpect { responseCode("107") }
+        mockMvc.get("/dev/admin/orders/$orderId") { header("Authorization", "Bearer $mustChangeToken") }.andExpect { responseCode("107") }
         move(orderId, "PROCESSING", token = mustChangeToken).andExpect { responseCode("107") }
         assertEquals("CONFIRMED", status(orderId))
     }
@@ -320,7 +320,7 @@ class AdminOrderTest : IntegrationTestBase() {
         move(orderId, "PROCESSING").andExpect { responseCode("00") }
         move(orderId, "SHIPPED", note = "GIG Logistics, tracking 12345").andExpect { responseCode("00") }
 
-        mockMvc.get("/api/customer/orders/$orderId") { header("Authorization", "Bearer ${shopper.token}") }.andExpect {
+        mockMvc.get("/dev/customer/orders/$orderId") { header("Authorization", "Bearer ${shopper.token}") }.andExpect {
             responseCode("00")
             jsonPath("$.data.status") { value("SHIPPED") }
             jsonPath("$.data.statusHistory[3].status") { value("SHIPPED") }

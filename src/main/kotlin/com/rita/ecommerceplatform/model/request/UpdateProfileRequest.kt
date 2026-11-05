@@ -8,7 +8,7 @@ import jakarta.validation.constraints.Size
 import tools.jackson.databind.annotation.JsonDeserialize
 
 /**
- * Body of PATCH /api/customer/me. Every field is optional: a field that is not sent
+ * Body of PATCH /{stage}/customer/me. Every field is optional: a field that is not sent
  * (null) keeps its current value. Email cannot be changed here (D6).
  * Validators such as @Pattern and @Size accept null, so they only check fields that are sent.
  */

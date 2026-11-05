@@ -11,7 +11,7 @@ class CustomerAuthFlowTest : IntegrationTestBase() {
     @Test
     fun `register returns 201 with the profile and never the password`() {
         val email = uniqueEmail()
-        mockMvc.post("/api/auth/register") {
+        mockMvc.post("/dev/auth/register") {
             contentType = MediaType.APPLICATION_JSON
             content = registerBody(email)
         }.andExpect {
@@ -27,7 +27,7 @@ class CustomerAuthFlowTest : IntegrationTestBase() {
     @Test
     fun `register trims and lowercases the email`() {
         val email = uniqueEmail()
-        mockMvc.post("/api/auth/register") {
+        mockMvc.post("/dev/auth/register") {
             contentType = MediaType.APPLICATION_JSON
             content = registerBody("  ${email.uppercase()}  ")
         }.andExpect {
@@ -40,7 +40,7 @@ class CustomerAuthFlowTest : IntegrationTestBase() {
     fun `register rejects an email whose domain has no dot or no proper ending`() {
         val name = uniqueEmail().substringBefore("@")
         listOf("$name@gmailcom", "$name@localhost", "$name@example.c", "$name@example.123").forEach { email ->
-            mockMvc.post("/api/auth/register") {
+            mockMvc.post("/dev/auth/register") {
                 contentType = MediaType.APPLICATION_JSON
                 content = registerBody(email)
             }.andExpect {
@@ -55,7 +55,7 @@ class CustomerAuthFlowTest : IntegrationTestBase() {
         assertEquals(0, saved)
 
         // A subdomain and a country ending are fine.
-        mockMvc.post("/api/auth/register") {
+        mockMvc.post("/dev/auth/register") {
             contentType = MediaType.APPLICATION_JSON
             content = registerBody("$name.obi@mail.example.co.uk")
         }.andExpect { responseCode("00") }
@@ -66,7 +66,7 @@ class CustomerAuthFlowTest : IntegrationTestBase() {
         val email = uniqueEmail()
         registerCustomer(email)
 
-        mockMvc.post("/api/auth/register") {
+        mockMvc.post("/dev/auth/register") {
             contentType = MediaType.APPLICATION_JSON
             content = registerBody(email.uppercase())
         }.andExpect {
@@ -77,7 +77,7 @@ class CustomerAuthFlowTest : IntegrationTestBase() {
 
     @Test
     fun `register with a weak password returns 400 with field errors`() {
-        mockMvc.post("/api/auth/register") {
+        mockMvc.post("/dev/auth/register") {
             contentType = MediaType.APPLICATION_JSON
             content = registerBody(uniqueEmail(), password = "short")
         }.andExpect {
@@ -93,7 +93,7 @@ class CustomerAuthFlowTest : IntegrationTestBase() {
         val email = uniqueEmail()
         registerCustomer(email)
 
-        mockMvc.post("/api/auth/login") {
+        mockMvc.post("/dev/auth/login") {
             contentType = MediaType.APPLICATION_JSON
             content = json("email" to email, "password" to DEFAULT_PASSWORD)
         }.andExpect {
@@ -110,12 +110,12 @@ class CustomerAuthFlowTest : IntegrationTestBase() {
         val email = uniqueEmail()
         registerCustomer(email)
 
-        val wrongPassword = mockMvc.post("/api/auth/login") {
+        val wrongPassword = mockMvc.post("/dev/auth/login") {
             contentType = MediaType.APPLICATION_JSON
             content = json("email" to email, "password" to "wrongpass1")
         }.andExpect { responseCode("86") }.andReturn()
 
-        val unknownEmail = mockMvc.post("/api/auth/login") {
+        val unknownEmail = mockMvc.post("/dev/auth/login") {
             contentType = MediaType.APPLICATION_JSON
             content = json("email" to uniqueEmail(), "password" to "wrongpass1")
         }.andExpect { responseCode("86") }.andReturn()
@@ -136,7 +136,7 @@ class CustomerAuthFlowTest : IntegrationTestBase() {
             .param("id", customerId)
             .update()
 
-        mockMvc.post("/api/auth/login") {
+        mockMvc.post("/dev/auth/login") {
             contentType = MediaType.APPLICATION_JSON
             content = json("email" to email, "password" to DEFAULT_PASSWORD)
         }.andExpect {
@@ -145,7 +145,7 @@ class CustomerAuthFlowTest : IntegrationTestBase() {
         }
 
         // Status is only revealed after a correct password.
-        mockMvc.post("/api/auth/login") {
+        mockMvc.post("/dev/auth/login") {
             contentType = MediaType.APPLICATION_JSON
             content = json("email" to email, "password" to "wrongpass1")
         }.andExpect { responseCode("86") }

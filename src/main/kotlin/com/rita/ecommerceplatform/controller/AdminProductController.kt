@@ -29,11 +29,11 @@ import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import java.math.BigDecimal
 
-/** Product management. SecurityConfig restricts every /api/admin URL to admins who have changed their password. */
+/** Product management. SecurityConfig restricts every /{stage}/admin URL to admins who have changed their password. */
 @Tag(name = "Admin products", description = "Create, edit, activate/deactivate and delete products")
 @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
 @RestController
-@RequestMapping("/api/admin/products")
+@RequestMapping("/{stage}/admin/products")
 class AdminProductController(private val productService: ProductService) {
 
     /**
@@ -53,12 +53,13 @@ class AdminProductController(private val productService: ProductService) {
         @RequestParam(required = false) inStock: Boolean?,
         @RequestParam(required = false) sort: String?,
         @RequestParam(required = false) stock: String?,
+        @PathVariable stage: String,
     ): BaseDataResponse {
         return BaseDataResponse("00", "Successful", productService.listForAdmin(page, size, search, categoryId, status, ProductFilters(minPrice, maxPrice, inStock, sort), stock))
     }
 
     @GetMapping("/{productId}")
-    fun get(@PathVariable productId: Long): BaseDataResponse {
+    fun get(@PathVariable productId: Long, @PathVariable stage: String): BaseDataResponse {
         return BaseDataResponse("00", "Successful", productService.getForAdmin(productId))
     }
 
@@ -67,6 +68,7 @@ class AdminProductController(private val productService: ProductService) {
     fun create(
         @AuthenticationPrincipal jwt: Jwt,
         @Valid @RequestBody request: CreateProductRequest,
+        @PathVariable stage: String,
     ): BaseDataResponse {
         return BaseDataResponse("00", "Successful", productService.create(adminId(jwt), request))
     }
@@ -77,6 +79,7 @@ class AdminProductController(private val productService: ProductService) {
         @AuthenticationPrincipal jwt: Jwt,
         @PathVariable productId: Long,
         @Valid @RequestBody request: UpdateProductRequest,
+        @PathVariable stage: String,
     ): BaseDataResponse {
         return BaseDataResponse("00", "Successful", productService.update(adminId(jwt), productId, request))
     }
@@ -85,6 +88,7 @@ class AdminProductController(private val productService: ProductService) {
     fun updateStatus(
         @PathVariable productId: Long,
         @Valid @RequestBody request: UpdateStatusRequest,
+        @PathVariable stage: String,
     ): BaseDataResponse {
         return BaseDataResponse("00", "Successful", productService.updateStatus(productId, request))
     }
@@ -98,6 +102,7 @@ class AdminProductController(private val productService: ProductService) {
         @AuthenticationPrincipal jwt: Jwt,
         @PathVariable productId: Long,
         @Valid @RequestBody request: StockAdjustmentRequest,
+        @PathVariable stage: String,
     ): BaseDataResponse {
         return BaseDataResponse("00", "Successful", productService.adjustStock(adminId(jwt), productId, request))
     }
@@ -108,12 +113,13 @@ class AdminProductController(private val productService: ProductService) {
         @PathVariable productId: Long,
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "${Paging.DEFAULT_SIZE}") size: Int,
+        @PathVariable stage: String,
     ): BaseDataResponse {
         return BaseDataResponse("00", "Successful", productService.stockMovements(productId, page, size))
     }
 
     @DeleteMapping("/{productId}")
-    fun delete(@PathVariable productId: Long): BaseResponse {
+    fun delete(@PathVariable productId: Long, @PathVariable stage: String): BaseResponse {
         productService.delete(productId)
         return BaseResponse()
     }

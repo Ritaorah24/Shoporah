@@ -5,7 +5,7 @@ import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.Size
 
 /**
- * Body of PATCH /api/admin/products/{productId}/images/{imageId}. Every field is optional; at least one is required.
+ * Body of PATCH /{stage}/admin/products/{productId}/images/{imageId}. Every field is optional; at least one is required.
  * altText "" clears it. primary can only be true: a product with images always has one primary, so the way to
  * move it is to make another image primary.
  */

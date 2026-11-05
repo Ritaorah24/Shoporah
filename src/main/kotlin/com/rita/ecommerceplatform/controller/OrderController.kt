@@ -30,7 +30,7 @@ import java.util.UUID
 @Tag(name = "Orders", description = "Checkout and the logged-in customer's orders")
 @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
 @RestController
-@RequestMapping("/api/customer/orders")
+@RequestMapping("/{stage}/customer/orders")
 class OrderController(private val orderService: OrderService) {
 
     /**
@@ -43,6 +43,7 @@ class OrderController(private val orderService: OrderService) {
         @Parameter(description = "A new UUID per checkout attempt; send the same one again when retrying")
         @RequestHeader(IDEMPOTENCY_KEY, required = false) idempotencyKey: String?,
         @Valid @RequestBody(required = false) request: CheckoutRequest?,
+        @PathVariable stage: String,
     ): BaseDataResponse {
         val result = orderService.checkout(customerId(jwt), parseKey(idempotencyKey), request)
         return BaseDataResponse("00", if (result.created) "Order created" else "Successful", result.order)
@@ -54,13 +55,14 @@ class OrderController(private val orderService: OrderService) {
         @AuthenticationPrincipal jwt: Jwt,
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "${Paging.DEFAULT_SIZE}") size: Int,
+        @PathVariable stage: String,
     ): BaseDataResponse {
         return BaseDataResponse("00", "Successful", orderService.list(customerId(jwt), page, size))
     }
 
     /** Items, totals, delivery address and status history of one of the customer's own orders. */
     @GetMapping("/{orderId}")
-    fun get(@AuthenticationPrincipal jwt: Jwt, @PathVariable orderId: Long): BaseDataResponse {
+    fun get(@AuthenticationPrincipal jwt: Jwt, @PathVariable orderId: Long, @PathVariable stage: String): BaseDataResponse {
         return BaseDataResponse("00", "Successful", orderService.get(customerId(jwt), orderId))
     }
 
@@ -73,6 +75,7 @@ class OrderController(private val orderService: OrderService) {
         @AuthenticationPrincipal jwt: Jwt,
         @PathVariable orderId: Long,
         @Valid @RequestBody(required = false) request: CancelOrderRequest?,
+        @PathVariable stage: String,
     ): BaseDataResponse {
         return BaseDataResponse("00", "Successful", orderService.cancel(customerId(jwt), orderId, request))
     }
@@ -87,7 +90,7 @@ class OrderController(private val orderService: OrderService) {
         }
     }
 
-    // Roles already restrict /api/customer/** to customer tokens; this guards against a mis-issued token.
+    // Roles already restrict /{stage}/customer/** to customer tokens; this guards against a mis-issued token.
     private fun customerId(jwt: Jwt): Long {
         val currentUser = CurrentUser.from(jwt)
         if (currentUser.userType != UserType.CUSTOMER) throw AccessNotAllowedException("Account is not active")

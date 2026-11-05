@@ -5,7 +5,7 @@ import jakarta.validation.constraints.Pattern
 import jakarta.validation.constraints.Size
 import tools.jackson.databind.annotation.JsonDeserialize
 
-/** Body of POST /api/auth/reset-password. The token is the one from the reset email's link. */
+/** Body of POST /{stage}/auth/reset-password. The token is the one from the reset email's link. */
 data class ResetPasswordRequest(
     @JsonDeserialize(using = TrimStringDeserializer::class)
     @field:NotBlank

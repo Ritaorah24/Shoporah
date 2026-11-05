@@ -12,10 +12,10 @@ import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import java.math.BigDecimal
 
-/** Public: no token needed (SecurityConfig permits GET on every /api/products URL). */
+/** Public: no token needed (SecurityConfig permits GET on every /{stage}/products URL). */
 @Tag(name = "Products", description = "Browse active products")
 @RestController
-@RequestMapping("/api/products")
+@RequestMapping("/{stage}/products")
 class ProductController(private val productService: ProductService) {
 
     /**
@@ -32,12 +32,13 @@ class ProductController(private val productService: ProductService) {
         @RequestParam(required = false) maxPrice: BigDecimal?,
         @RequestParam(required = false) inStock: Boolean?,
         @RequestParam(required = false) sort: String?,
+        @PathVariable stage: String,
     ): BaseDataResponse {
         return BaseDataResponse("00", "Successful", productService.listPublic(page, size, search, categoryId, ProductFilters(minPrice, maxPrice, inStock, sort)))
     }
 
     @GetMapping("/{productId}")
-    fun get(@PathVariable productId: Long): BaseDataResponse {
+    fun get(@PathVariable productId: Long, @PathVariable stage: String): BaseDataResponse {
         return BaseDataResponse("00", "Successful", productService.getPublic(productId))
     }
 }

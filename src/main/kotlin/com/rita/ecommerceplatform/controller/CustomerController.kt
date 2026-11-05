@@ -15,6 +15,7 @@ import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.security.oauth2.jwt.Jwt
+import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.RequestBody
@@ -25,14 +26,14 @@ import org.springframework.web.bind.annotation.RestController
 @Tag(name = "Customer profile", description = "The logged-in customer's own profile")
 @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
 @RestController
-@RequestMapping("/api/customer")
+@RequestMapping("/{stage}/customer")
 class CustomerController(
     private val customerService: CustomerService,
     private val authService: AuthService,
 ) {
 
     @GetMapping("/me")
-    fun getMe(@AuthenticationPrincipal jwt: Jwt): BaseDataResponse {
+    fun getMe(@AuthenticationPrincipal jwt: Jwt, @PathVariable stage: String): BaseDataResponse {
         return BaseDataResponse("00", "Successful", customerService.getProfile(customerId(jwt)))
     }
 
@@ -40,6 +41,7 @@ class CustomerController(
     fun updateMe(
         @AuthenticationPrincipal jwt: Jwt,
         @Valid @RequestBody request: UpdateProfileRequest,
+        @PathVariable stage: String,
     ): BaseDataResponse {
         return BaseDataResponse("00", "Successful", customerService.updateProfile(customerId(jwt), request))
     }
@@ -49,12 +51,13 @@ class CustomerController(
     fun changePassword(
         @AuthenticationPrincipal jwt: Jwt,
         @Valid @RequestBody request: ChangePasswordRequest,
+        @PathVariable stage: String,
     ): BaseResponse {
         authService.changeCustomerPassword(customerId(jwt), request)
         return BaseResponse()
     }
 
-    // Roles already restrict /api/customer/** to customer tokens; this guards against a mis-issued token.
+    // Roles already restrict /{stage}/customer/** to customer tokens; this guards against a mis-issued token.
     private fun customerId(jwt: Jwt): Long {
         val currentUser = CurrentUser.from(jwt)
         if (currentUser.userType != UserType.CUSTOMER) throw AccessNotAllowedException("Account is not active")

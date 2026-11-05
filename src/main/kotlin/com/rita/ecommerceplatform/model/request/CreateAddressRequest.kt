@@ -6,7 +6,7 @@ import jakarta.validation.constraints.Pattern
 import jakarta.validation.constraints.Size
 import tools.jackson.databind.annotation.JsonDeserialize
 
-/** Body of POST /api/customer/addresses. Every text field is trimmed before validation. */
+/** Body of POST /{stage}/customer/addresses. Every text field is trimmed before validation. */
 data class CreateAddressRequest(
     @JsonDeserialize(using = TrimStringDeserializer::class)
     @field:NotBlank

@@ -27,7 +27,7 @@ class WishlistTest : IntegrationTestBase() {
         adminToken = loginActiveAdmin()
         token = newCustomerToken()
         categoryId = readJson(
-            mockMvc.post("/api/admin/categories") {
+            mockMvc.post("/dev/admin/categories") {
                 header("Authorization", "Bearer $adminToken")
                 contentType = MediaType.APPLICATION_JSON
                 content = json("name" to unique("Cat"))
@@ -39,7 +39,7 @@ class WishlistTest : IntegrationTestBase() {
 
     private fun createProduct(stock: Int = 10, name: String = unique("Phone"), lowStockThreshold: Int? = null): Long =
         readJson(
-            mockMvc.post("/api/admin/products") {
+            mockMvc.post("/dev/admin/products") {
                 header("Authorization", "Bearer $adminToken")
                 contentType = MediaType.APPLICATION_JSON
                 content = json(
@@ -50,20 +50,20 @@ class WishlistTest : IntegrationTestBase() {
         )["productId"].asLong()
 
     private fun add(productId: Long, withToken: String = token): ResultActionsDsl =
-        mockMvc.post("/api/customer/wishlist/items") {
+        mockMvc.post("/dev/customer/wishlist/items") {
             header("Authorization", "Bearer $withToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("productId" to productId)
         }
 
     private fun wishlist(withToken: String = token): JsonNode =
-        readJson(mockMvc.get("/api/customer/wishlist") { header("Authorization", "Bearer $withToken") }
+        readJson(mockMvc.get("/dev/customer/wishlist") { header("Authorization", "Bearer $withToken") }
             .andExpect { responseCode("00") }.andReturn())
 
     private fun ids(list: JsonNode): List<Long> = list["items"].toList().map { it["productId"].asLong() }
 
     private fun move(productId: Long, quantity: Int? = null): ResultActionsDsl =
-        mockMvc.post("/api/customer/wishlist/items/$productId/move-to-cart") {
+        mockMvc.post("/dev/customer/wishlist/items/$productId/move-to-cart") {
             header("Authorization", "Bearer $token")
             quantity?.let {
                 contentType = MediaType.APPLICATION_JSON
@@ -72,7 +72,7 @@ class WishlistTest : IntegrationTestBase() {
         }
 
     private fun addToCart(productId: Long, quantity: Int) {
-        mockMvc.post("/api/customer/cart/items") {
+        mockMvc.post("/dev/customer/cart/items") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json("productId" to productId, "quantity" to quantity)
@@ -81,11 +81,11 @@ class WishlistTest : IntegrationTestBase() {
 
     /** productId → quantity in the customer's cart. */
     private fun cart(): Map<Long, Int> =
-        readJson(mockMvc.get("/api/customer/cart") { header("Authorization", "Bearer $token") }.andReturn())["items"]
+        readJson(mockMvc.get("/dev/customer/cart") { header("Authorization", "Bearer $token") }.andReturn())["items"]
             .toList().associate { it["productId"].asLong() to it["quantity"].asInt() }
 
     private fun setProductStatus(productId: Long, status: String) {
-        mockMvc.patch("/api/admin/products/$productId/status") {
+        mockMvc.patch("/dev/admin/products/$productId/status") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("status" to status)
@@ -115,7 +115,7 @@ class WishlistTest : IntegrationTestBase() {
         assertEquals("LOW_STOCK", list["items"][0]["availability"].asString())
 
         // A new price shows at once: the wishlist stores no price.
-        mockMvc.patch("/api/admin/products/$first") {
+        mockMvc.patch("/dev/admin/products/$first") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("clearDiscountPrice" to true)
@@ -146,7 +146,7 @@ class WishlistTest : IntegrationTestBase() {
             jsonPath("$.responseMessage") { value("Product not found") }
         }
         add(999999).andExpect { responseCode("25") }
-        mockMvc.post("/api/customer/wishlist/items") {
+        mockMvc.post("/dev/customer/wishlist/items") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = "{}"
@@ -162,7 +162,7 @@ class WishlistTest : IntegrationTestBase() {
         add(deleted)
 
         setProductStatus(deactivated, "INACTIVE")
-        mockMvc.delete("/api/admin/products/$deleted") { header("Authorization", "Bearer $adminToken") }
+        mockMvc.delete("/dev/admin/products/$deleted") { header("Authorization", "Bearer $adminToken") }
             .andExpect { responseCode("00") }
 
         val items = wishlist()["items"].toList()
@@ -177,9 +177,9 @@ class WishlistTest : IntegrationTestBase() {
         }
         assertEquals(2, wishlist()["itemCount"].asInt())
 
-        mockMvc.delete("/api/customer/wishlist/items/$deleted") { header("Authorization", "Bearer $token") }
+        mockMvc.delete("/dev/customer/wishlist/items/$deleted") { header("Authorization", "Bearer $token") }
             .andExpect { responseCode("00") }
-        mockMvc.delete("/api/customer/wishlist/items/$deleted") { header("Authorization", "Bearer $token") }.andExpect {
+        mockMvc.delete("/dev/customer/wishlist/items/$deleted") { header("Authorization", "Bearer $token") }.andExpect {
             responseCode("25")
             jsonPath("$.responseMessage") { value("Item not in wishlist") }
         }
@@ -286,13 +286,13 @@ class WishlistTest : IntegrationTestBase() {
         val other = newCustomerToken()
 
         assertEquals(emptyList(), ids(wishlist(other)))
-        mockMvc.delete("/api/customer/wishlist/items/$productId") { header("Authorization", "Bearer $other") }
+        mockMvc.delete("/dev/customer/wishlist/items/$productId") { header("Authorization", "Bearer $other") }
             .andExpect { responseCode("25") }
         assertEquals(listOf(productId), ids(wishlist()))
 
-        mockMvc.get("/api/customer/wishlist") { header("Authorization", "Bearer $adminToken") }
+        mockMvc.get("/dev/customer/wishlist") { header("Authorization", "Bearer $adminToken") }
             .andExpect { responseCode("107") }
         add(productId, withToken = adminToken).andExpect { responseCode("107") }
-        mockMvc.get("/api/customer/wishlist").andExpect { responseCode("115") }
+        mockMvc.get("/dev/customer/wishlist").andExpect { responseCode("115") }
     }
 }

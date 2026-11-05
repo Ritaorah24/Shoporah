@@ -31,7 +31,7 @@ class CouponTest : IntegrationTestBase() {
     private fun platformNow(): LocalDateTime = LocalDateTime.now(ZoneOffset.ofHours(1))
 
     private fun create(body: String, token: String = adminToken): ResultActionsDsl =
-        mockMvc.post("/api/admin/coupons") {
+        mockMvc.post("/dev/admin/coupons") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = body
@@ -45,27 +45,27 @@ class CouponTest : IntegrationTestBase() {
         )
 
     private fun update(id: Int, body: String): ResultActionsDsl =
-        mockMvc.patch("/api/admin/coupons/$id") {
+        mockMvc.patch("/dev/admin/coupons/$id") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = body
         }
 
     private fun setStatus(id: Int, status: String): ResultActionsDsl =
-        mockMvc.patch("/api/admin/coupons/$id/status") {
+        mockMvc.patch("/dev/admin/coupons/$id/status") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("status" to status)
         }
 
     private fun get(id: Int): ResultActionsDsl =
-        mockMvc.get("/api/admin/coupons/$id") { header("Authorization", "Bearer $adminToken") }
+        mockMvc.get("/dev/admin/coupons/$id") { header("Authorization", "Bearer $adminToken") }
 
     private fun stateOf(id: Int): String = readJson(get(id).andExpect { responseCode("00") }.andReturn())["state"].asString()
 
     private fun listCodes(vararg params: Pair<String, String>): JsonNode =
         readJson(
-            mockMvc.get("/api/admin/coupons") {
+            mockMvc.get("/dev/admin/coupons") {
                 header("Authorization", "Bearer $adminToken")
                 params.forEach { (name, value) -> param(name, value) }
             }.andExpect { responseCode("00") }.andReturn()
@@ -126,7 +126,7 @@ class CouponTest : IntegrationTestBase() {
             jsonPath("$.responseMessage") { value("Coupon code is already in use") }
         }
 
-        mockMvc.delete("/api/admin/coupons/$couponId") { header("Authorization", "Bearer $adminToken") }
+        mockMvc.delete("/dev/admin/coupons/$couponId") { header("Authorization", "Bearer $adminToken") }
             .andExpect { responseCode("00") }
         create(json("code" to code, "discountType" to "PERCENTAGE", "discountValue" to 5))
             .andExpect { responseCode("117") }
@@ -264,7 +264,7 @@ class CouponTest : IntegrationTestBase() {
 
         // The text is matched literally: % is not a wildcard.
         assertEquals(emptyList(), codes(listCodes("code" to "${prefix}%")))
-        mockMvc.get("/api/admin/coupons") {
+        mockMvc.get("/dev/admin/coupons") {
             header("Authorization", "Bearer $adminToken")
             param("status", "DELETED")
         }.andExpect { responseCode("106") }
@@ -275,7 +275,7 @@ class CouponTest : IntegrationTestBase() {
         val code = uniqueCode("D")
         val id = createCoupon(code)["couponId"].asInt()
 
-        mockMvc.delete("/api/admin/coupons/$id") { header("Authorization", "Bearer $adminToken") }
+        mockMvc.delete("/dev/admin/coupons/$id") { header("Authorization", "Bearer $adminToken") }
             .andExpect { responseCode("00") }
 
         assertEquals(emptyList(), codes(listCodes("code" to code)))
@@ -285,7 +285,7 @@ class CouponTest : IntegrationTestBase() {
         }
         update(id, json("discountValue" to 20)).andExpect { responseCode("25") }
         setStatus(id, "ACTIVE").andExpect { responseCode("25") }
-        mockMvc.delete("/api/admin/coupons/$id") { header("Authorization", "Bearer $adminToken") }
+        mockMvc.delete("/dev/admin/coupons/$id") { header("Authorization", "Bearer $adminToken") }
             .andExpect { responseCode("25") }
         get(999999).andExpect { responseCode("25") }
 
@@ -301,13 +301,13 @@ class CouponTest : IntegrationTestBase() {
         val body = json("code" to uniqueCode(), "discountType" to "PERCENTAGE", "discountValue" to 10)
 
         create(body, token = customerToken).andExpect { responseCode("107") }
-        mockMvc.get("/api/admin/coupons") { header("Authorization", "Bearer $customerToken") }
+        mockMvc.get("/dev/admin/coupons") { header("Authorization", "Bearer $customerToken") }
             .andExpect { responseCode("107") }
-        mockMvc.post("/api/admin/coupons") {
+        mockMvc.post("/dev/admin/coupons") {
             contentType = MediaType.APPLICATION_JSON
             content = body
         }.andExpect { responseCode("115") }
-        mockMvc.get("/api/admin/coupons") { header("Authorization", "Bearer ${loginSeedAdmin()}") }
+        mockMvc.get("/dev/admin/coupons") { header("Authorization", "Bearer ${loginSeedAdmin()}") }
             .andExpect { responseCode("107") }
     }
 }

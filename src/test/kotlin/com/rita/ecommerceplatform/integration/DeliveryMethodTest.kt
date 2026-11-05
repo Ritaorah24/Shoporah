@@ -35,7 +35,7 @@ class DeliveryMethodTest : IntegrationTestBase() {
     private fun uniqueCode() = "DM_${UUID.randomUUID().toString().take(8).uppercase()}"
 
     private fun create(body: String, token: String = adminToken): ResultActionsDsl =
-        mockMvc.post("/api/admin/delivery-methods") {
+        mockMvc.post("/dev/admin/delivery-methods") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = body
@@ -49,26 +49,26 @@ class DeliveryMethodTest : IntegrationTestBase() {
         )["deliveryMethodId"].asInt()
 
     private fun update(id: Int, body: String): ResultActionsDsl =
-        mockMvc.patch("/api/admin/delivery-methods/$id") {
+        mockMvc.patch("/dev/admin/delivery-methods/$id") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = body
         }
 
     private fun setStatus(id: Int, status: String): ResultActionsDsl =
-        mockMvc.patch("/api/admin/delivery-methods/$id/status") {
+        mockMvc.patch("/dev/admin/delivery-methods/$id/status") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("status" to status)
         }
 
     private fun publicCodes(): List<String> {
-        val list = readJson(mockMvc.get("/api/delivery-methods").andExpect { responseCode("00") }.andReturn())
+        val list = readJson(mockMvc.get("/dev/delivery-methods").andExpect { responseCode("00") }.andReturn())
         return (0 until list.size()).map { list[it]["code"].asString() }
     }
 
     private fun createCategory(): Int {
-        val result = mockMvc.post("/api/admin/categories") {
+        val result = mockMvc.post("/dev/admin/categories") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to unique("Cat"))
@@ -80,7 +80,7 @@ class DeliveryMethodTest : IntegrationTestBase() {
         val email = uniqueEmail()
         registerCustomer(email)
         val shopper = Shopper(email, loginCustomer(email))
-        mockMvc.post("/api/customer/addresses") {
+        mockMvc.post("/dev/customer/addresses") {
             header("Authorization", "Bearer ${shopper.token}")
             contentType = MediaType.APPLICATION_JSON
             content = json(
@@ -97,12 +97,12 @@ class DeliveryMethodTest : IntegrationTestBase() {
 
     /** Puts 2 units of a new 1,000 product in the cart (subtotal 2,000). */
     private fun fillCart(shopper: Shopper) {
-        val product = mockMvc.post("/api/admin/products") {
+        val product = mockMvc.post("/dev/admin/products") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to unique("Phone"), "sku" to unique("sku"), "categoryId" to categoryId, "price" to 1000, "stockQuantity" to 10)
         }.andExpect { responseCode("00") }.andReturn()
-        mockMvc.post("/api/customer/cart/items") {
+        mockMvc.post("/dev/customer/cart/items") {
             header("Authorization", "Bearer ${shopper.token}")
             contentType = MediaType.APPLICATION_JSON
             content = json("productId" to readJson(product)["productId"].asLong(), "quantity" to 2)
@@ -110,7 +110,7 @@ class DeliveryMethodTest : IntegrationTestBase() {
     }
 
     private fun checkout(shopper: Shopper, body: String? = null): ResultActionsDsl =
-        mockMvc.post("/api/customer/orders") {
+        mockMvc.post("/dev/customer/orders") {
             header("Authorization", "Bearer ${shopper.token}")
             header("Idempotency-Key", UUID.randomUUID().toString())
             body?.let {
@@ -191,14 +191,14 @@ class DeliveryMethodTest : IntegrationTestBase() {
         assertTrue(codes.indexOf(cheap) in 0 until codes.indexOf(dear), "cheapest first: $codes")
         assertFalse(hidden in codes)
 
-        mockMvc.get("/api/delivery-methods").andExpect {
+        mockMvc.get("/dev/delivery-methods").andExpect {
             responseCode("00")
             jsonPath("$.data[0].deliveryMethodId") { doesNotExist() }
             jsonPath("$.data[0].status") { doesNotExist() }
         }
 
         // The admin list still shows it, so it can be reactivated.
-        mockMvc.get("/api/admin/delivery-methods") { header("Authorization", "Bearer $adminToken") }
+        mockMvc.get("/dev/admin/delivery-methods") { header("Authorization", "Bearer $adminToken") }
             .andExpect { jsonPath("$.data[*].code") { value(hasItem(hidden)) } }
         setStatus(hiddenId, "ACTIVE").andExpect { responseCode("00") }
         assertTrue(hidden in publicCodes())
@@ -227,7 +227,7 @@ class DeliveryMethodTest : IntegrationTestBase() {
         assertEquals("Express", order["deliveryMethod"]["name"].asString())
 
         val payment = readJson(
-            mockMvc.post("/api/customer/payments/initialize") {
+            mockMvc.post("/dev/customer/payments/initialize") {
                 header("Authorization", "Bearer ${shopper.token}")
                 contentType = MediaType.APPLICATION_JSON
                 content = json("orderReference" to order["reference"].asString())
@@ -237,7 +237,7 @@ class DeliveryMethodTest : IntegrationTestBase() {
         assertEquals(450_000L, sent.amountKobo)
 
         // The admin sees the same method on the order.
-        mockMvc.get("/api/admin/orders/${order["orderId"].asLong()}") { header("Authorization", "Bearer $adminToken") }
+        mockMvc.get("/dev/admin/orders/${order["orderId"].asLong()}") { header("Authorization", "Bearer $adminToken") }
             .andExpect { jsonPath("$.data.deliveryMethod.code") { value(code) } }
     }
 
@@ -266,7 +266,7 @@ class DeliveryMethodTest : IntegrationTestBase() {
             jsonPath("$.responseMessage") { value("Delivery method $code is not available") }
         }
 
-        mockMvc.get("/api/customer/cart") { header("Authorization", "Bearer ${shopper.token}") }
+        mockMvc.get("/dev/customer/cart") { header("Authorization", "Bearer ${shopper.token}") }
             .andExpect { jsonPath("$.data.items.length()") { value(1) } }
     }
 
@@ -286,7 +286,7 @@ class DeliveryMethodTest : IntegrationTestBase() {
         val second = placeOrder(shopper, code)
 
         val firstAgain = readJson(
-            mockMvc.get("/api/customer/orders/${first["orderId"].asLong()}") { header("Authorization", "Bearer ${shopper.token}") }
+            mockMvc.get("/dev/customer/orders/${first["orderId"].asLong()}") { header("Authorization", "Bearer ${shopper.token}") }
                 .andExpect { responseCode("00") }.andReturn()
         )
         assertEquals(0, BigDecimal("1000").compareTo(firstAgain["deliveryFee"].decimalValue()))
@@ -299,9 +299,9 @@ class DeliveryMethodTest : IntegrationTestBase() {
     fun `customers cannot manage delivery methods`() {
         val customerToken = newCustomerToken()
         create(json("code" to uniqueCode(), "name" to "X", "fee" to 0), token = customerToken).andExpect { responseCode("107") }
-        mockMvc.get("/api/admin/delivery-methods") { header("Authorization", "Bearer $customerToken") }
+        mockMvc.get("/dev/admin/delivery-methods") { header("Authorization", "Bearer $customerToken") }
             .andExpect { responseCode("107") }
-        mockMvc.post("/api/admin/delivery-methods") {
+        mockMvc.post("/dev/admin/delivery-methods") {
             contentType = MediaType.APPLICATION_JSON
             content = json("code" to uniqueCode(), "name" to "X", "fee" to 0)
         }.andExpect { responseCode("115") }

@@ -26,11 +26,11 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 
-/** Coupon management. SecurityConfig restricts every /api/admin URL to admins who have changed their password. */
+/** Coupon management. SecurityConfig restricts every /{stage}/admin URL to admins who have changed their password. */
 @Tag(name = "Admin coupons", description = "Create, edit, activate/deactivate and delete discount coupons")
 @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
 @RestController
-@RequestMapping("/api/admin/coupons")
+@RequestMapping("/{stage}/admin/coupons")
 class AdminCouponController(private val couponService: CouponService) {
 
     /**
@@ -43,12 +43,13 @@ class AdminCouponController(private val couponService: CouponService) {
         @RequestParam(defaultValue = "${Paging.DEFAULT_SIZE}") size: Int,
         @RequestParam(required = false) status: String?,
         @RequestParam(required = false) code: String?,
+        @PathVariable stage: String,
     ): BaseDataResponse {
         return BaseDataResponse("00", "Successful", couponService.list(page, size, status, code))
     }
 
     @GetMapping("/{couponId}")
-    fun get(@PathVariable couponId: Int): BaseDataResponse {
+    fun get(@PathVariable couponId: Int, @PathVariable stage: String): BaseDataResponse {
         return BaseDataResponse("00", "Successful", couponService.get(couponId))
     }
 
@@ -57,6 +58,7 @@ class AdminCouponController(private val couponService: CouponService) {
     fun create(
         @AuthenticationPrincipal jwt: Jwt,
         @Valid @RequestBody request: CreateCouponRequest,
+        @PathVariable stage: String,
     ): BaseDataResponse {
         return BaseDataResponse("00", "Successful", couponService.create(adminId(jwt), request))
     }
@@ -65,6 +67,7 @@ class AdminCouponController(private val couponService: CouponService) {
     fun update(
         @PathVariable couponId: Int,
         @Valid @RequestBody request: UpdateCouponRequest,
+        @PathVariable stage: String,
     ): BaseDataResponse {
         return BaseDataResponse("00", "Successful", couponService.update(couponId, request))
     }
@@ -73,13 +76,14 @@ class AdminCouponController(private val couponService: CouponService) {
     fun updateStatus(
         @PathVariable couponId: Int,
         @Valid @RequestBody request: UpdateStatusRequest,
+        @PathVariable stage: String,
     ): BaseDataResponse {
         return BaseDataResponse("00", "Successful", couponService.updateStatus(couponId, request))
     }
 
     /** Soft delete: the coupon disappears from the list and its code can never be used again. */
     @DeleteMapping("/{couponId}")
-    fun delete(@PathVariable couponId: Int): BaseResponse {
+    fun delete(@PathVariable couponId: Int, @PathVariable stage: String): BaseResponse {
         couponService.delete(couponId)
         return BaseResponse()
     }

@@ -27,17 +27,17 @@ import org.springframework.web.bind.annotation.RestController
 @Tag(name = "Customer addresses", description = "The logged-in customer's delivery addresses")
 @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
 @RestController
-@RequestMapping("/api/customer/addresses")
+@RequestMapping("/{stage}/customer/addresses")
 class AddressController(private val addressService: AddressService) {
 
     /** Default address first, then newest first. */
     @GetMapping
-    fun list(@AuthenticationPrincipal jwt: Jwt): BaseDataResponse {
+    fun list(@AuthenticationPrincipal jwt: Jwt, @PathVariable stage: String): BaseDataResponse {
         return BaseDataResponse("00", "Successful", addressService.list(customerId(jwt)))
     }
 
     @GetMapping("/{addressId}")
-    fun get(@AuthenticationPrincipal jwt: Jwt, @PathVariable addressId: Long): BaseDataResponse {
+    fun get(@AuthenticationPrincipal jwt: Jwt, @PathVariable addressId: Long, @PathVariable stage: String): BaseDataResponse {
         return BaseDataResponse("00", "Successful", addressService.get(customerId(jwt), addressId))
     }
 
@@ -46,6 +46,7 @@ class AddressController(private val addressService: AddressService) {
     fun create(
         @AuthenticationPrincipal jwt: Jwt,
         @Valid @RequestBody request: CreateAddressRequest,
+        @PathVariable stage: String,
     ): BaseDataResponse {
         return BaseDataResponse("00", "Successful", addressService.create(customerId(jwt), request))
     }
@@ -55,23 +56,24 @@ class AddressController(private val addressService: AddressService) {
         @AuthenticationPrincipal jwt: Jwt,
         @PathVariable addressId: Long,
         @Valid @RequestBody request: UpdateAddressRequest,
+        @PathVariable stage: String,
     ): BaseDataResponse {
         return BaseDataResponse("00", "Successful", addressService.update(customerId(jwt), addressId, request))
     }
 
     @PatchMapping("/{addressId}/default")
-    fun setDefault(@AuthenticationPrincipal jwt: Jwt, @PathVariable addressId: Long): BaseDataResponse {
+    fun setDefault(@AuthenticationPrincipal jwt: Jwt, @PathVariable addressId: Long, @PathVariable stage: String): BaseDataResponse {
         return BaseDataResponse("00", "Successful", addressService.setDefault(customerId(jwt), addressId))
     }
 
     /** Deleting the default address leaves no default. */
     @DeleteMapping("/{addressId}")
-    fun delete(@AuthenticationPrincipal jwt: Jwt, @PathVariable addressId: Long): BaseResponse {
+    fun delete(@AuthenticationPrincipal jwt: Jwt, @PathVariable addressId: Long, @PathVariable stage: String): BaseResponse {
         addressService.delete(customerId(jwt), addressId)
         return BaseResponse()
     }
 
-    // Roles already restrict /api/customer/** to customer tokens; this guards against a mis-issued token.
+    // Roles already restrict /{stage}/customer/** to customer tokens; this guards against a mis-issued token.
     private fun customerId(jwt: Jwt): Long {
         val currentUser = CurrentUser.from(jwt)
         if (currentUser.userType != UserType.CUSTOMER) throw AccessNotAllowedException("Account is not active")

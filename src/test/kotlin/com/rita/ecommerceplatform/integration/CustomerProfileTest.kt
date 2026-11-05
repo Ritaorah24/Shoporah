@@ -15,7 +15,7 @@ class CustomerProfileTest : IntegrationTestBase() {
         val customerId = registerCustomer(email)
         val token = loginCustomer(email)
 
-        mockMvc.get("/api/customer/me") {
+        mockMvc.get("/dev/customer/me") {
             header("Authorization", "Bearer $token")
         }.andExpect {
             responseCode("00")
@@ -30,7 +30,7 @@ class CustomerProfileTest : IntegrationTestBase() {
         registerCustomer(email)
         val token = loginCustomer(email)
 
-        mockMvc.patch("/api/customer/me") {
+        mockMvc.patch("/dev/customer/me") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json("firstName" to "Ada")
@@ -49,7 +49,7 @@ class CustomerProfileTest : IntegrationTestBase() {
         registerCustomer(email)
         val token = loginCustomer(email)
 
-        mockMvc.patch("/api/customer/me") {
+        mockMvc.patch("/dev/customer/me") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json("firstName" to "Ada", "email" to "other@example.com")
@@ -58,7 +58,7 @@ class CustomerProfileTest : IntegrationTestBase() {
             content { string(containsString("email cannot be changed")) }
         }
 
-        mockMvc.get("/api/customer/me") {
+        mockMvc.get("/dev/customer/me") {
             header("Authorization", "Bearer $token")
         }.andExpect {
             jsonPath("$.data.email") { value(email) }
@@ -68,7 +68,7 @@ class CustomerProfileTest : IntegrationTestBase() {
 
     @Test
     fun `PATCH me with nothing to update returns 400`() {
-        mockMvc.patch("/api/customer/me") {
+        mockMvc.patch("/dev/customer/me") {
             header("Authorization", "Bearer ${newCustomerToken()}")
             contentType = MediaType.APPLICATION_JSON
             content = "{}"
@@ -80,7 +80,7 @@ class CustomerProfileTest : IntegrationTestBase() {
 
     @Test
     fun `PATCH me with a blank first name returns 400`() {
-        mockMvc.patch("/api/customer/me") {
+        mockMvc.patch("/dev/customer/me") {
             header("Authorization", "Bearer ${newCustomerToken()}")
             contentType = MediaType.APPLICATION_JSON
             content = json("firstName" to "   ")
@@ -92,7 +92,7 @@ class CustomerProfileTest : IntegrationTestBase() {
 
     @Test
     fun `GET me without a token returns 401`() {
-        mockMvc.get("/api/customer/me").andExpect {
+        mockMvc.get("/dev/customer/me").andExpect {
             responseCode("115")
             header { string("WWW-Authenticate", containsString("Bearer")) }
             jsonPath("$.responseMessage") { value("Missing, invalid or expired access token") }
@@ -101,7 +101,7 @@ class CustomerProfileTest : IntegrationTestBase() {
 
     @Test
     fun `GET me with an admin token returns 403`() {
-        mockMvc.get("/api/customer/me") {
+        mockMvc.get("/dev/customer/me") {
             header("Authorization", "Bearer ${loginSeedAdmin()}")
         }.andExpect {
             responseCode("107")

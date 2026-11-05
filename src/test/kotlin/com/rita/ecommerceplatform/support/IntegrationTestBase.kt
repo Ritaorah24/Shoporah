@@ -107,7 +107,7 @@ abstract class IntegrationTestBase {
 
     /** Registers a customer and returns the new customerId. */
     protected fun registerCustomer(email: String = uniqueEmail(), password: String = DEFAULT_PASSWORD): Long {
-        val result = mockMvc.post("/api/auth/register") {
+        val result = mockMvc.post("/dev/auth/register") {
             contentType = MediaType.APPLICATION_JSON
             content = registerBody(email, password)
         }.andExpect { responseCode("00") }.andReturn()
@@ -116,7 +116,7 @@ abstract class IntegrationTestBase {
 
     /** Logs a customer in and returns the access token. */
     protected fun loginCustomer(email: String, password: String = DEFAULT_PASSWORD): String {
-        val result = mockMvc.post("/api/auth/login") {
+        val result = mockMvc.post("/dev/auth/login") {
             contentType = MediaType.APPLICATION_JSON
             content = json("email" to email, "password" to password)
         }.andExpect { responseCode("00") }.andReturn()
@@ -146,7 +146,7 @@ abstract class IntegrationTestBase {
     /** Resets the seed admin, logs in with the seed password and returns the (MUST_CHANGE) token. */
     protected fun loginSeedAdmin(): String {
         resetSeedAdmin()
-        val result = mockMvc.post("/api/admin/auth/login") {
+        val result = mockMvc.post("/dev/admin/auth/login") {
             contentType = MediaType.APPLICATION_JSON
             content = json("email" to seedAdminEmail, "password" to seedAdminPassword)
         }.andExpect { responseCode("00") }.andReturn()
@@ -155,10 +155,10 @@ abstract class IntegrationTestBase {
 
     /**
      * Resets the seed admin, changes its password and returns the new token: the state needed to use
-     * admin endpoints, since MUST_CHANGE blocks everything under /api/admin except the password change.
+     * admin endpoints, since MUST_CHANGE blocks everything under /dev/admin except the password change.
      */
     protected fun loginActiveAdmin(): String {
-        val result = mockMvc.patch("/api/admin/auth/password") {
+        val result = mockMvc.patch("/dev/admin/auth/password") {
             header("Authorization", "Bearer ${loginSeedAdmin()}")
             contentType = MediaType.APPLICATION_JSON
             content = json("currentPassword" to seedAdminPassword, "newPassword" to CHANGED_ADMIN_PASSWORD)

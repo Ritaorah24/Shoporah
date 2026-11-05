@@ -40,7 +40,7 @@ class AdminCancelTest : IntegrationTestBase() {
     private fun unique(prefix: String) = "$prefix-${UUID.randomUUID().toString().take(8)}"
 
     private fun createCategory(): Int {
-        val result = mockMvc.post("/api/admin/categories") {
+        val result = mockMvc.post("/dev/admin/categories") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to unique("Cat"))
@@ -49,7 +49,7 @@ class AdminCancelTest : IntegrationTestBase() {
     }
 
     private fun createProduct(stock: Int = 10): Long {
-        val result = mockMvc.post("/api/admin/products") {
+        val result = mockMvc.post("/dev/admin/products") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json(
@@ -64,7 +64,7 @@ class AdminCancelTest : IntegrationTestBase() {
     }
 
     private fun createAddress() {
-        mockMvc.post("/api/customer/addresses") {
+        mockMvc.post("/dev/customer/addresses") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json(
@@ -81,13 +81,13 @@ class AdminCancelTest : IntegrationTestBase() {
     /** Each product, `quantity` of it in the cart, then checkout. */
     private fun placeOrder(productIds: List<Long> = listOf(createProduct(), createProduct()), quantity: Int = 2): Placed {
         productIds.forEach { productId ->
-            mockMvc.post("/api/customer/cart/items") {
+            mockMvc.post("/dev/customer/cart/items") {
                 header("Authorization", "Bearer $token")
                 contentType = MediaType.APPLICATION_JSON
                 content = json("productId" to productId, "quantity" to quantity)
             }.andExpect { responseCode("00") }
         }
-        val result = mockMvc.post("/api/customer/orders") {
+        val result = mockMvc.post("/dev/customer/orders") {
             header("Authorization", "Bearer $token")
             header("Idempotency-Key", UUID.randomUUID().toString())
         }.andExpect { responseCode("00") }.andReturn()
@@ -96,7 +96,7 @@ class AdminCancelTest : IntegrationTestBase() {
     }
 
     private fun initialize(placed: Placed): String {
-        val result = mockMvc.post("/api/customer/payments/initialize") {
+        val result = mockMvc.post("/dev/customer/payments/initialize") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json("orderReference" to placed.reference)
@@ -107,7 +107,7 @@ class AdminCancelTest : IntegrationTestBase() {
     private fun payAndVerify(placed: Placed) {
         val reference = initialize(placed)
         paymentGateway.pay(reference)
-        mockMvc.get("/api/customer/payments/verify/$reference") { header("Authorization", "Bearer $token") }
+        mockMvc.get("/dev/customer/payments/verify/$reference") { header("Authorization", "Bearer $token") }
             .andExpect { responseCode("00"); jsonPath("$.responseMessage") { value("Successful") } }
     }
 
@@ -115,7 +115,7 @@ class AdminCancelTest : IntegrationTestBase() {
     private fun paidOrder(): Placed = placeOrder().also(::payAndVerify)
 
     private fun moveTo(orderId: Long, status: String) {
-        mockMvc.patch("/api/admin/orders/$orderId/status") {
+        mockMvc.patch("/dev/admin/orders/$orderId/status") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("status" to status)
@@ -123,7 +123,7 @@ class AdminCancelTest : IntegrationTestBase() {
     }
 
     private fun cancel(orderId: Long, reason: String? = "Customer called to cancel", withToken: String? = adminToken): ResultActionsDsl =
-        mockMvc.post("/api/admin/orders/$orderId/cancel") {
+        mockMvc.post("/dev/admin/orders/$orderId/cancel") {
             withToken?.let { header("Authorization", "Bearer $it") }
             contentType = MediaType.APPLICATION_JSON
             content = json("reason" to reason)
@@ -156,7 +156,7 @@ class AdminCancelTest : IntegrationTestBase() {
     }
 
     private fun canCancel(orderId: Long): Boolean {
-        val result = mockMvc.get("/api/admin/orders/$orderId") { header("Authorization", "Bearer $adminToken") }
+        val result = mockMvc.get("/dev/admin/orders/$orderId") { header("Authorization", "Bearer $adminToken") }
             .andExpect { responseCode("00") }.andReturn()
         return readJson(result)["canCancel"].asBoolean()
     }

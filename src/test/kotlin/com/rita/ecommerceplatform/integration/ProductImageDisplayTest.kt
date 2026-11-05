@@ -32,7 +32,7 @@ class ProductImageDisplayTest : IntegrationTestBase() {
     fun setUp() {
         adminToken = loginActiveAdmin()
         categoryId = readJson(
-            mockMvc.post("/api/admin/categories") {
+            mockMvc.post("/dev/admin/categories") {
                 header("Authorization", "Bearer $adminToken")
                 contentType = MediaType.APPLICATION_JSON
                 content = json("name" to "Cat-${UUID.randomUUID().toString().take(8)}")
@@ -41,7 +41,7 @@ class ProductImageDisplayTest : IntegrationTestBase() {
     }
 
     private fun createProduct(): Long = readJson(
-        mockMvc.post("/api/admin/products") {
+        mockMvc.post("/dev/admin/products") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json(
@@ -57,7 +57,7 @@ class ProductImageDisplayTest : IntegrationTestBase() {
     /** Uploads an image and returns (imageId, url). */
     private fun upload(productId: Long, altText: String? = null, content: ByteArray = TestImages.JPEG): Pair<Long, String> {
         val image = readJson(
-            mockMvc.multipart("/api/admin/products/$productId/images") {
+            mockMvc.multipart("/dev/admin/products/$productId/images") {
                 header("Authorization", "Bearer $adminToken")
                 file(MockMultipartFile("file", "photo", "image/jpeg", content))
                 altText?.let { param("altText", it) }
@@ -67,23 +67,23 @@ class ProductImageDisplayTest : IntegrationTestBase() {
     }
 
     private fun patchImage(productId: Long, imageId: Long, vararg fields: Pair<String, Any?>, withToken: String = adminToken): ResultActionsDsl =
-        mockMvc.patch("/api/admin/products/$productId/images/$imageId") {
+        mockMvc.patch("/dev/admin/products/$productId/images/$imageId") {
             header("Authorization", "Bearer $withToken")
             contentType = MediaType.APPLICATION_JSON
             content = json(*fields)
         }
 
     private fun publicProduct(productId: Long): JsonNode = readJson(
-        mockMvc.get("/api/products/$productId").andExpect { responseCode("00") }.andReturn(),
+        mockMvc.get("/dev/products/$productId").andExpect { responseCode("00") }.andReturn(),
     )
 
     private fun adminProduct(productId: Long): JsonNode = readJson(
-        mockMvc.get("/api/admin/products/$productId") { header("Authorization", "Bearer $adminToken") }
+        mockMvc.get("/dev/admin/products/$productId") { header("Authorization", "Bearer $adminToken") }
             .andExpect { responseCode("00") }.andReturn(),
     )
 
     private fun publicList(): Map<Long, JsonNode> = readJson(
-        mockMvc.get("/api/products") { param("categoryId", categoryId.toString()) }.andExpect { responseCode("00") }.andReturn(),
+        mockMvc.get("/dev/products") { param("categoryId", categoryId.toString()) }.andExpect { responseCode("00") }.andReturn(),
     )["content"].toList().associateBy { it["productId"].asLong() }
 
     private fun imageIds(images: JsonNode): List<Long> = images.toList().map { it["imageId"].asLong() }
@@ -139,7 +139,7 @@ class ProductImageDisplayTest : IntegrationTestBase() {
         assertEquals(0, list.getValue(withNone)["images"].size())
 
         val adminList = readJson(
-            mockMvc.get("/api/admin/products") {
+            mockMvc.get("/dev/admin/products") {
                 header("Authorization", "Bearer $adminToken")
                 param("categoryId", categoryId.toString())
             }.andExpect { responseCode("00") }.andReturn(),
@@ -231,7 +231,7 @@ class ProductImageDisplayTest : IntegrationTestBase() {
         patchImage(other, imageId, "altText" to "x").andExpect { responseCode("25") }
         patchImage(productId, imageId, "altText" to "x", withToken = newCustomerToken()).andExpect { responseCode("107") }
 
-        mockMvc.delete("/api/admin/products/$productId") { header("Authorization", "Bearer $adminToken") }
+        mockMvc.delete("/dev/admin/products/$productId") { header("Authorization", "Bearer $adminToken") }
             .andExpect { responseCode("00") }
         patchImage(productId, imageId, "altText" to "x").andExpect { responseCode("25") }
     }
@@ -243,7 +243,7 @@ class ProductImageDisplayTest : IntegrationTestBase() {
         val withoutImage = createProduct()
         val token = newCustomerToken()
         listOf(withImage, withoutImage).forEach { productId ->
-            mockMvc.post("/api/customer/cart/items") {
+            mockMvc.post("/dev/customer/cart/items") {
                 header("Authorization", "Bearer $token")
                 contentType = MediaType.APPLICATION_JSON
                 content = json("productId" to productId, "quantity" to 1)
@@ -251,7 +251,7 @@ class ProductImageDisplayTest : IntegrationTestBase() {
         }
 
         val items = readJson(
-            mockMvc.get("/api/customer/cart") { header("Authorization", "Bearer $token") }.andExpect { responseCode("00") }.andReturn(),
+            mockMvc.get("/dev/customer/cart") { header("Authorization", "Bearer $token") }.andExpect { responseCode("00") }.andReturn(),
         )["items"].toList().associateBy { it["productId"].asLong() }
         assertEquals(url, items.getValue(withImage)["imageUrl"].asString())
         assertTrue(items.getValue(withoutImage).isNullAt("imageUrl"))

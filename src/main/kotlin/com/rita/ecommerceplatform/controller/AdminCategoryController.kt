@@ -24,20 +24,20 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 
-/** Category management. SecurityConfig restricts every /api/admin URL to admins who have changed their password. */
+/** Category management. SecurityConfig restricts every /{stage}/admin URL to admins who have changed their password. */
 @Tag(name = "Admin categories", description = "Create, edit, activate/deactivate and delete categories")
 @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
 @RestController
-@RequestMapping("/api/admin/categories")
+@RequestMapping("/{stage}/admin/categories")
 class AdminCategoryController(private val categoryService: CategoryService) {
 
     @GetMapping
-    fun list(): BaseDataResponse {
+    fun list(@PathVariable stage: String): BaseDataResponse {
         return BaseDataResponse("00", "Successful", categoryService.listForAdmin())
     }
 
     @GetMapping("/{categoryId}")
-    fun get(@PathVariable categoryId: Int): BaseDataResponse {
+    fun get(@PathVariable categoryId: Int, @PathVariable stage: String): BaseDataResponse {
         return BaseDataResponse("00", "Successful", categoryService.getForAdmin(categoryId))
     }
 
@@ -46,6 +46,7 @@ class AdminCategoryController(private val categoryService: CategoryService) {
     fun create(
         @AuthenticationPrincipal jwt: Jwt,
         @Valid @RequestBody request: CreateCategoryRequest,
+        @PathVariable stage: String,
     ): BaseDataResponse {
         return BaseDataResponse("00", "Successful", categoryService.create(adminId(jwt), request))
     }
@@ -54,6 +55,7 @@ class AdminCategoryController(private val categoryService: CategoryService) {
     fun update(
         @PathVariable categoryId: Int,
         @Valid @RequestBody request: UpdateCategoryRequest,
+        @PathVariable stage: String,
     ): BaseDataResponse {
         return BaseDataResponse("00", "Successful", categoryService.update(categoryId, request))
     }
@@ -62,12 +64,13 @@ class AdminCategoryController(private val categoryService: CategoryService) {
     fun updateStatus(
         @PathVariable categoryId: Int,
         @Valid @RequestBody request: UpdateStatusRequest,
+        @PathVariable stage: String,
     ): BaseDataResponse {
         return BaseDataResponse("00", "Successful", categoryService.updateStatus(categoryId, request))
     }
 
     @DeleteMapping("/{categoryId}")
-    fun delete(@PathVariable categoryId: Int): BaseResponse {
+    fun delete(@PathVariable categoryId: Int, @PathVariable stage: String): BaseResponse {
         categoryService.delete(categoryId)
         return BaseResponse()
     }

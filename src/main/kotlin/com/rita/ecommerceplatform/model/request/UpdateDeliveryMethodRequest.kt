@@ -13,7 +13,7 @@ import tools.jackson.databind.annotation.JsonDeserialize
 import java.math.BigDecimal
 
 /**
- * Body of PATCH /api/admin/delivery-methods/{id}. Every field is optional: a field that is not sent
+ * Body of PATCH /{stage}/admin/delivery-methods/{id}. Every field is optional: a field that is not sent
  * (null) keeps its current value. The code never changes; status has its own endpoint.
  * A new fee applies to new orders only: orders keep the fee they were placed with.
  */

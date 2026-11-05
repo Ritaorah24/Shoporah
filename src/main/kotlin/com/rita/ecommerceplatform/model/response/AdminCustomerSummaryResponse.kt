@@ -3,7 +3,7 @@ package com.rita.ecommerceplatform.model.response
 import com.rita.ecommerceplatform.model.entity.Customer
 import java.time.LocalDateTime
 
-/** One customer in the admin customer list. GET /api/admin/customers/{customerId} adds their order totals. */
+/** One customer in the admin customer list. GET /{stage}/admin/customers/{customerId} adds their order totals. */
 data class AdminCustomerSummaryResponse(
     val customerId: Long,
     val firstName: String,

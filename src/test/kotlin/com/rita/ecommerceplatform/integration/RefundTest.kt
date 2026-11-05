@@ -41,7 +41,7 @@ class RefundTest : IntegrationTestBase() {
     private fun unique(prefix: String) = "$prefix-${UUID.randomUUID().toString().take(8)}"
 
     private fun createCategory(): Int {
-        val result = mockMvc.post("/api/admin/categories") {
+        val result = mockMvc.post("/dev/admin/categories") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to unique("Cat"))
@@ -50,7 +50,7 @@ class RefundTest : IntegrationTestBase() {
     }
 
     private fun createProduct(): Long {
-        val result = mockMvc.post("/api/admin/products") {
+        val result = mockMvc.post("/dev/admin/products") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json(
@@ -65,7 +65,7 @@ class RefundTest : IntegrationTestBase() {
     }
 
     private fun createAddress() {
-        mockMvc.post("/api/customer/addresses") {
+        mockMvc.post("/dev/customer/addresses") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json(
@@ -83,14 +83,14 @@ class RefundTest : IntegrationTestBase() {
     private fun placeOrder(): Triple<Long, String, List<Long>> {
         val productIds = listOf(createProduct(), createProduct())
         productIds.forEach { productId ->
-            mockMvc.post("/api/customer/cart/items") {
+            mockMvc.post("/dev/customer/cart/items") {
                 header("Authorization", "Bearer $token")
                 contentType = MediaType.APPLICATION_JSON
                 content = json("productId" to productId, "quantity" to 2)
             }.andExpect { responseCode("00") }
         }
         val order = readJson(
-            mockMvc.post("/api/customer/orders") {
+            mockMvc.post("/dev/customer/orders") {
                 header("Authorization", "Bearer $token")
                 header("Idempotency-Key", UUID.randomUUID().toString())
             }.andExpect { responseCode("00") }.andReturn(),
@@ -99,7 +99,7 @@ class RefundTest : IntegrationTestBase() {
     }
 
     private fun initialize(orderReference: String): String {
-        val result = mockMvc.post("/api/customer/payments/initialize") {
+        val result = mockMvc.post("/dev/customer/payments/initialize") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json("orderReference" to orderReference)
@@ -111,13 +111,13 @@ class RefundTest : IntegrationTestBase() {
         val (orderId, reference, productIds) = placeOrder()
         val paymentReference = initialize(reference)
         paymentGateway.pay(paymentReference)
-        mockMvc.get("/api/customer/payments/verify/$paymentReference") { header("Authorization", "Bearer $token") }
+        mockMvc.get("/dev/customer/payments/verify/$paymentReference") { header("Authorization", "Bearer $token") }
             .andExpect { responseCode("00"); jsonPath("$.responseMessage") { value("Successful") } }
         return Paid(orderId, reference, paymentReference, productIds)
     }
 
     private fun cancelledPaidOrder(): Paid = paidOrder().also {
-        mockMvc.post("/api/admin/orders/${it.orderId}/cancel") {
+        mockMvc.post("/dev/admin/orders/${it.orderId}/cancel") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("reason" to "Item damaged")
@@ -129,7 +129,7 @@ class RefundTest : IntegrationTestBase() {
     }
 
     private fun moveTo(orderId: Long, status: String) {
-        mockMvc.patch("/api/admin/orders/$orderId/status") {
+        mockMvc.patch("/dev/admin/orders/$orderId/status") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("status" to status)
@@ -142,7 +142,7 @@ class RefundTest : IntegrationTestBase() {
         restock: Boolean? = null,
         withToken: String? = adminToken,
     ): ResultActionsDsl =
-        mockMvc.post("/api/admin/orders/$orderId/refund") {
+        mockMvc.post("/dev/admin/orders/$orderId/refund") {
             withToken?.let { header("Authorization", "Bearer $it") }
             contentType = MediaType.APPLICATION_JSON
             content = if (restock == null) json("reason" to reason) else json("reason" to reason, "restock" to restock)
@@ -155,10 +155,10 @@ class RefundTest : IntegrationTestBase() {
     }
 
     private fun refresh(refundId: Long): ResultActionsDsl =
-        mockMvc.post("/api/admin/refunds/$refundId/refresh") { header("Authorization", "Bearer $adminToken") }
+        mockMvc.post("/dev/admin/refunds/$refundId/refresh") { header("Authorization", "Bearer $adminToken") }
 
     private fun adminOrder(orderId: Long): JsonNode = readJson(
-        mockMvc.get("/api/admin/orders/$orderId") { header("Authorization", "Bearer $adminToken") }
+        mockMvc.get("/dev/admin/orders/$orderId") { header("Authorization", "Bearer $adminToken") }
             .andExpect { responseCode("00") }.andReturn(),
     )
 
@@ -228,7 +228,7 @@ class RefundTest : IntegrationTestBase() {
         paid.productIds.forEach { assertEquals(10, stock(it)) }
         assertTrue(returns(paid.orderId).isEmpty())
 
-        mockMvc.get("/api/customer/orders/${paid.orderId}") { header("Authorization", "Bearer $token") }.andExpect {
+        mockMvc.get("/dev/customer/orders/${paid.orderId}") { header("Authorization", "Bearer $token") }.andExpect {
             responseCode("00")
             jsonPath("$.data.paymentStatus") { value("REFUNDED") }
         }
@@ -468,7 +468,7 @@ class RefundTest : IntegrationTestBase() {
         refund(paid.orderId, withToken = null).andExpect { responseCode("115") }
         refund(999_999_999).andExpect { responseCode("25") }
         refresh(999_999_999).andExpect { responseCode("25") }
-        mockMvc.post("/api/admin/refunds/1/refresh") { header("Authorization", "Bearer $token") }
+        mockMvc.post("/dev/admin/refunds/1/refresh") { header("Authorization", "Bearer $token") }
             .andExpect { responseCode("107") }
         assertEquals(0, refundRows(paid.orderId))
 

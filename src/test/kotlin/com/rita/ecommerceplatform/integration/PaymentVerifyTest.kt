@@ -41,7 +41,7 @@ class PaymentVerifyTest : IntegrationTestBase() {
     private fun unique(prefix: String) = "$prefix-${UUID.randomUUID().toString().take(8)}"
 
     private fun createCategory(): Int {
-        val result = mockMvc.post("/api/admin/categories") {
+        val result = mockMvc.post("/dev/admin/categories") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to unique("Cat"))
@@ -50,7 +50,7 @@ class PaymentVerifyTest : IntegrationTestBase() {
     }
 
     private fun createProduct(stock: Int): Long {
-        val result = mockMvc.post("/api/admin/products") {
+        val result = mockMvc.post("/dev/admin/products") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json(
@@ -65,7 +65,7 @@ class PaymentVerifyTest : IntegrationTestBase() {
     }
 
     private fun createAddress() {
-        mockMvc.post("/api/customer/addresses") {
+        mockMvc.post("/dev/customer/addresses") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json(
@@ -83,14 +83,14 @@ class PaymentVerifyTest : IntegrationTestBase() {
     private fun placeOrder(quantities: List<Int> = listOf(2)): Placed {
         val productIds = quantities.map { quantity ->
             createProduct(stock = 10).also { productId ->
-                mockMvc.post("/api/customer/cart/items") {
+                mockMvc.post("/dev/customer/cart/items") {
                     header("Authorization", "Bearer $token")
                     contentType = MediaType.APPLICATION_JSON
                     content = json("productId" to productId, "quantity" to quantity)
                 }.andExpect { responseCode("00") }
             }
         }
-        val result = mockMvc.post("/api/customer/orders") {
+        val result = mockMvc.post("/dev/customer/orders") {
             header("Authorization", "Bearer $token")
             header("Idempotency-Key", UUID.randomUUID().toString())
         }.andExpect { responseCode("00") }.andReturn()
@@ -99,7 +99,7 @@ class PaymentVerifyTest : IntegrationTestBase() {
 
     /** Starts a payment for the order and returns its reference. */
     private fun initialize(placed: Placed): String {
-        val result = mockMvc.post("/api/customer/payments/initialize") {
+        val result = mockMvc.post("/dev/customer/payments/initialize") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json("orderReference" to placed.reference)
@@ -108,7 +108,7 @@ class PaymentVerifyTest : IntegrationTestBase() {
     }
 
     private fun verify(paymentReference: String, withToken: String? = token): ResultActionsDsl =
-        mockMvc.get("/api/customer/payments/verify/$paymentReference") {
+        mockMvc.get("/dev/customer/payments/verify/$paymentReference") {
             withToken?.let { header("Authorization", "Bearer $it") }
         }
 

@@ -26,7 +26,7 @@ class ProductFilterTest : IntegrationTestBase() {
     private fun unique(prefix: String) = "$prefix-${UUID.randomUUID().toString().take(8)}"
 
     private fun createCategory(): Int {
-        val result = mockMvc.post("/api/admin/categories") {
+        val result = mockMvc.post("/dev/admin/categories") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to unique("Cat"))
@@ -35,7 +35,7 @@ class ProductFilterTest : IntegrationTestBase() {
     }
 
     private fun createProduct(price: Int, discountPrice: Int? = null, stock: Int = 10, name: String = "Filter phone"): Long {
-        val result = mockMvc.post("/api/admin/products") {
+        val result = mockMvc.post("/dev/admin/products") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json(
@@ -59,10 +59,10 @@ class ProductFilterTest : IntegrationTestBase() {
         return readJson(result)["content"].toList().map { it["productId"].asLong() }
     }
 
-    private fun publicIds(vararg params: Pair<String, Any>) = ids("/api/products", *params)
+    private fun publicIds(vararg params: Pair<String, Any>) = ids("/dev/products", *params)
 
     private fun expectBadRequest(message: String?, vararg params: Pair<String, String>) {
-        mockMvc.get("/api/products") {
+        mockMvc.get("/dev/products") {
             params.forEach { (name, value) -> param(name, value) }
         }.andExpect {
             responseCode("106")
@@ -133,7 +133,7 @@ class ProductFilterTest : IntegrationTestBase() {
         createProduct(price = 2000, name = "Red toaster")
         createProduct(price = 2000, stock = 0, name = "Blue kettle mini")
 
-        mockMvc.get("/api/products") {
+        mockMvc.get("/dev/products") {
             param("categoryId", categoryId.toString())
             param("search", "kettle")
             param("maxPrice", "5000")
@@ -162,10 +162,10 @@ class ProductFilterTest : IntegrationTestBase() {
         val soldOut = createProduct(price = 2000, stock = 0)
         val high = createProduct(price = 3000)
 
-        assertEquals(listOf(high, low), ids("/api/admin/products", "inStock" to true, "sort" to "price_desc", admin = true))
-        assertEquals(listOf(soldOut), ids("/api/admin/products", "minPrice" to 1500, "maxPrice" to 2500, admin = true))
+        assertEquals(listOf(high, low), ids("/dev/admin/products", "inStock" to true, "sort" to "price_desc", admin = true))
+        assertEquals(listOf(soldOut), ids("/dev/admin/products", "minPrice" to 1500, "maxPrice" to 2500, admin = true))
 
-        mockMvc.get("/api/admin/products") {
+        mockMvc.get("/dev/admin/products") {
             header("Authorization", "Bearer $adminToken")
             param("sort", "cheapest")
         }.andExpect {

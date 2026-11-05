@@ -31,7 +31,7 @@ class AdminCustomerTest : IntegrationTestBase() {
     private fun register(firstName: String, phone: String = "+2348012345678"): Pair<Long, String> {
         val email = uniqueEmail()
         val id = readJson(
-            mockMvc.post("/api/auth/register") {
+            mockMvc.post("/dev/auth/register") {
                 contentType = MediaType.APPLICATION_JSON
                 content = json(
                     "firstName" to firstName,
@@ -70,7 +70,7 @@ class AdminCustomerTest : IntegrationTestBase() {
     }
 
     private fun list(vararg params: Pair<String, String>): JsonNode = readJson(
-        mockMvc.get("/api/admin/customers") {
+        mockMvc.get("/dev/admin/customers") {
             header("Authorization", "Bearer $adminToken")
             params.forEach { (name, value) -> param(name, value) }
         }.andExpect { responseCode("00") }.andReturn(),
@@ -123,7 +123,7 @@ class AdminCustomerTest : IntegrationTestBase() {
         insertOrder(ada, 4000, "PAID")
         insertOrder(ada, 9000, "REFUNDED")
 
-        mockMvc.get("/api/admin/customers/$ada") { header("Authorization", "Bearer $adminToken") }.andExpect {
+        mockMvc.get("/dev/admin/customers/$ada") { header("Authorization", "Bearer $adminToken") }.andExpect {
             responseCode("00")
             jsonPath("$.data.email") { value(adaEmail) }
             jsonPath("$.data.firstName") { value("Ada") }
@@ -133,7 +133,7 @@ class AdminCustomerTest : IntegrationTestBase() {
         }
 
         val (newcomer, _) = register("Bola")
-        mockMvc.get("/api/admin/customers/$newcomer") { header("Authorization", "Bearer $adminToken") }.andExpect {
+        mockMvc.get("/dev/admin/customers/$newcomer") { header("Authorization", "Bearer $adminToken") }.andExpect {
             jsonPath("$.data.orderCount") { value(0) }
             jsonPath("$.data.totalSpent") { value(0) }
         }
@@ -142,13 +142,13 @@ class AdminCustomerTest : IntegrationTestBase() {
     @Test
     fun `no secrets are returned, unknown customers are 404, bad status is 400 and customers are refused`() {
         val (ada, _) = register("Ada")
-        val body = mockMvc.get("/api/admin/customers/$ada") { header("Authorization", "Bearer $adminToken") }
+        val body = mockMvc.get("/dev/admin/customers/$ada") { header("Authorization", "Bearer $adminToken") }
             .andExpect { responseCode("00") }.andReturn().response.contentAsString
         listOf("password", "hash", "token").forEach { assertFalse(body.contains(it, ignoreCase = true), body) }
 
-        mockMvc.get("/api/admin/customers/999999999") { header("Authorization", "Bearer $adminToken") }
+        mockMvc.get("/dev/admin/customers/999999999") { header("Authorization", "Bearer $adminToken") }
             .andExpect { responseCode("25") }
-        mockMvc.get("/api/admin/customers") {
+        mockMvc.get("/dev/admin/customers") {
             header("Authorization", "Bearer $adminToken")
             param("status", "GONE")
         }.andExpect {
@@ -157,9 +157,9 @@ class AdminCustomerTest : IntegrationTestBase() {
         }
 
         val customerToken = newCustomerToken()
-        mockMvc.get("/api/admin/customers") { header("Authorization", "Bearer $customerToken") }
+        mockMvc.get("/dev/admin/customers") { header("Authorization", "Bearer $customerToken") }
             .andExpect { responseCode("107") }
-        mockMvc.get("/api/admin/customers/$ada") { header("Authorization", "Bearer $customerToken") }
+        mockMvc.get("/dev/admin/customers/$ada") { header("Authorization", "Bearer $customerToken") }
             .andExpect { responseCode("107") }
     }
 }

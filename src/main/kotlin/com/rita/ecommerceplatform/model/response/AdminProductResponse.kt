@@ -24,7 +24,7 @@ data class AdminProductResponse(
     val createdByAdminId: Int,
     // The main image; null when the product has no images.
     val primaryImageUrl: String?,
-    // Primary first, then by sortOrder; managed at /api/admin/products/{productId}/images.
+    // Primary first, then by sortOrder; managed at /{stage}/admin/products/{productId}/images.
     val images: List<AdminProductImageResponse>,
     val createdAt: LocalDateTime,
     val updatedAt: LocalDateTime,

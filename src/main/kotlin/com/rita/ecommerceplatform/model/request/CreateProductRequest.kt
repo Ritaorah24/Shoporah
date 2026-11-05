@@ -11,7 +11,7 @@ import tools.jackson.databind.annotation.JsonDeserialize
 import java.math.BigDecimal
 
 /**
- * Body of POST /api/admin/products. Money limits match the NUMERIC(12, 2) columns.
+ * Body of POST /{stage}/admin/products. Money limits match the NUMERIC(12, 2) columns.
  * "discountPrice must be less than price" involves two fields, so ProductService checks it.
  */
 data class CreateProductRequest(

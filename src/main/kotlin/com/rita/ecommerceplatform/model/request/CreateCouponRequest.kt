@@ -12,7 +12,7 @@ import java.math.BigDecimal
 import java.time.LocalDateTime
 
 /**
- * Body of POST /api/admin/coupons. Money limits match the NUMERIC(12, 2) columns; dates are platform time (UTC+1).
+ * Body of POST /{stage}/admin/coupons. Money limits match the NUMERIC(12, 2) columns; dates are platform time (UTC+1).
  * Rules that involve two fields (a PERCENTAGE value of at most 100, maxDiscountAmount only for PERCENTAGE,
  * expiresAt after startsAt and in the future) are checked by CouponService.
  */

@@ -35,7 +35,7 @@ class CustomerCancelTest : IntegrationTestBase() {
     private fun unique(prefix: String) = "$prefix-${UUID.randomUUID().toString().take(8)}"
 
     private fun createCategory(): Int {
-        val result = mockMvc.post("/api/admin/categories") {
+        val result = mockMvc.post("/dev/admin/categories") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to unique("Cat"))
@@ -44,7 +44,7 @@ class CustomerCancelTest : IntegrationTestBase() {
     }
 
     private fun createProduct(): Long {
-        val result = mockMvc.post("/api/admin/products") {
+        val result = mockMvc.post("/dev/admin/products") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json(
@@ -59,7 +59,7 @@ class CustomerCancelTest : IntegrationTestBase() {
     }
 
     private fun createAddress(customerToken: String) {
-        mockMvc.post("/api/customer/addresses") {
+        mockMvc.post("/dev/customer/addresses") {
             header("Authorization", "Bearer $customerToken")
             contentType = MediaType.APPLICATION_JSON
             content = json(
@@ -76,12 +76,12 @@ class CustomerCancelTest : IntegrationTestBase() {
     /** One new product (stock 10), 2 of it in the cart, then checkout. */
     private fun placeOrder(customerToken: String = token): Placed {
         val productId = createProduct()
-        mockMvc.post("/api/customer/cart/items") {
+        mockMvc.post("/dev/customer/cart/items") {
             header("Authorization", "Bearer $customerToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("productId" to productId, "quantity" to 2)
         }.andExpect { responseCode("00") }
-        val result = mockMvc.post("/api/customer/orders") {
+        val result = mockMvc.post("/dev/customer/orders") {
             header("Authorization", "Bearer $customerToken")
             header("Idempotency-Key", UUID.randomUUID().toString())
         }.andExpect { responseCode("00") }.andReturn()
@@ -90,7 +90,7 @@ class CustomerCancelTest : IntegrationTestBase() {
     }
 
     private fun initialize(placed: Placed): String {
-        val result = mockMvc.post("/api/customer/payments/initialize") {
+        val result = mockMvc.post("/dev/customer/payments/initialize") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json("orderReference" to placed.reference)
@@ -99,7 +99,7 @@ class CustomerCancelTest : IntegrationTestBase() {
     }
 
     private fun cancel(orderId: Long, reason: String? = null, withToken: String? = token): ResultActionsDsl =
-        mockMvc.post("/api/customer/orders/$orderId/cancel") {
+        mockMvc.post("/dev/customer/orders/$orderId/cancel") {
             withToken?.let { header("Authorization", "Bearer $it") }
             if (reason != null) {
                 contentType = MediaType.APPLICATION_JSON
@@ -208,7 +208,7 @@ class CustomerCancelTest : IntegrationTestBase() {
         val placed = placeOrder()
         val reference = initialize(placed)
         paymentGateway.pay(reference)
-        mockMvc.get("/api/customer/payments/verify/$reference") { header("Authorization", "Bearer $token") }
+        mockMvc.get("/dev/customer/payments/verify/$reference") { header("Authorization", "Bearer $token") }
             .andExpect { responseCode("00"); jsonPath("$.responseMessage") { value("Successful") } }
 
         cancel(placed.orderId).andExpect {
@@ -249,7 +249,7 @@ class CustomerCancelTest : IntegrationTestBase() {
         val placed = placeOrder()
         cancel(placed.orderId).andExpect { responseCode("00") }
 
-        mockMvc.post("/api/customer/payments/initialize") {
+        mockMvc.post("/dev/customer/payments/initialize") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json("orderReference" to placed.reference)

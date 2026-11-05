@@ -12,11 +12,11 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 
-/** Customer lookup for admins. SecurityConfig restricts every /api/admin URL to admins who have changed their password. */
+/** Customer lookup for admins. SecurityConfig restricts every /{stage}/admin URL to admins who have changed their password. */
 @Tag(name = "Admin customers", description = "Find customers and see their order totals")
 @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
 @RestController
-@RequestMapping("/api/admin/customers")
+@RequestMapping("/{stage}/admin/customers")
 class AdminCustomerController(private val adminCustomerService: AdminCustomerService) {
 
     /**
@@ -29,13 +29,14 @@ class AdminCustomerController(private val adminCustomerService: AdminCustomerSer
         @RequestParam(defaultValue = "${Paging.DEFAULT_SIZE}") size: Int,
         @RequestParam(required = false) search: String?,
         @RequestParam(required = false) status: String?,
+        @PathVariable stage: String,
     ): BaseDataResponse {
         return BaseDataResponse("00", "Successful", adminCustomerService.list(page, size, search, status))
     }
 
-    /** The customer with their order totals; their orders: GET /api/admin/orders?customerId={customerId}. */
+    /** The customer with their order totals; their orders: GET /{stage}/admin/orders?customerId={customerId}. */
     @GetMapping("/{customerId}")
-    fun get(@PathVariable customerId: Long): BaseDataResponse {
+    fun get(@PathVariable customerId: Long, @PathVariable stage: String): BaseDataResponse {
         return BaseDataResponse("00", "Successful", adminCustomerService.get(customerId))
     }
 }

@@ -8,7 +8,7 @@ import jakarta.validation.constraints.Size
 import tools.jackson.databind.annotation.JsonDeserialize
 
 /**
- * Body of PATCH /api/customer/addresses/{id}. Every field is optional: a field that is not sent
+ * Body of PATCH /{stage}/customer/addresses/{id}. Every field is optional: a field that is not sent
  * (null) keeps its current value. Required fields cannot be blanked; addressLine2 and postalCode
  * are cleared with "". The default address is changed through its own endpoint, not here.
  */

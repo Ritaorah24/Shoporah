@@ -13,14 +13,14 @@ import kotlin.test.assertNull
 class CustomerPasswordTest : IntegrationTestBase() {
 
     private fun changePassword(token: String, currentPassword: String?, newPassword: String?) =
-        mockMvc.patch("/api/customer/me/password") {
+        mockMvc.patch("/dev/customer/me/password") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
             content = json("currentPassword" to currentPassword, "newPassword" to newPassword)
         }
 
     private fun login(email: String, password: String) =
-        mockMvc.post("/api/auth/login") {
+        mockMvc.post("/dev/auth/login") {
             contentType = MediaType.APPLICATION_JSON
             content = json("email" to email, "password" to password)
         }
@@ -108,7 +108,7 @@ class CustomerPasswordTest : IntegrationTestBase() {
     fun `an admin token gets 403 and no token gets 401`() {
         changePassword(loginSeedAdmin(), DEFAULT_PASSWORD, "newSecret456").andExpect { responseCode("107") }
 
-        mockMvc.patch("/api/customer/me/password") {
+        mockMvc.patch("/dev/customer/me/password") {
             contentType = MediaType.APPLICATION_JSON
             content = json("currentPassword" to DEFAULT_PASSWORD, "newPassword" to "newSecret456")
         }.andExpect { responseCode("115") }

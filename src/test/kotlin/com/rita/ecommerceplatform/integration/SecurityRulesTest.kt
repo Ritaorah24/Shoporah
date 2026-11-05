@@ -49,7 +49,7 @@ class SecurityRulesTest : IntegrationTestBase() {
     }
 
     private fun expectRejected(token: String) {
-        mockMvc.get("/api/customer/me") {
+        mockMvc.get("/dev/customer/me") {
             header("Authorization", "Bearer $token")
         }.andExpect {
             responseCode("115")
@@ -62,7 +62,7 @@ class SecurityRulesTest : IntegrationTestBase() {
     fun `a correctly built token is accepted`() {
         // Control case: shows the helper builds valid tokens, so the rejections below are real.
         val customerId = registerCustomer()
-        mockMvc.get("/api/customer/me") {
+        mockMvc.get("/dev/customer/me") {
             header("Authorization", "Bearer ${customerToken(customerId)}")
         }.andExpect { responseCode("00") }
     }
@@ -106,7 +106,7 @@ class SecurityRulesTest : IntegrationTestBase() {
     @Test
     fun `an invalid token is rejected even on the login endpoint`() {
         // Documents the Postman trap: an old Bearer header makes even permitAll endpoints return 401.
-        mockMvc.post("/api/auth/login") {
+        mockMvc.post("/dev/auth/login") {
             header("Authorization", "Bearer not-a-real-token")
             contentType = MediaType.APPLICATION_JSON
             content = json("email" to uniqueEmail(), "password" to DEFAULT_PASSWORD)

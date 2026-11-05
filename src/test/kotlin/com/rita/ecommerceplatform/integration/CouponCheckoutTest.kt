@@ -32,7 +32,7 @@ class CouponCheckoutTest : IntegrationTestBase() {
     fun setUp() {
         adminToken = loginActiveAdmin()
         categoryId = readJson(
-            mockMvc.post("/api/admin/categories") {
+            mockMvc.post("/dev/admin/categories") {
                 header("Authorization", "Bearer $adminToken")
                 contentType = MediaType.APPLICATION_JSON
                 content = json("name" to unique("Cat"))
@@ -49,7 +49,7 @@ class CouponCheckoutTest : IntegrationTestBase() {
 
     private fun createDeliveryMethod(fee: Int): String {
         val code = "DM_${UUID.randomUUID().toString().take(8).uppercase()}"
-        mockMvc.post("/api/admin/delivery-methods") {
+        mockMvc.post("/dev/admin/delivery-methods") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("code" to code, "name" to "Test delivery", "fee" to fee)
@@ -60,7 +60,7 @@ class CouponCheckoutTest : IntegrationTestBase() {
     /** Creates a coupon and returns its id. */
     private fun createCoupon(code: String, vararg fields: Pair<String, Any?>): Int =
         readJson(
-            mockMvc.post("/api/admin/coupons") {
+            mockMvc.post("/dev/admin/coupons") {
                 header("Authorization", "Bearer $adminToken")
                 contentType = MediaType.APPLICATION_JSON
                 content = json("code" to code, *fields)
@@ -86,7 +86,7 @@ class CouponCheckoutTest : IntegrationTestBase() {
         val email = uniqueEmail()
         registerCustomer(email)
         val shopper = Shopper(email, loginCustomer(email))
-        mockMvc.post("/api/customer/addresses") {
+        mockMvc.post("/dev/customer/addresses") {
             header("Authorization", "Bearer ${shopper.token}")
             contentType = MediaType.APPLICATION_JSON
             content = json(
@@ -103,12 +103,12 @@ class CouponCheckoutTest : IntegrationTestBase() {
 
     /** Puts `quantity` units of a new product priced `price` in the cart. */
     private fun fillCart(shopper: Shopper, price: Any = 10000, quantity: Int = 2) {
-        val product = mockMvc.post("/api/admin/products") {
+        val product = mockMvc.post("/dev/admin/products") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("name" to unique("Phone"), "sku" to unique("sku"), "categoryId" to categoryId, "price" to price, "stockQuantity" to 50)
         }.andExpect { responseCode("00") }.andReturn()
-        mockMvc.post("/api/customer/cart/items") {
+        mockMvc.post("/dev/customer/cart/items") {
             header("Authorization", "Bearer ${shopper.token}")
             contentType = MediaType.APPLICATION_JSON
             content = json("productId" to readJson(product)["productId"].asLong(), "quantity" to quantity)
@@ -121,7 +121,7 @@ class CouponCheckoutTest : IntegrationTestBase() {
         key: UUID = UUID.randomUUID(),
         delivery: String = deliveryCode,
     ): ResultActionsDsl =
-        mockMvc.post("/api/customer/orders") {
+        mockMvc.post("/dev/customer/orders") {
             header("Authorization", "Bearer ${shopper.token}")
             header("Idempotency-Key", key.toString())
             contentType = MediaType.APPLICATION_JSON
@@ -132,26 +132,26 @@ class CouponCheckoutTest : IntegrationTestBase() {
         readJson(checkout(shopper, couponCode).andExpect { responseCode("00"); jsonPath("$.responseMessage") { value("Order created") } }.andReturn())
 
     private fun preview(shopper: Shopper, code: String): ResultActionsDsl =
-        mockMvc.post("/api/customer/coupons/validate") {
+        mockMvc.post("/dev/customer/coupons/validate") {
             header("Authorization", "Bearer ${shopper.token}")
             contentType = MediaType.APPLICATION_JSON
             content = json("code" to code)
         }
 
     private fun cartSize(shopper: Shopper): Int =
-        readJson(mockMvc.get("/api/customer/cart") { header("Authorization", "Bearer ${shopper.token}") }.andReturn())["items"].size()
+        readJson(mockMvc.get("/dev/customer/cart") { header("Authorization", "Bearer ${shopper.token}") }.andReturn())["items"].size()
 
     private fun money(node: JsonNode): BigDecimal = node.decimalValue()
 
     private fun assertMoney(expected: String, actual: JsonNode) = assertEquals(0, BigDecimal(expected).compareTo(money(actual)), "expected $expected, was $actual")
 
     private fun customerCancel(shopper: Shopper, orderId: Long) {
-        mockMvc.post("/api/customer/orders/$orderId/cancel") { header("Authorization", "Bearer ${shopper.token}") }
+        mockMvc.post("/dev/customer/orders/$orderId/cancel") { header("Authorization", "Bearer ${shopper.token}") }
             .andExpect { responseCode("00") }
     }
 
     private fun adminCancel(orderId: Long) {
-        mockMvc.post("/api/admin/orders/$orderId/cancel") {
+        mockMvc.post("/dev/admin/orders/$orderId/cancel") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("reason" to "Out of stock at the warehouse")
@@ -160,7 +160,7 @@ class CouponCheckoutTest : IntegrationTestBase() {
 
     private fun pay(shopper: Shopper, order: JsonNode): Long {
         val payment = readJson(
-            mockMvc.post("/api/customer/payments/initialize") {
+            mockMvc.post("/dev/customer/payments/initialize") {
                 header("Authorization", "Bearer ${shopper.token}")
                 contentType = MediaType.APPLICATION_JSON
                 content = json("orderReference" to order["reference"].asString())
@@ -168,7 +168,7 @@ class CouponCheckoutTest : IntegrationTestBase() {
         )
         val reference = payment["paymentReference"].asString()
         paymentGateway.pay(reference)
-        mockMvc.get("/api/customer/payments/verify/$reference") { header("Authorization", "Bearer ${shopper.token}") }
+        mockMvc.get("/dev/customer/payments/verify/$reference") { header("Authorization", "Bearer ${shopper.token}") }
             .andExpect { responseCode("00") }
         return paymentGateway.initialized.single { it.reference == reference }.amountKobo
     }
@@ -189,11 +189,11 @@ class CouponCheckoutTest : IntegrationTestBase() {
         assertEquals(1, usageCount(couponId))
 
         assertEquals(2_000_000L, pay(shopper, order))
-        mockMvc.get("/api/admin/orders/${order["orderId"].asLong()}") { header("Authorization", "Bearer $adminToken") }.andExpect {
+        mockMvc.get("/dev/admin/orders/${order["orderId"].asLong()}") { header("Authorization", "Bearer $adminToken") }.andExpect {
             jsonPath("$.data.couponCode") { value(code) }
             jsonPath("$.data.discountAmount") { value(1500.0) }
         }
-        mockMvc.get("/api/customer/orders/${order["orderId"].asLong()}") { header("Authorization", "Bearer ${shopper.token}") }
+        mockMvc.get("/dev/customer/orders/${order["orderId"].asLong()}") { header("Authorization", "Bearer ${shopper.token}") }
             .andExpect { jsonPath("$.data.couponCode") { value(code) } }
 
         // Without a coupon there is no code and no discount.
@@ -245,7 +245,7 @@ class CouponCheckoutTest : IntegrationTestBase() {
 
         val deleted = uniqueCode()
         val deletedId = percentCoupon(deleted, 10)
-        mockMvc.delete("/api/admin/coupons/$deletedId") { header("Authorization", "Bearer $adminToken") }
+        mockMvc.delete("/dev/admin/coupons/$deletedId") { header("Authorization", "Bearer $adminToken") }
             .andExpect { responseCode("00") }
         expectRefused(deleted, "Coupon $deleted does not exist")
 
@@ -305,7 +305,7 @@ class CouponCheckoutTest : IntegrationTestBase() {
         assertEquals(1, usageCount(couponId))
 
         preview(newShopper(), code).andExpect { responseCode("106") } // empty cart is checked first
-        mockMvc.post("/api/customer/coupons/validate") {
+        mockMvc.post("/dev/customer/coupons/validate") {
             header("Authorization", "Bearer $adminToken")
             contentType = MediaType.APPLICATION_JSON
             content = json("code" to code)

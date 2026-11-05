@@ -6,7 +6,7 @@ import jakarta.validation.constraints.AssertTrue
 import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.NotNull
 
-/** Body of PATCH /api/customer/cart/items/{productId}: the new quantity (replaces the current one). */
+/** Body of PATCH /{stage}/customer/cart/items/{productId}: the new quantity (replaces the current one). */
 data class UpdateCartItemRequest(
     // To remove the item, use DELETE instead of 0.
     @field:NotNull

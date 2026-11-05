@@ -20,11 +20,11 @@ import org.springframework.web.bind.annotation.RequestPart
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.multipart.MultipartFile
 
-/** Product images. SecurityConfig restricts every /api/admin URL to admins who have changed their password. */
+/** Product images. SecurityConfig restricts every /{stage}/admin URL to admins who have changed their password. */
 @Tag(name = "Admin product images", description = "Upload, order and remove product images (stored on Cloudinary)")
 @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
 @RestController
-@RequestMapping("/api/admin/products/{productId}/images")
+@RequestMapping("/{stage}/admin/products/{productId}/images")
 class AdminProductImageController(private val productImageService: ProductImageService) {
 
     /**
@@ -37,6 +37,7 @@ class AdminProductImageController(private val productImageService: ProductImageS
         @PathVariable productId: Long,
         @RequestPart("file") file: MultipartFile,
         @RequestParam(required = false) altText: String?,
+        @PathVariable stage: String,
     ): BaseDataResponse {
         return BaseDataResponse("00", "Successful", productImageService.upload(productId, file, altText))
     }
@@ -50,13 +51,14 @@ class AdminProductImageController(private val productImageService: ProductImageS
         @PathVariable productId: Long,
         @PathVariable imageId: Long,
         @Valid @RequestBody request: UpdateProductImageRequest,
+        @PathVariable stage: String,
     ): BaseDataResponse {
         return BaseDataResponse("00", "Successful", productImageService.update(productId, imageId, request))
     }
 
     /** Removes the image (and its stored file). If it was primary, the next image becomes primary. */
     @DeleteMapping("/{imageId}")
-    fun delete(@PathVariable productId: Long, @PathVariable imageId: Long): BaseResponse {
+    fun delete(@PathVariable productId: Long, @PathVariable imageId: Long, @PathVariable stage: String): BaseResponse {
         productImageService.delete(productId, imageId)
         return BaseResponse()
     }
