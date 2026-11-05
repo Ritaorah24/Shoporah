@@ -10,7 +10,7 @@ import com.rita.ecommerceplatform.repository.api.GatewayRefundStart
 import com.rita.ecommerceplatform.repository.api.GatewayRefundStatus
 import com.rita.ecommerceplatform.repository.api.GatewayVerifyResult
 import com.rita.ecommerceplatform.repository.api.PaymentGateway
-import com.rita.ecommerceplatform.repository.api.paystack.PaystackGateway
+import com.rita.ecommerceplatform.repository.api.PaystackApi
 import org.springframework.boot.test.context.TestComponent
 import org.springframework.context.annotation.Primary
 import java.util.concurrent.ConcurrentHashMap
@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Stands in for Paystack in every integration test (imported by IntegrationTestBase, @Primary over
- * PaystackGateway), so tests never touch the network. It remembers each initialized payment; a test then
+ * PaystackApi), so tests never touch the network. It remembers each initialized payment; a test then
  * decides what "Paystack" says about it with pay / fail / abandon, or makes it unreachable with down.
  * Refunds start "pending"; a test finishes them with processRefund / failRefund, or makes the next start
  * refused (rejectRefund) or unanswered (loseRefundAnswer).
@@ -86,7 +86,7 @@ class FakePaymentGateway : PaymentGateway {
             "${refundIds.incrementAndGet()}", request.transactionReference, "pending", request.amountKobo, request.currency,
         )
         refunds[refund.refundId] = refund
-        if (mode == RefundStartMode.LoseAnswer) throw ApiErrorException(PaystackGateway.PROVIDER_ERROR)
+        if (mode == RefundStartMode.LoseAnswer) throw ApiErrorException(PaystackApi.PROVIDER_ERROR)
         return GatewayRefundStart.Accepted(refund)
     }
 
@@ -131,7 +131,7 @@ class FakePaymentGateway : PaymentGateway {
         GatewayRefund(
             refundId = id,
             transactionReference = reference,
-            status = PaystackGateway.refundStatusOf(status),
+            status = PaystackApi.refundStatusOf(status),
             providerStatus = status,
             amountKobo = amountKobo,
             currency = currency,
@@ -158,6 +158,6 @@ class FakePaymentGateway : PaymentGateway {
         )
 
     private fun failIfDown() {
-        if (down) throw ApiErrorException(PaystackGateway.PROVIDER_ERROR)
+        if (down) throw ApiErrorException(PaystackApi.PROVIDER_ERROR)
     }
 }

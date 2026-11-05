@@ -3,7 +3,7 @@ package com.rita.ecommerceplatform.support
 import com.rita.ecommerceplatform.exception.ApiErrorException
 import com.rita.ecommerceplatform.repository.api.ImageStorage
 import com.rita.ecommerceplatform.repository.api.StoredImage
-import com.rita.ecommerceplatform.repository.api.cloudinary.CloudinaryImageStorage
+import com.rita.ecommerceplatform.repository.api.CloudinaryApi
 import org.springframework.boot.test.context.TestComponent
 import org.springframework.context.annotation.Primary
 import java.util.UUID
@@ -11,7 +11,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Stands in for Cloudinary in every integration test (imported by IntegrationTestBase, @Primary over
- * CloudinaryImageStorage), so no test uploads anything. It keeps what was "stored" by key; a test can make it
+ * CloudinaryApi), so no test uploads anything. It keeps what was "stored" by key; a test can make it
  * unreachable (down), unconfigured (notConfigured) or fail only on delete (deleteFails). Reset them in a finally block.
  */
 @TestComponent
@@ -38,7 +38,7 @@ class FakeImageStorage : ImageStorage {
 
     override fun delete(storageKey: String) {
         failIfUnavailable()
-        if (deleteFails) throw ApiErrorException(CloudinaryImageStorage.STORAGE_ERROR)
+        if (deleteFails) throw ApiErrorException(CloudinaryApi.STORAGE_ERROR)
         stored.remove(storageKey)
     }
 
@@ -49,7 +49,7 @@ class FakeImageStorage : ImageStorage {
     fun countIn(folder: String): Int = stored.keys.count { it.startsWith("$folder/") }
 
     private fun failIfUnavailable() {
-        if (notConfigured) throw ApiErrorException(CloudinaryImageStorage.NOT_CONFIGURED)
-        if (down) throw ApiErrorException(CloudinaryImageStorage.STORAGE_ERROR)
+        if (notConfigured) throw ApiErrorException(CloudinaryApi.NOT_CONFIGURED)
+        if (down) throw ApiErrorException(CloudinaryApi.STORAGE_ERROR)
     }
 }

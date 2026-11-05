@@ -162,7 +162,7 @@ class PaymentService(
         const val PROVIDER = "PAYSTACK"
         // Orders have no currency column: the store sells in naira only.
         const val CURRENCY = "NGN"
-        // Longer than PaystackConfig's 5 s connect + 10 s read timeouts, so a live request is never cut off.
+        // Longer than PaystackApi's 5 s connect + 10 s read timeouts, so a live request is never cut off.
         const val STALE_START_SECONDS = 30
         const val NOT_STARTED ="Not started: the payment provider could not be reached"
 

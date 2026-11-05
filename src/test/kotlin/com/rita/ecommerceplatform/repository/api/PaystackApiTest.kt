@@ -1,24 +1,10 @@
-package com.rita.ecommerceplatform.repository.api.paystack
+package com.rita.ecommerceplatform.repository.api
 
+import com.rita.ecommerceplatform.config.PaystackProps
 import com.rita.ecommerceplatform.exception.ApiErrorException
-import com.rita.ecommerceplatform.repository.api.GatewayInitRequest
-import com.rita.ecommerceplatform.repository.api.GatewayInitResult
-import com.rita.ecommerceplatform.repository.api.GatewayPaymentStatus
-import com.rita.ecommerceplatform.repository.api.GatewayRefundRequest
-import com.rita.ecommerceplatform.repository.api.GatewayRefundStart
-import com.rita.ecommerceplatform.repository.api.GatewayRefundStatus
+import com.rita.ecommerceplatform.support.MockHttpServer
 import org.junit.jupiter.api.Test
-import org.springframework.http.HttpMethod
 import org.springframework.http.HttpStatus
-import org.springframework.http.MediaType
-import org.springframework.test.web.client.MockRestServiceServer
-import org.springframework.test.web.client.match.MockRestRequestMatchers.content
-import org.springframework.test.web.client.match.MockRestRequestMatchers.method
-import org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo
-import org.springframework.test.web.client.response.MockRestResponseCreators.withException
-import org.springframework.test.web.client.response.MockRestResponseCreators.withStatus
-import org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess
-import org.springframework.web.client.RestClient
 import tools.jackson.databind.json.JsonMapper
 import java.io.IOException
 import java.time.OffsetDateTime
@@ -27,19 +13,21 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 
 /**
- * PaystackGateway against a mocked Paystack (checkpoint 1.4, Step 1): the requests it sends and how it
+ * PaystackApi against a mocked Paystack (checkpoint 1.4, Step 1): the requests it sends and how it
  * reads the answers. No Spring context and no network; the answers are shaped like Paystack's documented ones.
  */
-class PaystackGatewayTest {
+class PaystackApiTest {
 
-    private val builder = RestClient.builder().baseUrl("https://api.paystack.co")
-    private val server = MockRestServiceServer.bindTo(builder).build()
-    private val gateway = PaystackGateway(builder.build(), JsonMapper.builder().build())
+    private val server = MockHttpServer()
+    private val gateway = PaystackApi(
+        server.client,
+        PaystackProps(secretKey = "sk_test_example", baseUrl = "https://api.paystack.co"),
+        JsonMapper.builder().build(),
+    )
 
-    private fun json(body: String) = withSuccess(body, MediaType.APPLICATION_JSON)
+    private fun json(body: String) = MockHttpServer.Answer(body = body)
 
-    private fun withError(status: HttpStatus, body: String) =
-        withStatus(status).contentType(MediaType.APPLICATION_JSON).body(body)
+    private fun withError(status: HttpStatus, body: String) = MockHttpServer.Answer(status = status.value(), body = body)
 
     private val initRequest = GatewayInitRequest(
         reference = "PAY-TEST-1",
@@ -50,11 +38,9 @@ class PaystackGatewayTest {
 
     @Test
     fun `initialize sends the reference, email, amount in kobo and currency, and returns the payment page`() {
-        server.expect(requestTo("https://api.paystack.co/transaction/initialize"))
-            .andExpect(method(HttpMethod.POST))
-            .andExpect(
-                content().json("""{"reference":"PAY-TEST-1","email":"ada@example.com","amount":1250050,"currency":"NGN"}""", true),
-            )
+        server.expect("https://api.paystack.co/transaction/initialize")
+            .andExpectMethod("POST")
+            .andExpectJson("""{"reference":"PAY-TEST-1","email":"ada@example.com","amount":1250050,"currency":"NGN"}""", strict = true)
             .andRespond(
                 json(
                     """
@@ -72,8 +58,8 @@ class PaystackGatewayTest {
 
     @Test
     fun `initialize sends the callback URL only when there is one`() {
-        server.expect(requestTo("https://api.paystack.co/transaction/initialize"))
-            .andExpect(content().json("""{"callback_url":"https://shop.example.com/paid"}"""))
+        server.expect("https://api.paystack.co/transaction/initialize")
+            .andExpectJson("""{"callback_url":"https://shop.example.com/paid"}""")
             .andRespond(json("""{"status":true,"data":{"authorization_url":"https://checkout.paystack.com/x","access_code":"x"}}"""))
 
         gateway.initialize(initRequest.copy(callbackUrl = "https://shop.example.com/paid"))
@@ -87,8 +73,8 @@ class PaystackGatewayTest {
               "id":4099260516,"status":"success","reference":"PAY-TEST-1","amount":1250050,"currency":"NGN",
               "channel":"card","gateway_response":"Successful","paid_at":"2026-10-22T09:15:30.000Z"}}
         """.trimIndent()
-        server.expect(requestTo("https://api.paystack.co/transaction/verify/PAY-TEST-1"))
-            .andExpect(method(HttpMethod.GET))
+        server.expect("https://api.paystack.co/transaction/verify/PAY-TEST-1")
+            .andExpectMethod("GET")
             .andRespond(json(body))
 
         val result = gateway.verify("PAY-TEST-1")!!
@@ -106,18 +92,18 @@ class PaystackGatewayTest {
 
     @Test
     fun `Paystack statuses map to ours`() {
-        assertEquals(GatewayPaymentStatus.SUCCESS, PaystackGateway.statusOf("success"))
-        assertEquals(GatewayPaymentStatus.FAILED, PaystackGateway.statusOf("failed"))
-        assertEquals(GatewayPaymentStatus.FAILED, PaystackGateway.statusOf("reversed"))
-        assertEquals(GatewayPaymentStatus.ABANDONED, PaystackGateway.statusOf("abandoned"))
+        assertEquals(GatewayPaymentStatus.SUCCESS, PaystackApi.statusOf("success"))
+        assertEquals(GatewayPaymentStatus.FAILED, PaystackApi.statusOf("failed"))
+        assertEquals(GatewayPaymentStatus.FAILED, PaystackApi.statusOf("reversed"))
+        assertEquals(GatewayPaymentStatus.ABANDONED, PaystackApi.statusOf("abandoned"))
         listOf("ongoing", "pending", "processing", "queued", null).forEach {
-            assertEquals(GatewayPaymentStatus.PENDING, PaystackGateway.statusOf(it))
+            assertEquals(GatewayPaymentStatus.PENDING, PaystackApi.statusOf(it))
         }
     }
 
     @Test
     fun `verify of a payment the customer has not finished has no paid date`() {
-        server.expect(requestTo("https://api.paystack.co/transaction/verify/PAY-TEST-1"))
+        server.expect("https://api.paystack.co/transaction/verify/PAY-TEST-1")
             .andRespond(
                 json("""{"status":true,"data":{"id":1,"status":"abandoned","reference":"PAY-TEST-1","amount":1250050,"currency":"NGN","paid_at":null}}"""),
             )
@@ -129,8 +115,17 @@ class PaystackGatewayTest {
     }
 
     @Test
+    fun `a reference from the customer's URL stays one encoded path segment`() {
+        server.expect("https://api.paystack.co/transaction/verify/A%2FB%20C%3Fx=1")
+            .andRespond(withError(HttpStatus.BAD_REQUEST, """{"status":false,"code":"transaction_not_found"}"""))
+
+        assertNull(gateway.verify("A/B C?x=1"))
+        server.verify()
+    }
+
+    @Test
     fun `verify of a reference Paystack does not know returns null`() {
-        server.expect(requestTo("https://api.paystack.co/transaction/verify/NOPE"))
+        server.expect("https://api.paystack.co/transaction/verify/NOPE")
             .andRespond(
                 withError(
                     HttpStatus.BAD_REQUEST,
@@ -148,21 +143,21 @@ class PaystackGatewayTest {
             withError(HttpStatus.UNAUTHORIZED, """{"status":false,"message":"Invalid key"}"""),
             json("""{"status":false,"message":"Something went wrong"}"""),
             json("""{"status":true,"data":{"reference":"PAY-TEST-1"}}"""),
-            withSuccess("<html>gateway timeout</html>", MediaType.TEXT_HTML),
-            withException(IOException("Connection reset")),
+            MockHttpServer.Answer(body = "<html>gateway timeout</html>", contentType = "text/html"),
+            MockHttpServer.Answer(failure = IOException("Connection reset")),
         )
         failures.forEach { response ->
             server.reset()
-            server.expect(requestTo("https://api.paystack.co/transaction/verify/PAY-TEST-1")).andRespond(response)
+            server.expect("https://api.paystack.co/transaction/verify/PAY-TEST-1").andRespond(response)
 
             val ex = assertFailsWith<ApiErrorException> { gateway.verify("PAY-TEST-1") }
-            assertEquals(PaystackGateway.PROVIDER_ERROR, ex.message)
+            assertEquals(PaystackApi.PROVIDER_ERROR, ex.message)
         }
     }
 
     @Test
     fun `initialize failures become a 502 too`() {
-        server.expect(requestTo("https://api.paystack.co/transaction/initialize"))
+        server.expect("https://api.paystack.co/transaction/initialize")
             .andRespond(withError(HttpStatus.BAD_REQUEST, """{"status":false,"message":"Duplicate Transaction Reference"}"""))
 
         assertFailsWith<ApiErrorException> { gateway.initialize(initRequest) }
@@ -177,11 +172,9 @@ class PaystackGatewayTest {
 
     @Test
     fun `refund sends the payment reference, amount in kobo, currency and note, and reads the pending refund`() {
-        server.expect(requestTo("https://api.paystack.co/refund"))
-            .andExpect(method(HttpMethod.POST))
-            .andExpect(
-                content().json("""{"transaction":"PAY-TEST-1","amount":400000,"currency":"NGN","merchant_note":"Item damaged"}""", true),
-            )
+        server.expect("https://api.paystack.co/refund")
+            .andExpectMethod("POST")
+            .andExpectJson("""{"transaction":"PAY-TEST-1","amount":400000,"currency":"NGN","merchant_note":"Item damaged"}""", strict = true)
             .andRespond(
                 json(
                     """
@@ -208,7 +201,7 @@ class PaystackGatewayTest {
 
     @Test
     fun `a refund Paystack refuses is Rejected with its message, other failures are a 502`() {
-        server.expect(requestTo("https://api.paystack.co/refund"))
+        server.expect("https://api.paystack.co/refund")
             .andRespond(withError(HttpStatus.BAD_REQUEST, """{"status":false,"message":"Transaction has been fully reversed"}"""))
         assertEquals(GatewayRefundStart.Rejected("Transaction has been fully reversed"), gateway.refund(refundRequest))
 
@@ -218,18 +211,18 @@ class PaystackGatewayTest {
             withError(HttpStatus.TOO_MANY_REQUESTS, """{"status":false,"message":"Slow down"}"""),
             withError(HttpStatus.INTERNAL_SERVER_ERROR, """{"status":false,"message":"Server error"}"""),
             withError(HttpStatus.BAD_REQUEST, "<html>bad gateway</html>"),
-            withException(IOException("Read timed out")),
+            MockHttpServer.Answer(failure = IOException("Read timed out")),
         ).forEach { response ->
             server.reset()
-            server.expect(requestTo("https://api.paystack.co/refund")).andRespond(response)
+            server.expect("https://api.paystack.co/refund").andRespond(response)
             assertFailsWith<ApiErrorException> { gateway.refund(refundRequest) }
         }
     }
 
     @Test
     fun `fetchRefund reads a processed or failed refund, and an unknown id is null`() {
-        server.expect(requestTo("https://api.paystack.co/refund/5017041"))
-            .andExpect(method(HttpMethod.GET))
+        server.expect("https://api.paystack.co/refund/5017041")
+            .andExpectMethod("GET")
             .andRespond(
                 json(
                     """
@@ -245,7 +238,7 @@ class PaystackGatewayTest {
         assertNull(processed.failureReason)
 
         server.reset()
-        server.expect(requestTo("https://api.paystack.co/refund/5017041"))
+        server.expect("https://api.paystack.co/refund/5017041")
             .andRespond(
                 json("""{"status":true,"data":{"id":5017041,"amount":400000,"status":"failed","reason":"Account closed"}}"""),
             )
@@ -254,15 +247,15 @@ class PaystackGatewayTest {
         assertEquals("Account closed", failed.failureReason)
 
         server.reset()
-        server.expect(requestTo("https://api.paystack.co/refund/1"))
+        server.expect("https://api.paystack.co/refund/1")
             .andRespond(withError(HttpStatus.NOT_FOUND, """{"status":false,"message":"Refund not found"}"""))
         assertNull(gateway.fetchRefund("1"))
     }
 
     @Test
     fun `findRefunds asks by transaction id and keeps only this payment's refunds`() {
-        server.expect(requestTo("https://api.paystack.co/refund?perPage=100&transaction=3298598423"))
-            .andExpect(method(HttpMethod.GET))
+        server.expect("https://api.paystack.co/refund?perPage=100&transaction=3298598423")
+            .andExpectMethod("GET")
             .andRespond(
                 json(
                     """
@@ -284,10 +277,10 @@ class PaystackGatewayTest {
 
     @Test
     fun `Paystack refund statuses map to ours`() {
-        assertEquals(GatewayRefundStatus.PROCESSED, PaystackGateway.refundStatusOf("processed"))
-        assertEquals(GatewayRefundStatus.FAILED, PaystackGateway.refundStatusOf("failed"))
+        assertEquals(GatewayRefundStatus.PROCESSED, PaystackApi.refundStatusOf("processed"))
+        assertEquals(GatewayRefundStatus.FAILED, PaystackApi.refundStatusOf("failed"))
         listOf("pending", "processing", "needs-attention", null).forEach {
-            assertEquals(GatewayRefundStatus.PENDING, PaystackGateway.refundStatusOf(it))
+            assertEquals(GatewayRefundStatus.PENDING, PaystackApi.refundStatusOf(it))
         }
     }
 }

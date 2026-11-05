@@ -4,7 +4,7 @@ import com.rita.ecommerceplatform.exception.ApiErrorException
 
 /**
  * Where product images are kept (checkpoint 2.2, Step 8): an outside service that serves them to browsers by URL.
- * CloudinaryImageStorage is the real one; tests replace it with a fake, so no test uploads anything.
+ * CloudinaryApi is the real one; tests replace it with a fake, so no test uploads anything.
  * Failing to reach the service is a 502 (ApiErrorException); not being configured is a 503.
  */
 interface ImageStorage {

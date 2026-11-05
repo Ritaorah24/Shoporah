@@ -32,6 +32,8 @@ dependencies {
     implementation("io.github.oshai:kotlin-logging-jvm:8.0.4")
     implementation("org.jdbi:jdbi3-core:3.55.0")
     implementation("org.jdbi:jdbi3-kotlin:3.55.0")
+    implementation("com.squareup.okhttp3:okhttp:5.5.1")
+    implementation("org.json:json:20250517")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("tools.jackson.module:jackson-module-kotlin")
     runtimeOnly("org.postgresql:postgresql")
