@@ -8,21 +8,21 @@ import java.time.LocalDateTime
  * providerRefundId is null until the provider confirms it received the refund.
  */
 data class Refund(
-    val refundId: Long,
-    val orderId: Long,
-    val paymentId: Long,
-    val amount: BigDecimal,
-    val currency: String,
-    val status: RefundStatus,
-    val providerRefundId: String?,
-    val providerStatus: String?,
-    val reason: String,
-    val restock: Boolean,
-    val requestedByAdminId: Int,
-    val failureReason: String?,
-    val processedAt: LocalDateTime?,
-    val createdAt: LocalDateTime,
-    val updatedAt: LocalDateTime,
+    var refundId: Long? = null,
+    var refundOrderId: Long? = null,
+    var refundPaymentId: Long? = null,
+    var refundAmount: BigDecimal? = null,
+    var refundCurrency: String? = null,
+    var refundStatus: RefundStatus? = null,
+    var refundProviderRefundId: String? = null,
+    var refundProviderStatus: String? = null,
+    var refundReason: String? = null,
+    var refundRestock: Boolean? = null,
+    var refundRequestedByAdminId: Int? = null,
+    var refundFailureReason: String? = null,
+    var refundProcessedAt: LocalDateTime? = null,
+    var refundCreatedAt: LocalDateTime? = null,
+    var refundUpdatedAt: LocalDateTime? = null,
 )
 
 /** Allowed values of ec_refund.refundstatus (ck__ec_refund__status). PROCESSED and FAILED are final. */

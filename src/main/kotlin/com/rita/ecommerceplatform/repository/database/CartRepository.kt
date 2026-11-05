@@ -6,7 +6,6 @@ import org.jdbi.v3.core.kotlin.mapTo
 import com.rita.ecommerceplatform.model.entity.CartItem
 import com.rita.ecommerceplatform.model.entity.CategoryStatus
 import com.rita.ecommerceplatform.model.entity.ProductStatus
-import org.jdbi.v3.core.mapper.RowMapper
 import org.springframework.stereotype.Repository
 
 /** ec_cart (one per customer, reused for the customer's lifetime) and its ec_cart_item rows. */
@@ -45,21 +44,6 @@ interface CartRepository {
 @Repository
 class CartRepositoryImpl(private val jdbi: Jdbi) : CartRepository {
 
-    private val itemRowMapper = RowMapper { rs, _ ->
-        CartItem(
-            productId = rs.getLong("productid"),
-            quantity = rs.getInt("cartitemquantity"),
-            productName = rs.getString("productname"),
-            productSku = rs.getString("productsku"),
-            price = rs.getBigDecimal("productprice"),
-            discountPrice = rs.getBigDecimal("productdiscountprice"),
-            sellingPrice = rs.getBigDecimal("productsellingprice"),
-            stockQuantity = rs.getInt("productstockquantity"),
-            productStatus = ProductStatus.valueOf(rs.getString("productstatus").uppercase()),
-            categoryStatus = CategoryStatus.valueOf(rs.getString("categorystatus").uppercase()),
-        )
-    }
-
     override fun findCartId(customerId: Long): Long? =
         jdbi.withHandle<Long?, Exception> { handle ->
             handle.createQuery(CartQuery.FIND_CART_ID)
@@ -82,7 +66,7 @@ class CartRepositoryImpl(private val jdbi: Jdbi) : CartRepository {
         jdbi.withHandle<List<CartItem>, Exception> { handle ->
             handle.createQuery(CartQuery.FIND_ITEMS)
                 .bind("cartId", cartId)
-                .map(itemRowMapper)
+                .mapTo<CartItem>()
                 .list()
         }
 

@@ -75,8 +75,8 @@ class ProductImageService(
             val image = productImageRepository.findById(productId, imageId) ?: throw NotFoundException("Image not found")
             productImageRepository.update(
                 imageId = imageId,
-                altText = if (request.altText != null) request.altText.trim().ifEmpty { null } else image.altText,
-                sortOrder = request.sortOrder ?: image.sortOrder,
+                altText = if (request.altText != null) request.altText.trim().ifEmpty { null } else image.productImageAltText,
+                sortOrder = request.sortOrder ?: image.productImageSortOrder!!,
             )
             if (request.primary == true) productImageRepository.makePrimary(productId, imageId)
             productImageRepository.findByProduct(productId).map(AdminProductImageResponse::from)
@@ -92,10 +92,10 @@ class ProductImageService(
             lockNotDeleted(productId)
             val image = productImageRepository.findById(productId, imageId) ?: throw NotFoundException("Image not found")
             productImageRepository.delete(imageId)
-            if (image.isPrimary) productImageRepository.promoteFirstIfNoPrimary(productId)
+            if (image.productImageIsPrimary!!) productImageRepository.promoteFirstIfNoPrimary(productId)
             image
         }!!
-        deleteQuietly(image.storageKey)
+        deleteQuietly(image.productImageStorageKey!!)
     }
 
     private fun save(productId: Long, stored: StoredImage, altText: String?): ProductImage {
@@ -117,12 +117,12 @@ class ProductImageService(
     // Deleted products behave as if they do not exist (D3), images included.
     private fun findNotDeleted(productId: Long) {
         val product = productRepository.findById(productId)
-        if (product == null || product.status == ProductStatus.DELETED) throw NotFoundException("Product not found")
+        if (product == null || product.productStatus == ProductStatus.DELETED) throw NotFoundException("Product not found")
     }
 
     private fun lockNotDeleted(productId: Long) {
         val product = productRepository.findByIdForUpdate(productId)
-        if (product == null || product.status == ProductStatus.DELETED) throw NotFoundException("Product not found")
+        if (product == null || product.productStatus == ProductStatus.DELETED) throw NotFoundException("Product not found")
     }
 
     private fun deleteQuietly(storageKey: String) {

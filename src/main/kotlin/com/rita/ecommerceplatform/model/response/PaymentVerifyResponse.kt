@@ -19,14 +19,14 @@ data class PaymentVerifyResponse(
 ) {
     companion object {
         fun from(payment: Payment, order: Order) = PaymentVerifyResponse(
-            paymentReference = payment.reference,
-            orderReference = order.reference,
-            paymentStatus = payment.status.name,
-            orderStatus = order.status.name,
-            orderPaymentStatus = order.paymentStatus.name,
-            amount = payment.amount,
-            currency = payment.currency,
-            paidAt = payment.paidAt,
+            paymentReference = payment.paymentReference!!,
+            orderReference = order.orderReference!!,
+            paymentStatus = payment.paymentStatus!!.name,
+            orderStatus = order.orderStatus!!.name,
+            orderPaymentStatus = order.orderPaymentStatus!!.name,
+            amount = payment.paymentAmount!!,
+            currency = payment.paymentCurrency!!,
+            paidAt = payment.paymentPaidAt,
         )
     }
 }

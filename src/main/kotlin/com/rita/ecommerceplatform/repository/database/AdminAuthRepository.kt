@@ -2,10 +2,10 @@ package com.rita.ecommerceplatform.repository.database
 
 import com.rita.ecommerceplatform.repository.database.query.AdminAuthQuery
 import org.jdbi.v3.core.Jdbi
+import org.jdbi.v3.core.kotlin.mapTo
 import com.rita.ecommerceplatform.model.entity.AdminAuth
 import com.rita.ecommerceplatform.model.entity.AdminAuthStatus
 import com.rita.ecommerceplatform.model.entity.PasswordStatus
-import org.jdbi.v3.core.mapper.RowMapper
 import org.springframework.stereotype.Repository
 import java.time.LocalDateTime
 
@@ -21,30 +21,11 @@ interface AdminAuthRepository {
 @Repository
 class AdminAuthRepositoryImpl(private val jdbi: Jdbi) : AdminAuthRepository {
 
-    private val rowMapper = RowMapper { rs, _ ->
-        AdminAuth(
-            adminAuthId = rs.getInt("adminauthid"),
-            adminId = rs.getInt("adminauthadminid"),
-            passwordHash = rs.getString("adminauthpasswordhash"),
-            passwordStatus = PasswordStatus.valueOf(rs.getString("adminauthpasswordstatus").uppercase()),
-            passwordChangedAt = rs.getObject("adminauthpasswordchangedat", LocalDateTime::class.java),
-            failedLoginAttempts = rs.getInt("adminauthfailedloginattempts"),
-            lastFailedLoginAt = rs.getObject("adminauthlastfailedloginat", LocalDateTime::class.java),
-            lockedUntil = rs.getObject("adminauthlockeduntil", LocalDateTime::class.java),
-            lastLoginAt = rs.getObject("adminauthlastloginat", LocalDateTime::class.java),
-            resetTokenHash = rs.getString("adminauthresettokenhash"),
-            resetTokenExpiresAt = rs.getObject("adminauthresettokenexpiresat", LocalDateTime::class.java),
-            status = AdminAuthStatus.valueOf(rs.getString("adminauthstatus").uppercase()),
-            createdAt = rs.getObject("adminauthcreatedat", LocalDateTime::class.java),
-            updatedAt = rs.getObject("adminauthupdatedat", LocalDateTime::class.java),
-        )
-    }
-
     override fun findByAdminId(adminId: Int): AdminAuth? =
         jdbi.withHandle<AdminAuth?, Exception> { handle ->
             handle.createQuery(AdminAuthQuery.FIND_BY_ADMIN_ID)
                 .bind("adminId", adminId)
-                .map(rowMapper)
+                .mapTo<AdminAuth>()
                 .findOne()
                 .orElse(null)
         }

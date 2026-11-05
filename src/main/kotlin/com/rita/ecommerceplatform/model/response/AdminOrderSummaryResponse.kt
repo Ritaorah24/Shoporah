@@ -20,16 +20,16 @@ data class AdminOrderSummaryResponse(
 ) {
     companion object {
         fun from(row: OrderWithCustomer, itemCount: Int) = AdminOrderSummaryResponse(
-            orderId = row.order.orderId,
-            reference = row.order.reference,
-            customerId = row.order.customerId,
+            orderId = row.order.orderId!!,
+            reference = row.order.orderReference!!,
+            customerId = row.order.orderCustomerId!!,
             customerName = row.customerName,
             customerEmail = row.customerEmail,
-            status = row.order.status.name,
-            paymentStatus = row.order.paymentStatus.name,
-            total = row.order.total,
+            status = row.order.orderStatus!!.name,
+            paymentStatus = row.order.orderPaymentStatus!!.name,
+            total = row.order.orderTotal!!,
             itemCount = itemCount,
-            createdAt = row.order.createdAt,
+            createdAt = row.order.orderCreatedAt!!,
         )
     }
 }

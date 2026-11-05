@@ -2,6 +2,7 @@ package com.rita.ecommerceplatform.repository.database
 
 import com.rita.ecommerceplatform.repository.database.query.OrderItemQuery
 import org.jdbi.v3.core.Jdbi
+import org.jdbi.v3.core.kotlin.mapTo
 import com.rita.ecommerceplatform.model.entity.OrderItem
 import org.jdbi.v3.core.mapper.RowMapper
 import org.springframework.stereotype.Repository
@@ -22,20 +23,6 @@ interface OrderItemRepository {
 @Repository
 class OrderItemRepositoryImpl(private val jdbi: Jdbi) : OrderItemRepository {
 
-    private val rowMapper = RowMapper { rs, _ ->
-        OrderItem(
-            orderItemId = rs.getLong("orderitemid"),
-            orderId = rs.getLong("orderitemorderid"),
-            productId = rs.getLong("orderitemproductid"),
-            productName = rs.getString("orderitemproductname"),
-            productSku = rs.getString("orderitemproductsku"),
-            unitPrice = rs.getBigDecimal("orderitemunitprice"),
-            quantity = rs.getInt("orderitemquantity"),
-            lineTotal = rs.getBigDecimal("orderitemlinetotal"),
-            createdAt = rs.getObject("orderitemcreatedat", LocalDateTime::class.java),
-        )
-    }
-
     override fun insert(orderId: Long, productId: Long, productName: String, productSku: String, unitPrice: BigDecimal, quantity: Int) {
         jdbi.withHandle<Int, Exception> { handle ->
             handle.createUpdate(OrderItemQuery.INSERT)
@@ -53,7 +40,7 @@ class OrderItemRepositoryImpl(private val jdbi: Jdbi) : OrderItemRepository {
         jdbi.withHandle<List<OrderItem>, Exception> { handle ->
             handle.createQuery(OrderItemQuery.FIND_BY_ORDER_ID)
                 .bind("orderId", orderId)
-                .map(rowMapper)
+                .mapTo<OrderItem>()
                 .list()
         }
 

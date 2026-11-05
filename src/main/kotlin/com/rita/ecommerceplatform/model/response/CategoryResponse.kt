@@ -10,9 +10,9 @@ data class CategoryResponse(
 ) {
     companion object {
         fun from(category: Category) = CategoryResponse(
-            categoryId = category.categoryId,
-            name = category.name,
-            description = category.description,
+            categoryId = category.categoryId!!,
+            name = category.categoryName!!,
+            description = category.categoryDescription,
         )
     }
 }

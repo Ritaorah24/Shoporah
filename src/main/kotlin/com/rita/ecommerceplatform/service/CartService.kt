@@ -46,12 +46,12 @@ class CartService(
         val product = productRepository.findPublicById(request.productId!!) ?: throw NotFoundException("Product not found")
         val cartId = cartRepository.getOrCreateCartId(customerId)
 
-        val inCart = cartRepository.findQuantity(cartId, product.productId) ?: 0
+        val inCart = cartRepository.findQuantity(cartId, product.productId!!) ?: 0
         // Long, so a huge requested quantity cannot overflow past the stock check.
         val newQuantity = inCart.toLong() + request.quantity!!
-        checkStock(product.stockQuantity, newQuantity)
+        checkStock(product.productStockQuantity!!, newQuantity)
 
-        cartRepository.upsertItem(cartId, product.productId, newQuantity.toInt())
+        cartRepository.upsertItem(cartId, product.productId!!, newQuantity.toInt())
         cartRepository.touch(cartId)
         return toResponse(cartRepository.findItems(cartId))
     }
@@ -65,7 +65,7 @@ class CartService(
         val product = productRepository.findPublicById(productId) ?: throw NotFoundException("Product not found")
 
         val quantity = request.quantity!!
-        checkStock(product.stockQuantity, quantity.toLong())
+        checkStock(product.productStockQuantity!!, quantity.toLong())
 
         cartRepository.upsertItem(cartId, productId, quantity)
         cartRepository.touch(cartId)
@@ -96,28 +96,28 @@ class CartService(
     fun issueOf(item: CartItem): CartItemIssue? = when {
         item.productStatus != ProductStatus.ACTIVE || item.categoryStatus != CategoryStatus.ACTIVE ->
             CartItemIssue.PRODUCT_UNAVAILABLE
-        item.stockQuantity <= 0 -> CartItemIssue.OUT_OF_STOCK
-        item.quantity > item.stockQuantity -> CartItemIssue.INSUFFICIENT_STOCK
+        item.productStockQuantity!! <= 0 -> CartItemIssue.OUT_OF_STOCK
+        item.cartItemQuantity!! > item.productStockQuantity!! -> CartItemIssue.INSUFFICIENT_STOCK
         else -> null
     }
 
     private fun toResponse(items: List<CartItem>): CartResponse {
         // Each product's primary image, from one query for the whole cart.
-        val images = productImageRepository.findByProductIds(items.map { it.productId })
+        val images = productImageRepository.findByProductIds(items.map { it.productId!! })
         val lines = items.map { item ->
             val issue = issueOf(item)
             CartItemResponse(
-                productId = item.productId,
-                name = item.productName,
-                imageUrl = images[item.productId]?.firstOrNull { it.isPrimary }?.url,
-                price = item.price,
-                discountPrice = item.discountPrice,
-                unitPrice = item.sellingPrice,
-                quantity = item.quantity,
+                productId = item.productId!!,
+                name = item.productName!!,
+                imageUrl = images[item.productId]?.firstOrNull { it.productImageIsPrimary!! }?.productImageUrl,
+                price = item.productPrice!!,
+                discountPrice = item.productDiscountPrice,
+                unitPrice = item.productSellingPrice!!,
+                quantity = item.cartItemQuantity!!,
                 lineTotal = lineTotal(item),
                 available = issue == null,
                 issue = issue?.name,
-                availableQuantity = if (issue == CartItemIssue.INSUFFICIENT_STOCK) item.stockQuantity else null,
+                availableQuantity = if (issue == CartItemIssue.INSUFFICIENT_STOCK) item.productStockQuantity else null,
             )
         }
         val buyable = lines.filter { it.available }
@@ -130,7 +130,7 @@ class CartService(
     }
 
     /** Selling price (discount if any) x quantity, from database prices only. */
-    fun lineTotal(item: CartItem): BigDecimal = item.sellingPrice * BigDecimal.valueOf(item.quantity.toLong())
+    fun lineTotal(item: CartItem): BigDecimal = item.productSellingPrice!! * BigDecimal.valueOf(item.cartItemQuantity!!.toLong())
 
     // D2 (1.3): the count is shown so the customer can fix their cart.
     private fun checkStock(stock: Int, wanted: Long) {

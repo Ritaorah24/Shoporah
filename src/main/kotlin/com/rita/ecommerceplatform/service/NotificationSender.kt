@@ -37,18 +37,18 @@ class NotificationSender(
 
     private fun sendNext(): Boolean = transactionTemplate.execute {
         val notification = notificationRepository.lockNextDue(retryDelaySeconds) ?: return@execute false
-        if (notification.channel != channel.type) {
-            notificationRepository.markAttemptFailed(notification.notificationId, "No ${notification.channel} channel", maxAttempts)
+        if (notification.notificationChannel != channel.type) {
+            notificationRepository.markAttemptFailed(notification.notificationId!!, "No ${notification.notificationChannel} channel", maxAttempts)
             return@execute true
         }
         try {
-            channel.send(notification.recipient, notification.subject, notification.body)
-            notificationRepository.markSent(notification.notificationId)
+            channel.send(notification.notificationRecipient!!, notification.notificationSubject, notification.notificationBody)
+            notificationRepository.markSent(notification.notificationId!!)
         } catch (e: Exception) {
             // The reason is saved for support; the body is not logged (it can hold personal details).
             log.warn("Notification {} ({}) failed on attempt {}: {}",
-                notification.notificationId, notification.type, notification.attemptCount + 1, e.message)
-            notificationRepository.markAttemptFailed(notification.notificationId, e.message ?: e.javaClass.simpleName, maxAttempts)
+                notification.notificationId, notification.notificationType, notification.notificationAttemptCount!! + 1, e.message)
+            notificationRepository.markAttemptFailed(notification.notificationId!!, e.message ?: e.javaClass.simpleName, maxAttempts)
         }
         true
     } ?: false

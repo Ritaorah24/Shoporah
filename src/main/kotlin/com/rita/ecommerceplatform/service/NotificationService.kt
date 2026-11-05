@@ -36,5 +36,5 @@ class NotificationService(private val notificationRepository: NotificationReposi
     /** Queues one of NotificationMessages' emails to a customer. */
     @Transactional(propagation = Propagation.MANDATORY)
     fun queueToCustomer(type: NotificationType, customer: Customer, message: EmailMessage, orderId: Long? = null): Long? =
-        queue(type, customer.email, message.subject, message.body, customerId = customer.customerId, orderId = orderId)
+        queue(type, customer.customerEmail!!, message.subject, message.body, customerId = customer.customerId, orderId = orderId)
 }

@@ -4,7 +4,6 @@ import com.rita.ecommerceplatform.repository.database.query.ProductImageQuery
 import org.jdbi.v3.core.Jdbi
 import org.jdbi.v3.core.kotlin.mapTo
 import com.rita.ecommerceplatform.model.entity.ProductImage
-import org.jdbi.v3.core.mapper.RowMapper
 import org.springframework.stereotype.Repository
 import java.time.LocalDateTime
 
@@ -45,20 +44,6 @@ interface ProductImageRepository {
 @Repository
 class ProductImageRepositoryImpl(private val jdbi: Jdbi) : ProductImageRepository {
 
-    private val rowMapper = RowMapper { rs, _ ->
-        ProductImage(
-            imageId = rs.getLong("productimageid"),
-            productId = rs.getLong("productimageproductid"),
-            url = rs.getString("productimageurl"),
-            storageKey = rs.getString("productimagestoragekey"),
-            altText = rs.getString("productimagealttext"),
-            sortOrder = rs.getInt("productimagesortorder"),
-            isPrimary = rs.getBoolean("productimageisprimary"),
-            createdAt = rs.getObject("productimagecreatedat", LocalDateTime::class.java),
-            updatedAt = rs.getObject("productimageupdatedat", LocalDateTime::class.java),
-        )
-    }
-
     override fun insert(productId: Long, url: String, storageKey: String, altText: String?, sortOrder: Int, isPrimary: Boolean): Long =
         jdbi.withHandle<Long, Exception> { handle ->
             handle.createQuery(ProductImageQuery.INSERT)
@@ -76,7 +61,7 @@ class ProductImageRepositoryImpl(private val jdbi: Jdbi) : ProductImageRepositor
         jdbi.withHandle<List<ProductImage>, Exception> { handle ->
             handle.createQuery(ProductImageQuery.FIND_BY_PRODUCT)
                 .bind("productId", productId)
-                .map(rowMapper)
+                .mapTo<ProductImage>()
                 .list()
         }
 
@@ -85,10 +70,10 @@ class ProductImageRepositoryImpl(private val jdbi: Jdbi) : ProductImageRepositor
         return jdbi.withHandle<List<ProductImage>, Exception> { handle ->
             handle.createQuery(ProductImageQuery.FIND_BY_PRODUCT_IDS)
                 .bindList("productIds", productIds)
-                .map(rowMapper)
+                .mapTo<ProductImage>()
                 .list()
         }
-            .groupBy { it.productId }
+            .groupBy { it.productImageProductId!! }
     }
 
     override fun update(imageId: Long, altText: String?, sortOrder: Int): Int =
@@ -119,7 +104,7 @@ class ProductImageRepositoryImpl(private val jdbi: Jdbi) : ProductImageRepositor
             handle.createQuery(ProductImageQuery.FIND_BY_ID)
                 .bind("imageId", imageId)
                 .bind("productId", productId)
-                .map(rowMapper)
+                .mapTo<ProductImage>()
                 .findOne()
                 .orElse(null)
         }

@@ -44,11 +44,11 @@ class WishlistService(
         val product = productRepository.findPublicById(request.productId!!) ?: throw NotFoundException("Product not found")
         val wishlistId = wishlistRepository.getOrCreateWishlistId(customerId)
 
-        if (!wishlistRepository.contains(wishlistId, product.productId)) {
+        if (!wishlistRepository.contains(wishlistId, product.productId!!)) {
             if (wishlistRepository.countItems(wishlistId) >= MAX_ITEMS) {
                 throw ConflictException("A wishlist can hold at most $MAX_ITEMS products")
             }
-            wishlistRepository.addItem(wishlistId, product.productId)
+            wishlistRepository.addItem(wishlistId, product.productId!!)
             wishlistRepository.touch(wishlistId)
         }
         return toResponse(wishlistRepository.findItems(wishlistId))
@@ -82,19 +82,19 @@ class WishlistService(
 
     private fun toResponse(items: List<WishlistItem>): WishlistResponse {
         // Each product's primary image, from one query for the whole wishlist.
-        val images = productImageRepository.findByProductIds(items.map { it.productId })
+        val images = productImageRepository.findByProductIds(items.map { it.productId!! })
         return WishlistResponse(
             items = items.map { item ->
                 WishlistItemResponse(
-                    productId = item.productId,
-                    name = item.productName,
-                    imageUrl = images[item.productId]?.firstOrNull { it.isPrimary }?.url,
-                    price = item.price,
-                    discountPrice = item.discountPrice,
-                    sellingPrice = item.sellingPrice,
+                    productId = item.productId!!,
+                    name = item.productName!!,
+                    imageUrl = images[item.productId]?.firstOrNull { it.productImageIsPrimary!! }?.productImageUrl,
+                    price = item.productPrice!!,
+                    discountPrice = item.productDiscountPrice,
+                    sellingPrice = item.productSellingPrice!!,
                     availability = item.availability()?.name,
                     available = item.available,
-                    addedAt = item.addedAt,
+                    addedAt = item.wishlistItemCreatedAt!!,
                 )
             },
             itemCount = items.size,

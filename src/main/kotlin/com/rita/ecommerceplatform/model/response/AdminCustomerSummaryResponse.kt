@@ -16,14 +16,14 @@ data class AdminCustomerSummaryResponse(
 ) {
     companion object {
         fun from(customer: Customer, orderCount: Long) = AdminCustomerSummaryResponse(
-            customerId = customer.customerId,
-            firstName = customer.firstName,
-            lastName = customer.lastName,
-            email = customer.email,
-            phoneNumber = customer.phoneNumber,
-            status = customer.status.name,
+            customerId = customer.customerId!!,
+            firstName = customer.customerFirstName!!,
+            lastName = customer.customerLastName!!,
+            email = customer.customerEmail!!,
+            phoneNumber = customer.customerPhoneNumber,
+            status = customer.customerStatus!!.name,
             orderCount = orderCount,
-            createdAt = customer.createdAt,
+            createdAt = customer.customerCreatedAt!!,
         )
     }
 }

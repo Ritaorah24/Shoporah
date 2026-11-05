@@ -45,17 +45,17 @@ class RefundSettlement(
     @Transactional
     fun settle(refundId: Long, result: GatewayRefund): Refund {
         // Read without a lock only to learn the order; a refund's order never changes.
-        val orderId = refundRepository.findById(refundId)?.orderId ?: throw IllegalStateException("Refund $refundId does not exist")
+        val orderId = refundRepository.findById(refundId)?.refundOrderId ?: throw IllegalStateException("Refund $refundId does not exist")
         val order = orderRepository.lockById(orderId)!!
         val refund = refundRepository.lockById(refundId)!!
-        if (refund.status != RefundStatus.PENDING) return refund
+        if (refund.refundStatus != RefundStatus.PENDING) return refund
 
         val details = RefundProviderDetails(result.refundId, result.providerStatus, result.rawResponse)
         when (result.status) {
             GatewayRefundStatus.PENDING -> refundRepository.saveProviderDetails(refundId, details)
             GatewayRefundStatus.FAILED -> {
                 val reason = result.failureReason ?: "The payment provider could not complete the refund (${result.providerStatus})"
-                log.warn("Refund {} of order {} failed at the provider: {}", refundId, order.reference, reason)
+                log.warn("Refund {} of order {} failed at the provider: {}", refundId, order.orderReference, reason)
                 refundRepository.markFailed(refundId, reason, details)
             }
             GatewayRefundStatus.PROCESSED -> process(order, refund, details)
@@ -64,38 +64,38 @@ class RefundSettlement(
     }
 
     private fun process(order: Order, refund: Refund, details: RefundProviderDetails) {
-        check(refundRepository.markProcessed(refund.refundId, details) == 1) { "Refund ${refund.refundId} changed while locked" }
+        check(refundRepository.markProcessed(refund.refundId!!, details) == 1) { "Refund ${refund.refundId} changed while locked" }
 
         // Checked when the refund started; checked again because the money is now gone whatever we decide.
-        if (order.paymentStatus != OrderPaymentStatus.PAID ||
-            (order.status != OrderStatus.CANCELLED && order.status != OrderStatus.DELIVERED)
+        if (order.orderPaymentStatus != OrderPaymentStatus.PAID ||
+            (order.orderStatus != OrderStatus.CANCELLED && order.orderStatus != OrderStatus.DELIVERED)
         ) {
-            log.error("Refund {} was processed but order {} is {} / {}; order left unchanged", refund.refundId, order.reference, order.status, order.paymentStatus)
+            log.error("Refund {} was processed but order {} is {} / {}; order left unchanged", refund.refundId, order.orderReference, order.orderStatus, order.orderPaymentStatus)
             return
         }
 
         // A delivered order becomes REFUNDED; a cancelled one stays CANCELLED (it is final) and only its payment changes.
-        val to = if (order.status == OrderStatus.DELIVERED) OrderStatus.REFUNDED else OrderStatus.CANCELLED
-        if (to != order.status) OrderStatusRules.ensureCanChange(order.status, to, OrderStatusActor.ADMIN)
-        check(orderRepository.markRefunded(order.orderId, order.status, to) == 1) { "Order ${order.reference} changed while locked" }
-        if (refund.restock) returnStock(order, refund)
+        val to = if (order.orderStatus == OrderStatus.DELIVERED) OrderStatus.REFUNDED else OrderStatus.CANCELLED
+        if (to != order.orderStatus) OrderStatusRules.ensureCanChange(order.orderStatus!!, to, OrderStatusActor.ADMIN)
+        check(orderRepository.markRefunded(order.orderId!!, order.orderStatus!!, to) == 1) { "Order ${order.orderReference} changed while locked" }
+        if (refund.refundRestock!!) returnStock(order, refund)
 
         // The admin who asked for the refund made the decision, whichever path (refresh or webhook) settles it.
         statusHistoryRepository.insert(
-            orderId = order.orderId,
-            fromStatus = order.status,
+            orderId = order.orderId!!,
+            fromStatus = order.orderStatus,
             toStatus = to,
-            adminId = refund.requestedByAdminId,
+            adminId = refund.refundRequestedByAdminId,
             customerId = null,
-            note = "$REFUND_PROCESSED: ${NotificationMessages.naira(refund.amount)}" + if (refund.restock) ". $ITEMS_RETURNED" else "",
+            note = "$REFUND_PROCESSED: ${NotificationMessages.naira(refund.refundAmount!!)}" + if (refund.refundRestock!!) ". $ITEMS_RETURNED" else "",
         )
 
-        val customer = customerRepository.findById(order.customerId)
-            ?: throw IllegalStateException("Customer ${order.customerId} of order ${order.reference} does not exist")
+        val customer = customerRepository.findById(order.orderCustomerId!!)
+            ?: throw IllegalStateException("Customer ${order.orderCustomerId} of order ${order.orderReference} does not exist")
         notificationService.queueToCustomer(
             NotificationType.ORDER_REFUNDED,
             customer,
-            NotificationMessages.orderRefunded(customer.firstName, order.reference, refund.amount),
+            NotificationMessages.orderRefunded(customer.customerFirstName!!, order.orderReference!!, refund.refundAmount!!),
             orderId = order.orderId,
         )
     }
@@ -103,16 +103,16 @@ class RefundSettlement(
     // Puts back what the payment took (its SALE movements, by productId), exactly once: the refund is locked and
     // PROCESSED is final, and uq__ec_inventorymovement__order_refund rejects a second return.
     private fun returnStock(order: Order, refund: Refund) {
-        inventoryMovementRepository.findSalesByOrder(order.orderId).forEach { sale ->
+        inventoryMovementRepository.findSalesByOrder(order.orderId!!).forEach { sale ->
             val stockAfter = productRepository.increaseStock(sale.productId, sale.quantity)
-                ?: throw IllegalStateException("Product ${sale.productId} of order ${order.reference} does not exist")
+                ?: throw IllegalStateException("Product ${sale.productId} of order ${order.orderReference} does not exist")
             inventoryMovementRepository.insert(
                 productId = sale.productId,
                 type = InventoryMovementType.REFUND_RETURN,
                 quantityChange = sale.quantity,
                 stockAfter = stockAfter,
-                adminId = refund.requestedByAdminId,
-                note = "Order ${order.reference} returned and refunded",
+                adminId = refund.refundRequestedByAdminId,
+                note = "Order ${order.orderReference} returned and refunded",
                 orderId = order.orderId,
             )
         }

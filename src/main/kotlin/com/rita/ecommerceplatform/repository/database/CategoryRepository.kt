@@ -5,7 +5,6 @@ import org.jdbi.v3.core.Jdbi
 import org.jdbi.v3.core.kotlin.mapTo
 import com.rita.ecommerceplatform.model.entity.Category
 import com.rita.ecommerceplatform.model.entity.CategoryStatus
-import org.jdbi.v3.core.mapper.RowMapper
 import org.springframework.stereotype.Repository
 import java.time.LocalDateTime
 
@@ -37,18 +36,6 @@ interface CategoryRepository {
 @Repository
 class CategoryRepositoryImpl(private val jdbi: Jdbi) : CategoryRepository {
 
-    private val rowMapper = RowMapper { rs, _ ->
-        Category(
-            categoryId = rs.getInt("categoryid"),
-            name = rs.getString("categoryname"),
-            description = rs.getString("categorydescription"),
-            createdByAdminId = rs.getInt("categorycreatedbyadminid"),
-            status = CategoryStatus.valueOf(rs.getString("categorystatus").uppercase()),
-            createdAt = rs.getObject("categorycreatedat", LocalDateTime::class.java),
-            updatedAt = rs.getObject("categoryupdatedat", LocalDateTime::class.java),
-        )
-    }
-
     override fun existsByName(name: String, excludingCategoryId: Int?): Boolean =
         jdbi.withHandle<Boolean, Exception> { handle ->
             handle.createQuery(CategoryQuery.EXISTS_BY_NAME)
@@ -72,7 +59,7 @@ class CategoryRepositoryImpl(private val jdbi: Jdbi) : CategoryRepository {
         jdbi.withHandle<Category?, Exception> { handle ->
             handle.createQuery(CategoryQuery.FIND_BY_ID)
                 .bind("categoryId", categoryId)
-                .map(rowMapper)
+                .mapTo<Category>()
                 .findOne()
                 .orElse(null)
         }
@@ -81,7 +68,7 @@ class CategoryRepositoryImpl(private val jdbi: Jdbi) : CategoryRepository {
         jdbi.withHandle<List<Category>, Exception> { handle ->
             handle.createQuery(CategoryQuery.FIND_BY_STATUSES)
                 .bindList("statuses", statuses.map { it.name })
-                .map(rowMapper)
+                .mapTo<Category>()
                 .list()
         }
 

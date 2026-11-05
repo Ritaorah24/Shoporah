@@ -48,12 +48,12 @@ class CategoryService(private val categoryRepository: CategoryRepository) {
     @Transactional
     fun update(categoryId: Int, request: UpdateCategoryRequest): AdminCategoryResponse {
         val existing = findNotDeleted(categoryId)
-        val name = request.name ?: existing.name
-        if (categoryRepository.existsByName(name, excludingCategoryId = categoryId)) throw nameInUse()
+        val name = request.name ?: existing.categoryName
+        if (categoryRepository.existsByName(name!!, excludingCategoryId = categoryId)) throw nameInUse()
 
-        val description = if (request.description != null) request.description.blankToNull() else existing.description
+        val description = if (request.description != null) request.description.blankToNull() else existing.categoryDescription
         try {
-            categoryRepository.update(categoryId, name, description)
+            categoryRepository.update(categoryId, name!!, description)
         } catch (e: DuplicateKeyException) {
             throw nameInUse()
         }
@@ -81,7 +81,7 @@ class CategoryService(private val categoryRepository: CategoryRepository) {
     /** Deleted categories behave as if they do not exist (D3). */
     private fun findNotDeleted(categoryId: Int): Category {
         val category = categoryRepository.findById(categoryId)
-        if (category == null || category.status == CategoryStatus.DELETED) throw NotFoundException("Category not found")
+        if (category == null || category.categoryStatus == CategoryStatus.DELETED) throw NotFoundException("Category not found")
         return category
     }
 

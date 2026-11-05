@@ -20,15 +20,15 @@ data class StockMovementResponse(
 ) {
     companion object {
         fun from(movement: InventoryMovement) = StockMovementResponse(
-            movementId = movement.movementId,
-            type = movement.type.name,
-            quantityChange = movement.quantityChange,
-            stockAfter = movement.stockAfter,
-            orderId = movement.orderId,
+            movementId = movement.inventoryMovementId!!,
+            type = movement.inventoryMovementType!!.name,
+            quantityChange = movement.inventoryMovementQuantityChange!!,
+            stockAfter = movement.inventoryMovementStockAfter!!,
+            orderId = movement.inventoryMovementOrderId,
             orderReference = movement.orderReference,
-            adminId = movement.adminId,
-            note = movement.note,
-            createdAt = movement.createdAt,
+            adminId = movement.inventoryMovementAdminId,
+            note = movement.inventoryMovementNote,
+            createdAt = movement.inventoryMovementCreatedAt!!,
         )
     }
 }

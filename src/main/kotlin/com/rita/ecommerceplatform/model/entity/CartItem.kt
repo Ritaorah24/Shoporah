@@ -8,14 +8,14 @@ import java.math.BigDecimal
  * the cart always reflects the current price and whether the product can still be bought.
  */
 data class CartItem(
-    val productId: Long,
-    val quantity: Int,
-    val productName: String,
-    val productSku: String,
-    val price: BigDecimal,
-    val discountPrice: BigDecimal?,
-    val sellingPrice: BigDecimal,
-    val stockQuantity: Int,
-    val productStatus: ProductStatus,
-    val categoryStatus: CategoryStatus,
+    var productId: Long? = null,
+    var cartItemQuantity: Int? = null,
+    var productName: String? = null,
+    var productSku: String? = null,
+    var productPrice: BigDecimal? = null,
+    var productDiscountPrice: BigDecimal? = null,
+    var productSellingPrice: BigDecimal? = null,
+    var productStockQuantity: Int? = null,
+    var productStatus: ProductStatus? = null,
+    var categoryStatus: CategoryStatus? = null,
 )

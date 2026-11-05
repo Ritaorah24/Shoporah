@@ -7,7 +7,6 @@ import com.rita.ecommerceplatform.utility.constant.PrefixConstant
 import com.rita.ecommerceplatform.utility.containsPattern
 import com.rita.ecommerceplatform.model.entity.Customer
 import com.rita.ecommerceplatform.model.entity.CustomerStatus
-import org.jdbi.v3.core.mapper.RowMapper
 import org.springframework.stereotype.Repository
 import java.time.LocalDateTime
 
@@ -43,19 +42,6 @@ interface CustomerRepository {
 class CustomerRepositoryImpl(private val jdbi: Jdbi) : CustomerRepository {
 
     // Maps one ec_customer row (database column names) to a Customer (Kotlin names).
-    private val rowMapper = RowMapper { rs, _ ->
-        Customer(
-            customerId = rs.getLong("customerid"),
-            firstName = rs.getString("customerfirstname"),
-            lastName = rs.getString("customerlastname"),
-            email = rs.getString("customeremail"),
-            phoneNumber = rs.getString("customerphonenumber"),
-            status = CustomerStatus.valueOf(rs.getString("customerstatus").uppercase()),
-            createdAt = rs.getObject("customercreatedat", LocalDateTime::class.java),
-            updatedAt = rs.getObject("customerupdatedat", LocalDateTime::class.java),
-        )
-    }
-
     override fun existsByEmail(email: String): Boolean =
         jdbi.withHandle<Boolean, Exception> { handle ->
             handle.createQuery(CustomerQuery.EXISTS_BY_EMAIL)
@@ -79,7 +65,7 @@ class CustomerRepositoryImpl(private val jdbi: Jdbi) : CustomerRepository {
         jdbi.withHandle<Customer?, Exception> { handle ->
             handle.createQuery(CustomerQuery.FIND_BY_ID)
                 .bind("customerId", customerId)
-                .map(rowMapper)
+                .mapTo<Customer>()
                 .findOne()
                 .orElse(null)
         }
@@ -97,7 +83,7 @@ class CustomerRepositoryImpl(private val jdbi: Jdbi) : CustomerRepository {
         jdbi.withHandle<Customer?, Exception> { handle ->
             handle.createQuery(CustomerQuery.FIND_BY_EMAIL)
                 .bind("email", email)
-                .map(rowMapper)
+                .mapTo<Customer>()
                 .findOne()
                 .orElse(null)
         }
@@ -112,7 +98,7 @@ class CustomerRepositoryImpl(private val jdbi: Jdbi) : CustomerRepository {
             LIMIT :limit OFFSET :offset
             """)
                 .bindMap(params + mapOf("limit" to limit, "offset" to offset))
-                .map(rowMapper)
+                .mapTo<Customer>()
                 .list()
         }
     }

@@ -36,20 +36,20 @@ data class OrderResponse(
             deliveryMethod: DeliveryMethod,
             couponCode: String?,
         ) = OrderResponse(
-            orderId = order.orderId,
-            reference = order.reference,
-            status = order.status.name,
-            paymentStatus = order.paymentStatus.name,
+            orderId = order.orderId!!,
+            reference = order.orderReference!!,
+            status = order.orderStatus!!.name,
+            paymentStatus = order.orderPaymentStatus!!.name,
             items = items.map(OrderItemResponse::from),
-            subtotal = order.subtotal,
+            subtotal = order.orderSubtotal!!,
             deliveryMethod = OrderDeliveryMethodResponse.from(deliveryMethod),
-            deliveryFee = order.deliveryFee,
+            deliveryFee = order.orderDeliveryFee!!,
             couponCode = couponCode,
-            discountAmount = order.discountAmount,
-            total = order.total,
+            discountAmount = order.orderDiscountAmount!!,
+            total = order.orderTotal!!,
             deliveryAddress = DeliveryAddressResponse.from(order.deliveryAddress),
             statusHistory = history.map(StatusChangeResponse::from),
-            createdAt = order.createdAt,
+            createdAt = order.orderCreatedAt!!,
         )
     }
 }
@@ -64,12 +64,12 @@ data class OrderItemResponse(
 ) {
     companion object {
         fun from(item: OrderItem) = OrderItemResponse(
-            productId = item.productId,
-            productName = item.productName,
-            productSku = item.productSku,
-            unitPrice = item.unitPrice,
-            quantity = item.quantity,
-            lineTotal = item.lineTotal,
+            productId = item.orderItemProductId!!,
+            productName = item.orderItemProductName!!,
+            productSku = item.orderItemProductSku!!,
+            unitPrice = item.orderItemUnitPrice!!,
+            quantity = item.orderItemQuantity!!,
+            lineTotal = item.orderItemLineTotal!!,
         )
     }
 }
@@ -106,9 +106,9 @@ data class StatusChangeResponse(
 ) {
     companion object {
         fun from(change: OrderStatusChange) = StatusChangeResponse(
-            status = change.toStatus.name,
-            changedAt = change.createdAt,
-            note = change.note,
+            status = change.orderStatusHistoryToStatus!!.name,
+            changedAt = change.orderStatusHistoryCreatedAt!!,
+            note = change.orderStatusHistoryNote,
         )
     }
 }

@@ -15,13 +15,13 @@ data class AdminCategoryResponse(
 ) {
     companion object {
         fun from(category: Category) = AdminCategoryResponse(
-            categoryId = category.categoryId,
-            name = category.name,
-            description = category.description,
-            status = category.status.name,
-            createdByAdminId = category.createdByAdminId,
-            createdAt = category.createdAt,
-            updatedAt = category.updatedAt,
+            categoryId = category.categoryId!!,
+            name = category.categoryName!!,
+            description = category.categoryDescription,
+            status = category.categoryStatus!!.name,
+            createdByAdminId = category.categoryCreatedByAdminId!!,
+            createdAt = category.categoryCreatedAt!!,
+            updatedAt = category.categoryUpdatedAt!!,
         )
     }
 }

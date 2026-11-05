@@ -125,37 +125,6 @@ interface OrderRepository {
 @Repository
 class OrderRepositoryImpl(private val jdbi: Jdbi) : OrderRepository {
 
-    private val rowMapper = RowMapper { rs, _ ->
-        Order(
-            orderId = rs.getLong("orderid"),
-            reference = rs.getString("orderreference"),
-            idempotencyKey = rs.getObject("orderidempotencykey", UUID::class.java),
-            customerId = rs.getLong("ordercustomerid"),
-            customerAddressId = rs.getObject("ordercustomeraddressid", Long::class.javaObjectType),
-            deliveryMethodId = rs.getInt("orderdeliverymethodid"),
-            couponId = rs.getObject("ordercouponid", Int::class.javaObjectType),
-            deliveryAddress = AddressDetails(
-                recipientName = rs.getString("orderrecipientname"),
-                recipientPhoneNumber = rs.getString("orderrecipientphonenumber"),
-                addressLine1 = rs.getString("orderaddressline1"),
-                addressLine2 = rs.getString("orderaddressline2"),
-                city = rs.getString("ordercity"),
-                state = rs.getString("orderstate"),
-                country = rs.getString("ordercountry"),
-                postalCode = rs.getString("orderpostalcode"),
-            ),
-            subtotal = rs.getBigDecimal("ordersubtotal"),
-            deliveryFee = rs.getBigDecimal("orderdeliveryfee"),
-            discountAmount = rs.getBigDecimal("orderdiscountamount"),
-            total = rs.getBigDecimal("ordertotal"),
-            status = OrderStatus.valueOf(rs.getString("orderstatus").uppercase()),
-            paymentStatus = OrderPaymentStatus.valueOf(rs.getString("orderpaymentstatus").uppercase()),
-            paidAt = rs.getObject("orderpaidat", LocalDateTime::class.java),
-            createdAt = rs.getObject("ordercreatedat", LocalDateTime::class.java),
-            updatedAt = rs.getObject("orderupdatedat", LocalDateTime::class.java),
-        )
-    }
-
     override fun insert(order: NewOrder): Long =
         jdbi.withHandle<Long, Exception> { handle ->
             handle.createQuery(OrderQuery.INSERT)
@@ -194,7 +163,7 @@ class OrderRepositoryImpl(private val jdbi: Jdbi) : OrderRepository {
             handle.createQuery(OrderQuery.FIND_BY_ID)
                 .bind("orderId", orderId)
                 .bind("customerId", customerId)
-                .map(rowMapper)
+                .mapTo<Order>()
                 .findOne()
                 .orElse(null)
         }
@@ -204,7 +173,7 @@ class OrderRepositoryImpl(private val jdbi: Jdbi) : OrderRepository {
             handle.createQuery(OrderQuery.LOCK_BY_REFERENCE)
                 .bind("reference", reference)
                 .bind("customerId", customerId)
-                .map(rowMapper)
+                .mapTo<Order>()
                 .findOne()
                 .orElse(null)
         }
@@ -213,7 +182,7 @@ class OrderRepositoryImpl(private val jdbi: Jdbi) : OrderRepository {
         jdbi.withHandle<Order?, Exception> { handle ->
             handle.createQuery(OrderQuery.LOCK_BY_ID)
                 .bind("orderId", orderId)
-                .map(rowMapper)
+                .mapTo<Order>()
                 .findOne()
                 .orElse(null)
         }
@@ -241,7 +210,7 @@ class OrderRepositoryImpl(private val jdbi: Jdbi) : OrderRepository {
             handle.createQuery(OrderQuery.FIND_BY_IDEMPOTENCY_KEY)
                 .bind("customerId", customerId)
                 .bind("idempotencyKey", idempotencyKey)
-                .map(rowMapper)
+                .mapTo<Order>()
                 .findOne()
                 .orElse(null)
         }
@@ -252,7 +221,7 @@ class OrderRepositoryImpl(private val jdbi: Jdbi) : OrderRepository {
                 .bind("customerId", customerId)
                 .bind("limit", limit)
                 .bind("offset", offset)
-                .map(rowMapper)
+                .mapTo<Order>()
                 .list()
         }
 
@@ -266,7 +235,7 @@ class OrderRepositoryImpl(private val jdbi: Jdbi) : OrderRepository {
 
     private val withCustomerMapper = RowMapper { rs, ctx ->
         OrderWithCustomer(
-            order = rowMapper.map(rs, ctx),
+            order = ctx.findRowMapperFor(Order::class.java).get().map(rs, ctx),
             customerName = "${rs.getString("customerfirstname")} ${rs.getString("customerlastname")}",
             customerEmail = rs.getString("customeremail"),
         )

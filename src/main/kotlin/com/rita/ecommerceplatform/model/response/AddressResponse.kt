@@ -19,7 +19,7 @@ data class AddressResponse(
 ) {
     companion object {
         fun from(address: CustomerAddress) = AddressResponse(
-            addressId = address.addressId,
+            addressId = address.customerAddressId!!,
             recipientName = address.details.recipientName,
             recipientPhoneNumber = address.details.recipientPhoneNumber,
             addressLine1 = address.details.addressLine1,
@@ -28,7 +28,7 @@ data class AddressResponse(
             state = address.details.state,
             country = address.details.country,
             postalCode = address.details.postalCode,
-            isDefault = address.isDefault,
+            isDefault = address.customerAddressIsDefault!!,
         )
     }
 }

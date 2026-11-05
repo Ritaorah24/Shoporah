@@ -19,10 +19,30 @@ data class AddressDetails(
 
 /** One row of public.ec_customer_address. Addresses are hard-deleted; orders keep a snapshot. */
 data class CustomerAddress(
-    val addressId: Long,
-    val customerId: Long,
-    val details: AddressDetails,
-    val isDefault: Boolean,
-    val createdAt: LocalDateTime,
-    val updatedAt: LocalDateTime,
-)
+    var customerAddressId: Long? = null,
+    var customerAddressCustomerId: Long? = null,
+    var customerAddressRecipientName: String? = null,
+    var customerAddressRecipientPhoneNumber: String? = null,
+    var customerAddressLine1: String? = null,
+    var customerAddressLine2: String? = null,
+    var customerAddressCity: String? = null,
+    var customerAddressState: String? = null,
+    var customerAddressCountry: String? = null,
+    var customerAddressPostalCode: String? = null,
+    var customerAddressIsDefault: Boolean? = null,
+    var customerAddressCreatedAt: LocalDateTime? = null,
+    var customerAddressUpdatedAt: LocalDateTime? = null,
+) {
+    /** The delivery details as one value. */
+    val details: AddressDetails
+        get() = AddressDetails(
+            recipientName = customerAddressRecipientName!!,
+            recipientPhoneNumber = customerAddressRecipientPhoneNumber!!,
+            addressLine1 = customerAddressLine1!!,
+            addressLine2 = customerAddressLine2,
+            city = customerAddressCity!!,
+            state = customerAddressState!!,
+            country = customerAddressCountry!!,
+            postalCode = customerAddressPostalCode,
+        )
+}

@@ -2,9 +2,9 @@ package com.rita.ecommerceplatform.repository.database
 
 import com.rita.ecommerceplatform.repository.database.query.OrderStatusHistoryQuery
 import org.jdbi.v3.core.Jdbi
+import org.jdbi.v3.core.kotlin.mapTo
 import com.rita.ecommerceplatform.model.entity.OrderStatus
 import com.rita.ecommerceplatform.model.entity.OrderStatusChange
-import org.jdbi.v3.core.mapper.RowMapper
 import org.springframework.stereotype.Repository
 import java.time.LocalDateTime
 
@@ -30,17 +30,6 @@ interface OrderStatusHistoryRepository {
 @Repository
 class OrderStatusHistoryRepositoryImpl(private val jdbi: Jdbi) : OrderStatusHistoryRepository {
 
-    private val rowMapper = RowMapper { rs, _ ->
-        OrderStatusChange(
-            fromStatus = rs.getString("orderstatushistoryfromstatus")?.let { OrderStatus.valueOf(it.uppercase()) },
-            toStatus = OrderStatus.valueOf(rs.getString("orderstatushistorytostatus").uppercase()),
-            note = rs.getString("orderstatushistorynote"),
-            createdAt = rs.getObject("orderstatushistorycreatedat", LocalDateTime::class.java),
-            changedByAdminId = rs.getObject("orderstatushistorychangedbyadminid", Int::class.javaObjectType),
-            changedByCustomerId = rs.getObject("orderstatushistorychangedbycustomerid", Long::class.javaObjectType),
-        )
-    }
-
     override fun insert(
         orderId: Long,
         fromStatus: OrderStatus?,
@@ -65,7 +54,7 @@ class OrderStatusHistoryRepositoryImpl(private val jdbi: Jdbi) : OrderStatusHist
         jdbi.withHandle<List<OrderStatusChange>, Exception> { handle ->
             handle.createQuery(OrderStatusHistoryQuery.FIND_BY_ORDER_ID)
                 .bind("orderId", orderId)
-                .map(rowMapper)
+                .mapTo<OrderStatusChange>()
                 .list()
         }
 }

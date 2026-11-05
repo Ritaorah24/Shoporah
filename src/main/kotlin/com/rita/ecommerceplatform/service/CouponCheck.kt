@@ -25,18 +25,18 @@ object CouponCheck {
      * `typedCode` is what the customer sent, for the messages; null coupon = no such code.
      */
     fun discountFor(coupon: Coupon?, typedCode: String, subtotal: BigDecimal, now: LocalDateTime): BigDecimal {
-        val code = coupon?.code ?: typedCode.uppercase()
-        if (coupon == null || coupon.status == CouponStatus.DELETED) refuse("Coupon $code does not exist")
+        val code = coupon?.couponCode ?: typedCode.uppercase()
+        if (coupon == null || coupon.couponStatus == CouponStatus.DELETED) refuse("Coupon $code does not exist")
         when (coupon.state(now)) {
             CouponState.INACTIVE -> refuse("Coupon $code is not active")
             CouponState.EXPIRED -> refuse("Coupon $code has expired")
             CouponState.EXHAUSTED -> refuse("Coupon $code has reached its usage limit")
-            CouponState.SCHEDULED -> refuse("Coupon $code can be used from ${coupon.startsAt!!.format(START_FORMAT)}")
+            CouponState.SCHEDULED -> refuse("Coupon $code can be used from ${coupon.couponStartsAt!!.format(START_FORMAT)}")
             CouponState.USABLE -> Unit
         }
-        if (subtotal < coupon.minimumOrderValue) {
+        if (subtotal < coupon.couponMinimumOrderValue) {
             refuse(
-                "Coupon $code needs a subtotal of at least ${NotificationMessages.naira(coupon.minimumOrderValue)} " +
+                "Coupon $code needs a subtotal of at least ${NotificationMessages.naira(coupon.couponMinimumOrderValue!!)} " +
                     "(yours is ${NotificationMessages.naira(subtotal)})"
             )
         }
@@ -45,14 +45,14 @@ object CouponCheck {
 
     /** Percentage (rounded to the kobo, capped at maxDiscountAmount) or fixed; never more than the subtotal. */
     fun amountOff(coupon: Coupon, subtotal: BigDecimal): BigDecimal {
-        val raw = when (coupon.discountType) {
+        val raw = when (coupon.couponDiscountType!!) {
             CouponDiscountType.PERCENTAGE -> {
-                val percent = (subtotal * coupon.discountValue).divide(HUNDRED, 2, RoundingMode.HALF_UP)
-                coupon.maxDiscountAmount?.let { percent.min(it) } ?: percent
+                val percent = (subtotal * coupon.couponDiscountValue!!).divide(HUNDRED, 2, RoundingMode.HALF_UP)
+                coupon.couponMaxDiscountAmount?.let { percent.min(it) } ?: percent
             }
-            CouponDiscountType.FIXED_AMOUNT -> coupon.discountValue
+            CouponDiscountType.FIXED_AMOUNT -> coupon.couponDiscountValue
         }
-        return raw.min(subtotal).setScale(2, RoundingMode.HALF_UP)
+        return raw!!.min(subtotal).setScale(2, RoundingMode.HALF_UP)
     }
 
     fun refuse(message: String): Nothing = throw BadRequestException(message, FIELD)

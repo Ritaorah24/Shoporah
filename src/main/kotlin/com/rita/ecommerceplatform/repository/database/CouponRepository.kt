@@ -8,7 +8,6 @@ import com.rita.ecommerceplatform.utility.startsWithPattern
 import com.rita.ecommerceplatform.model.entity.Coupon
 import com.rita.ecommerceplatform.model.entity.CouponDiscountType
 import com.rita.ecommerceplatform.model.entity.CouponStatus
-import org.jdbi.v3.core.mapper.RowMapper
 import org.springframework.stereotype.Repository
 import java.math.BigDecimal
 import java.time.LocalDateTime
@@ -69,31 +68,11 @@ interface CouponRepository {
 @Repository
 class CouponRepositoryImpl(private val jdbi: Jdbi) : CouponRepository {
 
-    private val rowMapper = RowMapper { rs, _ ->
-        Coupon(
-            couponId = rs.getInt("couponid"),
-            code = rs.getString("couponcode"),
-            description = rs.getString("coupondescription"),
-            discountType = CouponDiscountType.valueOf(rs.getString("coupondiscounttype").uppercase()),
-            discountValue = rs.getBigDecimal("coupondiscountvalue"),
-            maxDiscountAmount = rs.getBigDecimal("couponmaxdiscountamount"),
-            minimumOrderValue = rs.getBigDecimal("couponminimumordervalue"),
-            usageLimit = rs.getObject("couponusagelimit", Int::class.javaObjectType),
-            usageCount = rs.getInt("couponusagecount"),
-            startsAt = rs.getObject("couponstartsat", LocalDateTime::class.java),
-            expiresAt = rs.getObject("couponexpiresat", LocalDateTime::class.java),
-            createdByAdminId = rs.getInt("couponcreatedbyadminid"),
-            status = CouponStatus.valueOf(rs.getString("couponstatus").uppercase()),
-            createdAt = rs.getObject("couponcreatedat", LocalDateTime::class.java),
-            updatedAt = rs.getObject("couponupdatedat", LocalDateTime::class.java),
-        )
-    }
-
     override fun findById(couponId: Int): Coupon? =
         jdbi.withHandle<Coupon?, Exception> { handle ->
             handle.createQuery(CouponQuery.FIND_BY_ID)
                 .bind("id", couponId)
-                .map(rowMapper)
+                .mapTo<Coupon>()
                 .findOne()
                 .orElse(null)
         }
@@ -102,7 +81,7 @@ class CouponRepositoryImpl(private val jdbi: Jdbi) : CouponRepository {
         jdbi.withHandle<Coupon?, Exception> { handle ->
             handle.createQuery(CouponQuery.LOCK_BY_ID)
                 .bind("id", couponId)
-                .map(rowMapper)
+                .mapTo<Coupon>()
                 .findOne()
                 .orElse(null)
         }
@@ -111,7 +90,7 @@ class CouponRepositoryImpl(private val jdbi: Jdbi) : CouponRepository {
         jdbi.withHandle<Coupon?, Exception> { handle ->
             handle.createQuery(CouponQuery.FIND_BY_CODE)
                 .bind("code", code)
-                .map(rowMapper)
+                .mapTo<Coupon>()
                 .findOne()
                 .orElse(null)
         }
@@ -120,7 +99,7 @@ class CouponRepositoryImpl(private val jdbi: Jdbi) : CouponRepository {
         jdbi.withHandle<Coupon?, Exception> { handle ->
             handle.createQuery(CouponQuery.LOCK_BY_CODE)
                 .bind("code", code)
-                .map(rowMapper)
+                .mapTo<Coupon>()
                 .findOne()
                 .orElse(null)
         }
@@ -158,7 +137,7 @@ class CouponRepositoryImpl(private val jdbi: Jdbi) : CouponRepository {
             """)
                 .bindList("statuses", statuses.map { it.name })
                 .bindMap(params + mapOf("limit" to limit, "offset" to offset))
-                .map(rowMapper)
+                .mapTo<Coupon>()
                 .list()
         }
     }

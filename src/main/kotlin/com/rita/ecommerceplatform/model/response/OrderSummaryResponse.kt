@@ -17,13 +17,13 @@ data class OrderSummaryResponse(
 ) {
     companion object {
         fun from(order: Order, itemCount: Int) = OrderSummaryResponse(
-            orderId = order.orderId,
-            reference = order.reference,
-            status = order.status.name,
-            paymentStatus = order.paymentStatus.name,
-            total = order.total,
+            orderId = order.orderId!!,
+            reference = order.orderReference!!,
+            status = order.orderStatus!!.name,
+            paymentStatus = order.orderPaymentStatus!!.name,
+            total = order.orderTotal!!,
             itemCount = itemCount,
-            createdAt = order.createdAt,
+            createdAt = order.orderCreatedAt!!,
         )
     }
 }

@@ -6,36 +6,56 @@ import java.util.UUID
 
 /** One row of public.ec_order. The address and totals are a snapshot taken at checkout. */
 data class Order(
-    val orderId: Long,
-    val reference: String,
-    val idempotencyKey: UUID,
-    val customerId: Long,
-    val customerAddressId: Long?,
-    val deliveryMethodId: Int,
-    val couponId: Int?,
-    val deliveryAddress: AddressDetails,
-    val subtotal: BigDecimal,
-    val deliveryFee: BigDecimal,
-    val discountAmount: BigDecimal,
-    val total: BigDecimal,
-    val status: OrderStatus,
-    val paymentStatus: OrderPaymentStatus,
-    val paidAt: LocalDateTime?,
-    val createdAt: LocalDateTime,
-    val updatedAt: LocalDateTime,
-)
+    var orderId: Long? = null,
+    var orderReference: String? = null,
+    var orderIdempotencyKey: UUID? = null,
+    var orderCustomerId: Long? = null,
+    var orderCustomerAddressId: Long? = null,
+    var orderDeliveryMethodId: Int? = null,
+    var orderCouponId: Int? = null,
+    var orderRecipientName: String? = null,
+    var orderRecipientPhoneNumber: String? = null,
+    var orderAddressLine1: String? = null,
+    var orderAddressLine2: String? = null,
+    var orderCity: String? = null,
+    var orderState: String? = null,
+    var orderCountry: String? = null,
+    var orderPostalCode: String? = null,
+    var orderSubtotal: BigDecimal? = null,
+    var orderDeliveryFee: BigDecimal? = null,
+    var orderDiscountAmount: BigDecimal? = null,
+    var orderTotal: BigDecimal? = null,
+    var orderStatus: OrderStatus? = null,
+    var orderPaymentStatus: OrderPaymentStatus? = null,
+    var orderPaidAt: LocalDateTime? = null,
+    var orderCreatedAt: LocalDateTime? = null,
+    var orderUpdatedAt: LocalDateTime? = null,
+) {
+    /** The delivery details as one value. */
+    val deliveryAddress: AddressDetails
+        get() = AddressDetails(
+            recipientName = orderRecipientName!!,
+            recipientPhoneNumber = orderRecipientPhoneNumber!!,
+            addressLine1 = orderAddressLine1!!,
+            addressLine2 = orderAddressLine2,
+            city = orderCity!!,
+            state = orderState!!,
+            country = orderCountry!!,
+            postalCode = orderPostalCode,
+        )
+}
 
 /** One row of public.ec_order_item: the product's name, SKU and price as they were at checkout. */
 data class OrderItem(
-    val orderItemId: Long,
-    val orderId: Long,
-    val productId: Long,
-    val productName: String,
-    val productSku: String,
-    val unitPrice: BigDecimal,
-    val quantity: Int,
-    val lineTotal: BigDecimal,
-    val createdAt: LocalDateTime,
+    var orderItemId: Long? = null,
+    var orderItemOrderId: Long? = null,
+    var orderItemProductId: Long? = null,
+    var orderItemProductName: String? = null,
+    var orderItemProductSku: String? = null,
+    var orderItemUnitPrice: BigDecimal? = null,
+    var orderItemQuantity: Int? = null,
+    var orderItemLineTotal: BigDecimal? = null,
+    var orderItemCreatedAt: LocalDateTime? = null,
 )
 
 /**
@@ -43,12 +63,12 @@ data class OrderItem(
  * Only admin views show the actor (customers are not shown who made a change).
  */
 data class OrderStatusChange(
-    val fromStatus: OrderStatus?,
-    val toStatus: OrderStatus,
-    val note: String?,
-    val createdAt: LocalDateTime,
-    val changedByAdminId: Int? = null,
-    val changedByCustomerId: Long? = null,
+    var orderStatusHistoryFromStatus: OrderStatus? = null,
+    var orderStatusHistoryToStatus: OrderStatus? = null,
+    var orderStatusHistoryNote: String? = null,
+    var orderStatusHistoryCreatedAt: LocalDateTime? = null,
+    var orderStatusHistoryChangedByAdminId: Int? = null,
+    var orderStatusHistoryChangedByCustomerId: Long? = null,
 )
 
 /** Allowed values of ec_order.orderstatus (ck__ec_order__status). The allowed changes between them come in Step 4. */
@@ -59,16 +79,16 @@ enum class OrderPaymentStatus { UNPAID, PAID, REFUNDED }
 
 /** One row of public.ec_delivery_method. Orders keep their own copy of the fee (orderdeliveryfee). */
 data class DeliveryMethod(
-    val deliveryMethodId: Int,
-    val code: String,
-    val name: String,
-    val description: String?,
-    val fee: BigDecimal,
-    val estimatedMinDays: Int?,
-    val estimatedMaxDays: Int?,
-    val status: DeliveryMethodStatus,
-    val createdAt: LocalDateTime,
-    val updatedAt: LocalDateTime,
+    var deliveryMethodId: Int? = null,
+    var deliveryMethodCode: String? = null,
+    var deliveryMethodName: String? = null,
+    var deliveryMethodDescription: String? = null,
+    var deliveryMethodFee: BigDecimal? = null,
+    var deliveryMethodEstimatedMinDays: Int? = null,
+    var deliveryMethodEstimatedMaxDays: Int? = null,
+    var deliveryMethodStatus: DeliveryMethodStatus? = null,
+    var deliveryMethodCreatedAt: LocalDateTime? = null,
+    var deliveryMethodUpdatedAt: LocalDateTime? = null,
 )
 
 /** Allowed values of ec_delivery_method.deliverymethodstatus (ck__ec_deliverymethod__status). */

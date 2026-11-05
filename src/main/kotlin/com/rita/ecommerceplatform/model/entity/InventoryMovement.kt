@@ -7,16 +7,16 @@ import java.time.LocalDateTime
  * quantityChange is signed (+ in, - out); stockAfter is the product's stock right after.
  */
 data class InventoryMovement(
-    val movementId: Long,
-    val productId: Long,
-    val type: InventoryMovementType,
-    val quantityChange: Int,
-    val stockAfter: Int,
-    val orderId: Long?,
-    val orderReference: String?,
-    val adminId: Int?,
-    val note: String?,
-    val createdAt: LocalDateTime,
+    var inventoryMovementId: Long? = null,
+    var inventoryMovementProductId: Long? = null,
+    var inventoryMovementType: InventoryMovementType? = null,
+    var inventoryMovementQuantityChange: Int? = null,
+    var inventoryMovementStockAfter: Int? = null,
+    var inventoryMovementOrderId: Long? = null,
+    var orderReference: String? = null,
+    var inventoryMovementAdminId: Int? = null,
+    var inventoryMovementNote: String? = null,
+    var inventoryMovementCreatedAt: LocalDateTime? = null,
 )
 
 /**

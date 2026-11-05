@@ -8,28 +8,28 @@ import java.time.LocalDateTime
  * "Expired" and "exhausted" are not stored: state() works them out from the dates and the usage count.
  */
 data class Coupon(
-    val couponId: Int,
-    val code: String,
-    val description: String?,
-    val discountType: CouponDiscountType,
-    val discountValue: BigDecimal,
-    val maxDiscountAmount: BigDecimal?,
-    val minimumOrderValue: BigDecimal,
-    val usageLimit: Int?,
-    val usageCount: Int,
-    val startsAt: LocalDateTime?,
-    val expiresAt: LocalDateTime?,
-    val createdByAdminId: Int,
-    val status: CouponStatus,
-    val createdAt: LocalDateTime,
-    val updatedAt: LocalDateTime,
+    var couponId: Int? = null,
+    var couponCode: String? = null,
+    var couponDescription: String? = null,
+    var couponDiscountType: CouponDiscountType? = null,
+    var couponDiscountValue: BigDecimal? = null,
+    var couponMaxDiscountAmount: BigDecimal? = null,
+    var couponMinimumOrderValue: BigDecimal? = null,
+    var couponUsageLimit: Int? = null,
+    var couponUsageCount: Int? = null,
+    var couponStartsAt: LocalDateTime? = null,
+    var couponExpiresAt: LocalDateTime? = null,
+    var couponCreatedByAdminId: Int? = null,
+    var couponStatus: CouponStatus? = null,
+    var couponCreatedAt: LocalDateTime? = null,
+    var couponUpdatedAt: LocalDateTime? = null,
 ) {
-    /** Whether the coupon can be used at `now` (platform time), and if not, why. Valid from startsAt until just before expiresAt. */
+    /** Whether the coupon can be used at `now` (platform time), and if not, why. Valid from couponStartsAt until just before couponExpiresAt. */
     fun state(now: LocalDateTime): CouponState = when {
-        status != CouponStatus.ACTIVE -> CouponState.INACTIVE
-        expiresAt != null && !now.isBefore(expiresAt) -> CouponState.EXPIRED
-        usageLimit != null && usageCount >= usageLimit -> CouponState.EXHAUSTED
-        startsAt != null && now.isBefore(startsAt) -> CouponState.SCHEDULED
+        couponStatus != CouponStatus.ACTIVE -> CouponState.INACTIVE
+        couponExpiresAt != null && !now.isBefore(couponExpiresAt) -> CouponState.EXPIRED
+        couponUsageLimit != null && couponUsageCount!! >= couponUsageLimit!! -> CouponState.EXHAUSTED
+        couponStartsAt != null && now.isBefore(couponStartsAt) -> CouponState.SCHEDULED
         else -> CouponState.USABLE
     }
 }

@@ -25,17 +25,17 @@ data class AdminCustomerResponse(
 ) {
     companion object {
         fun from(customer: Customer, totals: CustomerOrderTotals) = AdminCustomerResponse(
-            customerId = customer.customerId,
-            firstName = customer.firstName,
-            lastName = customer.lastName,
-            email = customer.email,
-            phoneNumber = customer.phoneNumber,
-            status = customer.status.name,
+            customerId = customer.customerId!!,
+            firstName = customer.customerFirstName!!,
+            lastName = customer.customerLastName!!,
+            email = customer.customerEmail!!,
+            phoneNumber = customer.customerPhoneNumber,
+            status = customer.customerStatus!!.name,
             orderCount = totals.orderCount,
             paidOrderCount = totals.paidOrderCount,
             totalSpent = totals.totalSpent,
-            createdAt = customer.createdAt,
-            updatedAt = customer.updatedAt,
+            createdAt = customer.customerCreatedAt!!,
+            updatedAt = customer.customerUpdatedAt!!,
         )
     }
 }

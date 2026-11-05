@@ -7,21 +7,21 @@ import java.time.LocalDateTime
  * that was (SENT) or gave up (FAILED). Exactly one of customerId / adminId is set (ck__ec_notification__recipient).
  */
 data class Notification(
-    val notificationId: Long,
-    val customerId: Long?,
-    val adminId: Int?,
-    val orderId: Long?,
-    val channel: NotificationChannelType,
-    val type: NotificationType,
-    val recipient: String,
-    val subject: String?,
-    val body: String?,
-    val status: NotificationStatus,
-    val attemptCount: Int,
-    val sentAt: LocalDateTime?,
-    val failureReason: String?,
-    val createdAt: LocalDateTime,
-    val updatedAt: LocalDateTime,
+    var notificationId: Long? = null,
+    var notificationCustomerId: Long? = null,
+    var notificationAdminId: Int? = null,
+    var notificationOrderId: Long? = null,
+    var notificationChannel: NotificationChannelType? = null,
+    var notificationType: NotificationType? = null,
+    var notificationRecipient: String? = null,
+    var notificationSubject: String? = null,
+    var notificationBody: String? = null,
+    var notificationStatus: NotificationStatus? = null,
+    var notificationAttemptCount: Int? = null,
+    var notificationSentAt: LocalDateTime? = null,
+    var notificationFailureReason: String? = null,
+    var notificationCreatedAt: LocalDateTime? = null,
+    var notificationUpdatedAt: LocalDateTime? = null,
 )
 
 /** Allowed values of ec_notification.notificationchannel (ck__ec_notification__channel). */

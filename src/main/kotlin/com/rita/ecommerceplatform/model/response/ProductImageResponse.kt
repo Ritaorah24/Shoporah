@@ -9,6 +9,6 @@ data class ProductImageResponse(
     val primary: Boolean,
 ) {
     companion object {
-        fun from(image: ProductImage) = ProductImageResponse(url = image.url, altText = image.altText, primary = image.isPrimary)
+        fun from(image: ProductImage) = ProductImageResponse(url = image.productImageUrl!!, altText = image.productImageAltText, primary = image.productImageIsPrimary!!)
     }
 }

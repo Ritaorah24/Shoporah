@@ -72,7 +72,7 @@ class AuthService(
 
         val customer = customerRepository.findById(customerId)
             ?: error("Customer $customerId not found right after insert")
-        notificationService.queueToCustomer(NotificationType.REGISTRATION, customer, NotificationMessages.registration(customer.firstName))
+        notificationService.queueToCustomer(NotificationType.REGISTRATION, customer, NotificationMessages.registration(customer.customerFirstName!!))
         return CustomerProfileResponse.from(customer)
     }
 
@@ -81,22 +81,22 @@ class AuthService(
         val password = request.password!!
 
         val customer = customerRepository.findByEmail(email)
-        val auth = customer?.let { customerAuthRepository.findByCustomerId(it.customerId) }
+        val auth = customer?.let { customerAuthRepository.findByCustomerId(it.customerId!!) }
         if (customer == null || auth == null) {
             passwordEncoder.matches(password, dummyHash)
             throw InvalidCredentialsException()
         }
-        if (!passwordEncoder.matches(password, auth.passwordHash)) {
+        if (!passwordEncoder.matches(password, auth.customerAuthPasswordHash)) {
             throw InvalidCredentialsException()
         }
         // Status is checked only after the password, so strangers cannot probe which accounts are suspended.
-        if (customer.status != CustomerStatus.ACTIVE || auth.status != CustomerAuthStatus.ACTIVE) {
+        if (customer.customerStatus != CustomerStatus.ACTIVE || auth.customerAuthStatus != CustomerAuthStatus.ACTIVE) {
             throw AccountNotActiveException()
         }
 
-        customerAuthRepository.updateLastLoginAt(customer.customerId)
+        customerAuthRepository.updateLastLoginAt(customer.customerId!!)
         return TokenResponse(
-            accessToken = jwtService.createToken(customer.customerId, UserType.CUSTOMER, listOf("CUSTOMER")),
+            accessToken = jwtService.createToken(customer.customerId!!, UserType.CUSTOMER, listOf("CUSTOMER")),
             expiresIn = jwtService.expirySeconds,
         )
     }
@@ -113,19 +113,19 @@ class AuthService(
 
         val customer = customerRepository.findById(customerId) ?: throw InvalidCredentialsException("Customer account not found")
         val auth = customerAuthRepository.findByCustomerId(customerId)
-        if (auth == null || !passwordEncoder.matches(currentPassword, auth.passwordHash)) {
+        if (auth == null || !passwordEncoder.matches(currentPassword, auth.customerAuthPasswordHash)) {
             throw InvalidCredentialsException("Current password is incorrect")
         }
         // Same order as login: status is only revealed after a correct password.
-        if (customer.status != CustomerStatus.ACTIVE || auth.status != CustomerAuthStatus.ACTIVE) {
+        if (customer.customerStatus != CustomerStatus.ACTIVE || auth.customerAuthStatus != CustomerAuthStatus.ACTIVE) {
             throw AccountNotActiveException()
         }
-        if (passwordEncoder.matches(newPassword, auth.passwordHash)) {
+        if (passwordEncoder.matches(newPassword, auth.customerAuthPasswordHash)) {
             throw BadRequestException("New password must be different from the current password")
         }
 
         customerAuthRepository.updatePassword(customerId, passwordEncoder.encode(newPassword)!!)
-        notificationService.queueToCustomer(NotificationType.PASSWORD_CHANGED, customer, NotificationMessages.passwordChanged(customer.firstName))
+        notificationService.queueToCustomer(NotificationType.PASSWORD_CHANGED, customer, NotificationMessages.passwordChanged(customer.customerFirstName!!))
     }
 
     fun adminLogin(request: LoginRequest): TokenResponse {
@@ -133,9 +133,9 @@ class AuthService(
         val password = request.password!!
 
         val admin = adminRepository.findByEmail(email)
-        val auth = admin?.let { adminAuthRepository.findByAdminId(it.adminId) }
+        val auth = admin?.let { adminAuthRepository.findByAdminId(it.adminId!!) }
         // ec_admin_auth allows a NULL hash: treat it like an unknown email.
-        val hash = auth?.passwordHash
+        val hash = auth?.adminAuthPasswordHash
         if (admin == null || hash == null) {
             passwordEncoder.matches(password, dummyHash)
             throw InvalidCredentialsException()
@@ -143,12 +143,12 @@ class AuthService(
         if (!passwordEncoder.matches(password, hash)) {
             throw InvalidCredentialsException()
         }
-        if (admin.status != AdminStatus.ACTIVE || auth.status != AdminAuthStatus.ACTIVE) {
+        if (admin.adminStatus != AdminStatus.ACTIVE || auth.adminAuthStatus != AdminAuthStatus.ACTIVE) {
             throw AccountNotActiveException()
         }
 
-        adminAuthRepository.updateLastLoginAt(admin.adminId)
-        return adminTokenResponse(admin, mustChangePassword = auth.passwordStatus == PasswordStatus.MUST_CHANGE)
+        adminAuthRepository.updateLastLoginAt(admin.adminId!!)
+        return adminTokenResponse(admin, mustChangePassword = auth.adminAuthPasswordStatus == PasswordStatus.MUST_CHANGE)
     }
 
     /**
@@ -161,11 +161,11 @@ class AuthService(
 
         val admin = adminRepository.findById(adminId) ?: throw InvalidCredentialsException("Admin account not found")
         val auth = adminAuthRepository.findByAdminId(adminId)
-        val hash = auth?.passwordHash
+        val hash = auth?.adminAuthPasswordHash
         if (hash == null || !passwordEncoder.matches(currentPassword, hash)) {
             throw InvalidCredentialsException("Current password is incorrect")
         }
-        if (admin.status != AdminStatus.ACTIVE || auth.status != AdminAuthStatus.ACTIVE) {
+        if (admin.adminStatus != AdminStatus.ACTIVE || auth.adminAuthStatus != AdminAuthStatus.ACTIVE) {
             throw AccountNotActiveException()
         }
         // Otherwise MUST_CHANGE could be cleared by "changing" the temporary password to itself.
@@ -179,9 +179,9 @@ class AuthService(
 
     private fun adminTokenResponse(admin: Admin, mustChangePassword: Boolean) = TokenResponse(
         accessToken = jwtService.createToken(
-            subjectId = admin.adminId.toLong(),
+            subjectId = admin.adminId!!.toLong(),
             userType = UserType.ADMIN,
-            roles = listOf(admin.roleName.uppercase()),
+            roles = listOf(admin.roleName!!.uppercase()),
             mustChangePassword = mustChangePassword,
         ),
         expiresIn = jwtService.expirySeconds,

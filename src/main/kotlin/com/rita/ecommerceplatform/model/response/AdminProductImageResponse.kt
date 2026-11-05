@@ -15,13 +15,13 @@ data class AdminProductImageResponse(
 ) {
     companion object {
         fun from(image: ProductImage) = AdminProductImageResponse(
-            imageId = image.imageId,
-            productId = image.productId,
-            url = image.url,
-            altText = image.altText,
-            sortOrder = image.sortOrder,
-            primary = image.isPrimary,
-            createdAt = image.createdAt,
+            imageId = image.productImageId!!,
+            productId = image.productImageProductId!!,
+            url = image.productImageUrl!!,
+            altText = image.productImageAltText,
+            sortOrder = image.productImageSortOrder!!,
+            primary = image.productImageIsPrimary!!,
+            createdAt = image.productImageCreatedAt!!,
         )
     }
 }

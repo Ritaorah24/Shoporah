@@ -79,7 +79,7 @@ class AddressService(
     fun setDefault(customerId: Long, addressId: Long): AddressResponse {
         customerRepository.lockById(customerId)
         val address = find(customerId, addressId)
-        if (!address.isDefault) {
+        if (!address.customerAddressIsDefault!!) {
             addressRepository.clearDefault(customerId)
             addressRepository.markDefault(addressId, customerId)
         }

@@ -6,7 +6,6 @@ import org.jdbi.v3.core.kotlin.mapTo
 import com.rita.ecommerceplatform.model.entity.CategoryStatus
 import com.rita.ecommerceplatform.model.entity.ProductStatus
 import com.rita.ecommerceplatform.model.entity.WishlistItem
-import org.jdbi.v3.core.mapper.RowMapper
 import org.springframework.stereotype.Repository
 import java.time.LocalDateTime
 
@@ -40,21 +39,6 @@ interface WishlistRepository {
 @Repository
 class WishlistRepositoryImpl(private val jdbi: Jdbi) : WishlistRepository {
 
-    private val itemRowMapper = RowMapper { rs, _ ->
-        WishlistItem(
-            productId = rs.getLong("productid"),
-            productName = rs.getString("productname"),
-            price = rs.getBigDecimal("productprice"),
-            discountPrice = rs.getBigDecimal("productdiscountprice"),
-            sellingPrice = rs.getBigDecimal("productsellingprice"),
-            stockQuantity = rs.getInt("productstockquantity"),
-            lowStockThreshold = rs.getObject("productlowstockthreshold", Int::class.javaObjectType),
-            productStatus = ProductStatus.valueOf(rs.getString("productstatus").uppercase()),
-            categoryStatus = CategoryStatus.valueOf(rs.getString("categorystatus").uppercase()),
-            addedAt = rs.getObject("wishlistitemcreatedat", LocalDateTime::class.java),
-        )
-    }
-
     override fun findWishlistId(customerId: Long): Long? =
         jdbi.withHandle<Long?, Exception> { handle ->
             handle.createQuery(WishlistQuery.FIND_WISHLIST_ID)
@@ -77,7 +61,7 @@ class WishlistRepositoryImpl(private val jdbi: Jdbi) : WishlistRepository {
         jdbi.withHandle<List<WishlistItem>, Exception> { handle ->
             handle.createQuery(WishlistQuery.FIND_ITEMS)
                 .bind("wishlistId", wishlistId)
-                .map(itemRowMapper)
+                .mapTo<WishlistItem>()
                 .list()
         }
 

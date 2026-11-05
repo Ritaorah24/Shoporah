@@ -26,16 +26,16 @@ data class ProductResponse(
     companion object {
         /** `images` in the order the repository returns them (primary first). */
         fun from(product: Product, images: List<ProductImage>) = ProductResponse(
-            productId = product.productId,
-            name = product.name,
-            description = product.description,
-            categoryId = product.categoryId,
-            categoryName = product.categoryName,
-            price = product.price,
-            discountPrice = product.discountPrice,
-            sellingPrice = product.sellingPrice,
+            productId = product.productId!!,
+            name = product.productName!!,
+            description = product.productDescription,
+            categoryId = product.productCategoryId!!,
+            categoryName = product.categoryName!!,
+            price = product.productPrice!!,
+            discountPrice = product.productDiscountPrice,
+            sellingPrice = product.productSellingPrice!!,
             availability = product.availability().name,
-            primaryImageUrl = images.firstOrNull { it.isPrimary }?.url,
+            primaryImageUrl = images.firstOrNull { it.productImageIsPrimary!! }?.productImageUrl,
             images = images.map(ProductImageResponse::from),
         )
     }

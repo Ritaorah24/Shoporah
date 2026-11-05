@@ -65,7 +65,7 @@ class AdminOrderService(
         val safeSize = Paging.size(size)
         val rows = orderRepository.findAllWithCustomer(search, safeSize, Paging.offset(safePage, safeSize))
         // One grouped query for the whole page, not one per order.
-        val quantities = orderItemRepository.quantitiesByOrderIds(rows.map { it.order.orderId })
+        val quantities = orderItemRepository.quantitiesByOrderIds(rows.map { it.order.orderId!! })
         return PageResponse.of(
             rows.map { AdminOrderSummaryResponse.from(it, quantities[it.order.orderId] ?: 0) },
             safePage,
@@ -85,14 +85,14 @@ class AdminOrderService(
     fun updateStatus(adminId: Int, orderId: Long, request: UpdateOrderStatusRequest): AdminOrderResponse {
         val order = orderRepository.lockById(orderId) ?: throw orderNotFound()
         val to = OrderStatus.valueOf(request.status!!.uppercase())
-        OrderStatusRules.ensureCanChange(order.status, to, OrderStatusActor.ADMIN)
+        OrderStatusRules.ensureCanChange(order.orderStatus!!, to, OrderStatusActor.ADMIN)
 
         // The lock makes this always 1; the WHERE on the old status is a second guard.
-        check(orderRepository.updateStatus(orderId, order.status, to) == 1) { "Order $orderId changed while locked" }
+        check(orderRepository.updateStatus(orderId, order.orderStatus!!, to) == 1) { "Order $orderId changed while locked" }
         val note = request.note?.trim()?.ifEmpty { null }
         statusHistoryRepository.insert(
             orderId = orderId,
-            fromStatus = order.status,
+            fromStatus = order.orderStatus,
             toStatus = to,
             adminId = adminId,
             customerId = null,
@@ -109,7 +109,7 @@ class AdminOrderService(
      */
     fun cancel(adminId: Int, orderId: Long, request: AdminCancelOrderRequest): AdminOrderResponse {
         val order = orderRepository.findByIdWithCustomer(orderId)?.order ?: throw orderNotFound()
-        if (order.status == OrderStatus.PENDING && orderCancellation.settleOpenPayment(orderId)) {
+        if (order.orderStatus == OrderStatus.PENDING && orderCancellation.settleOpenPayment(orderId)) {
             throw ConflictException("This order was just paid; check it and cancel again if needed")
         }
         orderCancellation.cancelByAdmin(adminId, orderId, request.reason!!.trim())
@@ -119,34 +119,34 @@ class AdminOrderService(
     // Shipped and delivered tell the customer; PROCESSING has no email (no notification type for it).
     private fun notifyCustomer(order: Order, to: OrderStatus, note: String?) {
         if (to != OrderStatus.SHIPPED && to != OrderStatus.DELIVERED) return
-        val customer = customerRepository.findById(order.customerId)
-            ?: throw IllegalStateException("Customer ${order.customerId} of order ${order.reference} does not exist")
+        val customer = customerRepository.findById(order.orderCustomerId!!)
+            ?: throw IllegalStateException("Customer ${order.orderCustomerId} of order ${order.orderReference} does not exist")
         if (to == OrderStatus.SHIPPED) {
             notificationService.queueToCustomer(
                 NotificationType.ORDER_SHIPPED, customer,
-                NotificationMessages.orderShipped(customer.firstName, order.reference, note), orderId = order.orderId,
+                NotificationMessages.orderShipped(customer.customerFirstName!!, order.orderReference!!, note), orderId = order.orderId,
             )
         } else {
             notificationService.queueToCustomer(
                 NotificationType.ORDER_DELIVERED, customer,
-                NotificationMessages.orderDelivered(customer.firstName, order.reference), orderId = order.orderId,
+                NotificationMessages.orderDelivered(customer.customerFirstName!!, order.orderReference!!), orderId = order.orderId,
             )
         }
     }
 
     private fun toResponse(row: OrderWithCustomer): AdminOrderResponse {
-        val refunds = refundRepository.findByOrder(row.order.orderId)
+        val refunds = refundRepository.findByOrder(row.order.orderId!!)
         return AdminOrderResponse.from(
             row,
-            orderItemRepository.findByOrderId(row.order.orderId),
-            statusHistoryRepository.findByOrderId(row.order.orderId),
-            paymentRepository.findByOrder(row.order.orderId),
+            orderItemRepository.findByOrderId(row.order.orderId!!),
+            statusHistoryRepository.findByOrderId(row.order.orderId!!),
+            paymentRepository.findByOrder(row.order.orderId!!),
             refunds,
-            OrderStatusRules.nextStatuses(row.order.status, OrderStatusActor.ADMIN).filter { it in FULFILMENT_STATUSES },
-            deliveryMethodRepository.findById(row.order.deliveryMethodId)!!,
-            row.order.couponId?.let { couponRepository.findById(it)!!.code },
-            canCancel = OrderStatus.CANCELLED in OrderStatusRules.nextStatuses(row.order.status, OrderStatusActor.ADMIN),
-            canRefund = RefundService.isRefundable(row.order) && refunds.all { it.status == RefundStatus.FAILED },
+            OrderStatusRules.nextStatuses(row.order.orderStatus!!, OrderStatusActor.ADMIN).filter { it in FULFILMENT_STATUSES },
+            deliveryMethodRepository.findById(row.order.orderDeliveryMethodId!!)!!,
+            row.order.orderCouponId?.let { couponRepository.findById(it)!!.couponCode },
+            canCancel = OrderStatus.CANCELLED in OrderStatusRules.nextStatuses(row.order.orderStatus!!, OrderStatusActor.ADMIN),
+            canRefund = RefundService.isRefundable(row.order) && refunds.all { it.refundStatus == RefundStatus.FAILED },
         )
     }
 

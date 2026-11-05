@@ -5,7 +5,6 @@ import org.jdbi.v3.core.Jdbi
 import org.jdbi.v3.core.kotlin.mapTo
 import com.rita.ecommerceplatform.model.entity.Payment
 import com.rita.ecommerceplatform.model.entity.PaymentStatus
-import org.jdbi.v3.core.mapper.RowMapper
 import org.springframework.stereotype.Repository
 import java.math.BigDecimal
 import java.time.LocalDateTime
@@ -71,26 +70,6 @@ interface PaymentRepository {
 @Repository
 class PaymentRepositoryImpl(private val jdbi: Jdbi) : PaymentRepository {
 
-    private val rowMapper = RowMapper { rs, _ ->
-        Payment(
-            paymentId = rs.getLong("paymentid"),
-            orderId = rs.getLong("paymentorderid"),
-            reference = rs.getString("paymentreference"),
-            provider = rs.getString("paymentprovider"),
-            providerTransactionId = rs.getString("paymentprovidertransactionid"),
-            amount = rs.getBigDecimal("paymentamount"),
-            currency = rs.getString("paymentcurrency"),
-            status = PaymentStatus.valueOf(rs.getString("paymentstatus").uppercase()),
-            authorizationUrl = rs.getString("paymentauthorizationurl"),
-            channel = rs.getString("paymentchannel"),
-            gatewayResponse = rs.getString("paymentgatewayresponse"),
-            paidAt = rs.getObject("paymentpaidat", LocalDateTime::class.java),
-            verifiedAt = rs.getObject("paymentverifiedat", LocalDateTime::class.java),
-            createdAt = rs.getObject("paymentcreatedat", LocalDateTime::class.java),
-            updatedAt = rs.getObject("paymentupdatedat", LocalDateTime::class.java),
-        )
-    }
-
     override fun insert(orderId: Long, reference: String, provider: String, amount: BigDecimal, currency: String): Long =
         jdbi.withHandle<Long, Exception> { handle ->
             handle.createQuery(PaymentQuery.INSERT)
@@ -107,7 +86,7 @@ class PaymentRepositoryImpl(private val jdbi: Jdbi) : PaymentRepository {
         jdbi.withHandle<Payment?, Exception> { handle ->
             handle.createQuery(PaymentQuery.FIND_BY_ID)
                 .bind("paymentId", paymentId)
-                .map(rowMapper)
+                .mapTo<Payment>()
                 .findOne()
                 .orElse(null)
         }
@@ -117,7 +96,7 @@ class PaymentRepositoryImpl(private val jdbi: Jdbi) : PaymentRepository {
             handle.createQuery(PaymentQuery.FIND_BY_REFERENCE_FOR_CUSTOMER)
                 .bind("reference", reference)
                 .bind("customerId", customerId)
-                .map(rowMapper)
+                .mapTo<Payment>()
                 .findOne()
                 .orElse(null)
         }
@@ -126,7 +105,7 @@ class PaymentRepositoryImpl(private val jdbi: Jdbi) : PaymentRepository {
         jdbi.withHandle<Payment?, Exception> { handle ->
             handle.createQuery(PaymentQuery.FIND_BY_REFERENCE)
                 .bind("reference", reference)
-                .map(rowMapper)
+                .mapTo<Payment>()
                 .findOne()
                 .orElse(null)
         }
@@ -135,7 +114,7 @@ class PaymentRepositoryImpl(private val jdbi: Jdbi) : PaymentRepository {
         jdbi.withHandle<Payment?, Exception> { handle ->
             handle.createQuery(PaymentQuery.LOCK_BY_ID)
                 .bind("paymentId", paymentId)
-                .map(rowMapper)
+                .mapTo<Payment>()
                 .findOne()
                 .orElse(null)
         }
@@ -144,7 +123,7 @@ class PaymentRepositoryImpl(private val jdbi: Jdbi) : PaymentRepository {
         jdbi.withHandle<Payment?, Exception> { handle ->
             handle.createQuery(PaymentQuery.FIND_SUCCESSFUL_FOR_ORDER)
                 .bind("orderId", orderId)
-                .map(rowMapper)
+                .mapTo<Payment>()
                 .findOne()
                 .orElse(null)
         }
@@ -153,7 +132,7 @@ class PaymentRepositoryImpl(private val jdbi: Jdbi) : PaymentRepository {
         jdbi.withHandle<List<Payment>, Exception> { handle ->
             handle.createQuery(PaymentQuery.FIND_BY_ORDER)
                 .bind("orderId", orderId)
-                .map(rowMapper)
+                .mapTo<Payment>()
                 .list()
         }
 
@@ -161,7 +140,7 @@ class PaymentRepositoryImpl(private val jdbi: Jdbi) : PaymentRepository {
         jdbi.withHandle<Payment?, Exception> { handle ->
             handle.createQuery(PaymentQuery.FIND_OPEN_ATTEMPT)
                 .bind("orderId", orderId)
-                .map(rowMapper)
+                .mapTo<Payment>()
                 .findOne()
                 .orElse(null)
         }

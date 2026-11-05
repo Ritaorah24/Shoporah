@@ -7,7 +7,6 @@ import com.rita.ecommerceplatform.model.entity.Notification
 import com.rita.ecommerceplatform.model.entity.NotificationChannelType
 import com.rita.ecommerceplatform.model.entity.NotificationStatus
 import com.rita.ecommerceplatform.model.entity.NotificationType
-import org.jdbi.v3.core.mapper.RowMapper
 import org.springframework.stereotype.Repository
 import java.time.LocalDateTime
 
@@ -61,26 +60,6 @@ interface NotificationRepository {
 
 @Repository
 class NotificationRepositoryImpl(private val jdbi: Jdbi) : NotificationRepository {
-
-    private val rowMapper = RowMapper { rs, _ ->
-        Notification(
-            notificationId = rs.getLong("notificationid"),
-            customerId = rs.getObject("notificationcustomerid", java.lang.Long::class.java)?.toLong(),
-            adminId = rs.getObject("notificationadminid", Integer::class.java)?.toInt(),
-            orderId = rs.getObject("notificationorderid", java.lang.Long::class.java)?.toLong(),
-            channel = NotificationChannelType.valueOf(rs.getString("notificationchannel").uppercase()),
-            type = NotificationType.valueOf(rs.getString("notificationtype").uppercase()),
-            recipient = rs.getString("notificationrecipient"),
-            subject = rs.getString("notificationsubject"),
-            body = rs.getString("notificationbody"),
-            status = NotificationStatus.valueOf(rs.getString("notificationstatus").uppercase()),
-            attemptCount = rs.getInt("notificationattemptcount"),
-            sentAt = rs.getObject("notificationsentat", LocalDateTime::class.java),
-            failureReason = rs.getString("notificationfailurereason"),
-            createdAt = rs.getObject("notificationcreatedat", LocalDateTime::class.java),
-            updatedAt = rs.getObject("notificationupdatedat", LocalDateTime::class.java),
-        )
-    }
 
     override fun insertPending(
         type: NotificationType,
@@ -139,7 +118,7 @@ class NotificationRepositoryImpl(private val jdbi: Jdbi) : NotificationRepositor
         jdbi.withHandle<Notification?, Exception> { handle ->
             handle.createQuery(NotificationQuery.FIND_BY_ID)
                 .bind("id", notificationId)
-                .map(rowMapper)
+                .mapTo<Notification>()
                 .findOne()
                 .orElse(null)
         }
@@ -149,7 +128,7 @@ class NotificationRepositoryImpl(private val jdbi: Jdbi) : NotificationRepositor
             handle.createQuery(NotificationQuery.LOCK_NEXT_DUE)
                 .bind("pending", NotificationStatus.PENDING.name)
                 .bind("retryDelaySeconds", retryDelaySeconds)
-                .map(rowMapper)
+                .mapTo<Notification>()
                 .findOne()
                 .orElse(null)
         }

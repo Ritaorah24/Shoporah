@@ -5,7 +5,6 @@ import org.jdbi.v3.core.Jdbi
 import org.jdbi.v3.core.kotlin.mapTo
 import com.rita.ecommerceplatform.model.entity.DeliveryMethod
 import com.rita.ecommerceplatform.model.entity.DeliveryMethodStatus
-import org.jdbi.v3.core.mapper.RowMapper
 import org.springframework.stereotype.Repository
 import java.math.BigDecimal
 import java.time.LocalDateTime
@@ -53,26 +52,11 @@ interface DeliveryMethodRepository {
 @Repository
 class DeliveryMethodRepositoryImpl(private val jdbi: Jdbi) : DeliveryMethodRepository {
 
-    private val rowMapper = RowMapper { rs, _ ->
-        DeliveryMethod(
-            deliveryMethodId = rs.getInt("deliverymethodid"),
-            code = rs.getString("deliverymethodcode"),
-            name = rs.getString("deliverymethodname"),
-            description = rs.getString("deliverymethoddescription"),
-            fee = rs.getBigDecimal("deliverymethodfee"),
-            estimatedMinDays = rs.getObject("deliverymethodestimatedmindays", Int::class.javaObjectType),
-            estimatedMaxDays = rs.getObject("deliverymethodestimatedmaxdays", Int::class.javaObjectType),
-            status = DeliveryMethodStatus.valueOf(rs.getString("deliverymethodstatus").uppercase()),
-            createdAt = rs.getObject("deliverymethodcreatedat", LocalDateTime::class.java),
-            updatedAt = rs.getObject("deliverymethodupdatedat", LocalDateTime::class.java),
-        )
-    }
-
     override fun findActiveByCode(code: String): DeliveryMethod? =
         jdbi.withHandle<DeliveryMethod?, Exception> { handle ->
             handle.createQuery(DeliveryMethodQuery.FIND_ACTIVE_BY_CODE)
                 .bind("code", code)
-                .map(rowMapper)
+                .mapTo<DeliveryMethod>()
                 .findOne()
                 .orElse(null)
         }
@@ -81,7 +65,7 @@ class DeliveryMethodRepositoryImpl(private val jdbi: Jdbi) : DeliveryMethodRepos
         jdbi.withHandle<DeliveryMethod?, Exception> { handle ->
             handle.createQuery(DeliveryMethodQuery.FIND_BY_ID)
                 .bind("id", deliveryMethodId)
-                .map(rowMapper)
+                .mapTo<DeliveryMethod>()
                 .findOne()
                 .orElse(null)
         }
@@ -89,14 +73,14 @@ class DeliveryMethodRepositoryImpl(private val jdbi: Jdbi) : DeliveryMethodRepos
     override fun findAll(): List<DeliveryMethod> =
         jdbi.withHandle<List<DeliveryMethod>, Exception> { handle ->
             handle.createQuery(DeliveryMethodQuery.FIND_ALL)
-                .map(rowMapper)
+                .mapTo<DeliveryMethod>()
                 .list()
         }
 
     override fun findAllActive(): List<DeliveryMethod> =
         jdbi.withHandle<List<DeliveryMethod>, Exception> { handle ->
             handle.createQuery(DeliveryMethodQuery.FIND_ALL_ACTIVE)
-                .map(rowMapper)
+                .mapTo<DeliveryMethod>()
                 .list()
         }
 

@@ -56,11 +56,11 @@ class PasswordResetService(
      */
     fun requestReset(request: ForgotPasswordRequest) {
         val customer = customerRepository.findByEmail(request.email!!.lowercase()) ?: return
-        val auth = customerAuthRepository.findByCustomerId(customer.customerId) ?: return
-        if (customer.status != CustomerStatus.ACTIVE || auth.status != CustomerAuthStatus.ACTIVE) return
+        val auth = customerAuthRepository.findByCustomerId(customer.customerId!!) ?: return
+        if (customer.customerStatus != CustomerStatus.ACTIVE || auth.customerAuthStatus != CustomerAuthStatus.ACTIVE) return
 
         val token = newToken()
-        if (customerAuthRepository.saveResetToken(customer.customerId, hash(token), tokenMinutes, cooldownSeconds) == 0) {
+        if (customerAuthRepository.saveResetToken(customer.customerId!!, hash(token), tokenMinutes, cooldownSeconds) == 0) {
             return // a link was sent less than cooldownSeconds ago
         }
         emailExecutor.execute { sendResetEmail(customer, token) }
@@ -74,21 +74,21 @@ class PasswordResetService(
     fun resetPassword(request: ResetPasswordRequest) {
         val tokenHash = hash(request.token!!)
         val auth = customerAuthRepository.findByValidResetTokenHash(tokenHash) ?: throw invalidLink()
-        val customer = customerRepository.findById(auth.customerId) ?: throw invalidLink()
+        val customer = customerRepository.findById(auth.customerAuthCustomerId!!) ?: throw invalidLink()
         // Only someone holding a valid link gets this far, so revealing the status here is fine.
-        if (customer.status != CustomerStatus.ACTIVE || auth.status != CustomerAuthStatus.ACTIVE) {
+        if (customer.customerStatus != CustomerStatus.ACTIVE || auth.customerAuthStatus != CustomerAuthStatus.ACTIVE) {
             throw AccountNotActiveException()
         }
         if (customerAuthRepository.resetPassword(tokenHash, passwordEncoder.encode(request.newPassword!!)!!) != 1) {
             throw invalidLink()
         }
-        notificationService.queueToCustomer(NotificationType.PASSWORD_CHANGED, customer, NotificationMessages.passwordChanged(customer.firstName))
+        notificationService.queueToCustomer(NotificationType.PASSWORD_CHANGED, customer, NotificationMessages.passwordChanged(customer.customerFirstName!!))
     }
 
     private fun sendResetEmail(customer: Customer, token: String) {
         val subject = "Reset your Shoporah password"
         val body = """
-            Hi ${customer.firstName},
+            Hi ${customer.customerFirstName},
 
             We received a request to reset your password. Use this link within $tokenMinutes minutes:
             $resetUrl?token=$token
@@ -97,7 +97,7 @@ class PasswordResetService(
         """.trimIndent()
 
         val (status, reason) = try {
-            channel.send(customer.email, subject, body)
+            channel.send(customer.customerEmail!!, subject, body)
             NotificationStatus.SENT to null
         } catch (e: Exception) {
             log.warn("Password reset email for customer {} failed: {}", customer.customerId, e.message)
@@ -107,7 +107,7 @@ class PasswordResetService(
             notificationRepository.insertLog(
                 type = NotificationType.PASSWORD_RESET,
                 channel = channel.type,
-                recipient = customer.email,
+                recipient = customer.customerEmail!!,
                 subject = subject,
                 body = LOG_BODY,
                 status = status,

@@ -22,29 +22,29 @@ object NotificationMessages {
     )
 
     fun orderPlaced(firstName: String, order: Order, items: List<OrderItem>) = EmailMessage(
-        subject = "We received your order ${order.reference}",
+        subject = "We received your order ${order.orderReference}",
         body = buildString {
             appendLine("Hi $firstName,")
             appendLine()
-            appendLine("Thank you for your order ${order.reference}.")
+            appendLine("Thank you for your order ${order.orderReference}.")
             appendLine()
-            items.forEach { appendLine("- ${it.productName} x ${it.quantity}: ${naira(it.lineTotal)}") }
+            items.forEach { appendLine("- ${it.orderItemProductName} x ${it.orderItemQuantity}: ${naira(it.orderItemLineTotal!!)}") }
             appendLine()
-            appendLine("Subtotal: ${naira(order.subtotal)}")
-            appendLine("Delivery: ${naira(order.deliveryFee)}")
-            if (order.discountAmount.signum() > 0) appendLine("Discount: -${naira(order.discountAmount)}")
-            appendLine("Total: ${naira(order.total)}")
+            appendLine("Subtotal: ${naira(order.orderSubtotal!!)}")
+            appendLine("Delivery: ${naira(order.orderDeliveryFee!!)}")
+            if (order.orderDiscountAmount!!.signum() > 0) appendLine("Discount: -${naira(order.orderDiscountAmount!!)}")
+            appendLine("Total: ${naira(order.orderTotal!!)}")
             appendLine()
             append("Your order is waiting for payment. We will let you know as soon as the payment is confirmed.")
         },
     )
 
     fun paymentConfirmed(firstName: String, order: Order) = EmailMessage(
-        subject = "Payment received for order ${order.reference}",
+        subject = "Payment received for order ${order.orderReference}",
         body = """
             Hi $firstName,
 
-            We received your payment of ${naira(order.total)} for order ${order.reference}.
+            We received your payment of ${naira(order.orderTotal!!)} for order ${order.orderReference}.
             Your order is confirmed and we are getting it ready.
         """.trimIndent(),
     )
@@ -82,14 +82,14 @@ object NotificationMessages {
 
     /** Cancelled by an admin or by the system. `paid` decides whether the customer is told about a refund. */
     fun orderCancelled(firstName: String, order: Order, reason: String, paid: Boolean) = EmailMessage(
-        subject = "Your order ${order.reference} was cancelled",
+        subject = "Your order ${order.orderReference} was cancelled",
         body = buildString {
             appendLine("Hi $firstName,")
             appendLine()
-            appendLine("We are sorry, your order ${order.reference} was cancelled.")
+            appendLine("We are sorry, your order ${order.orderReference} was cancelled.")
             appendLine("Reason: $reason")
             appendLine()
-            append(if (paid) "Your payment of ${naira(order.total)} will be refunded." else "You were not charged.")
+            append(if (paid) "Your payment of ${naira(order.orderTotal!!)} will be refunded." else "You were not charged.")
         },
     )
 

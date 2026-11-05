@@ -41,8 +41,8 @@ class CouponService(
         val coupon = couponRepository.findByCode(code)
         val discount = CouponCheck.discountFor(coupon, code, cart.subtotal, now())
         return CouponPreviewResponse(
-            code = coupon!!.code,
-            description = coupon.description,
+            code = coupon!!.couponCode!!,
+            description = coupon.couponDescription,
             subtotal = cart.subtotal,
             discountAmount = discount,
             subtotalAfterDiscount = cart.subtotal - discount,
@@ -106,23 +106,23 @@ class CouponService(
     @Transactional
     fun update(couponId: Int, request: UpdateCouponRequest): AdminCouponResponse {
         // Locked, so a redemption (Step 2) cannot raise the usage count between this check and the update.
-        val existing = couponRepository.lockById(couponId)?.takeUnless { it.status == CouponStatus.DELETED }
+        val existing = couponRepository.lockById(couponId)?.takeUnless { it.couponStatus == CouponStatus.DELETED }
             ?: throw couponNotFound()
         val terms = CouponTerms(
-            description = if (request.description != null) request.description.blankToNull() else existing.description,
-            discountType = request.discountType?.let { CouponDiscountType.valueOf(it.uppercase()) } ?: existing.discountType,
-            discountValue = request.discountValue ?: existing.discountValue,
-            maxDiscountAmount = if (request.clearMaxDiscountAmount == true) null else request.maxDiscountAmount ?: existing.maxDiscountAmount,
-            minimumOrderValue = request.minimumOrderValue ?: existing.minimumOrderValue,
-            usageLimit = if (request.clearUsageLimit == true) null else request.usageLimit ?: existing.usageLimit,
-            startsAt = if (request.clearStartsAt == true) null else request.startsAt ?: existing.startsAt,
-            expiresAt = if (request.clearExpiresAt == true) null else request.expiresAt ?: existing.expiresAt,
+            description = if (request.description != null) request.description.blankToNull() else existing.couponDescription,
+            discountType = request.discountType?.let { CouponDiscountType.valueOf(it.uppercase()) } ?: existing.couponDiscountType!!,
+            discountValue = request.discountValue ?: existing.couponDiscountValue!!,
+            maxDiscountAmount = if (request.clearMaxDiscountAmount == true) null else request.maxDiscountAmount ?: existing.couponMaxDiscountAmount,
+            minimumOrderValue = request.minimumOrderValue ?: existing.couponMinimumOrderValue!!,
+            usageLimit = if (request.clearUsageLimit == true) null else request.usageLimit ?: existing.couponUsageLimit,
+            startsAt = if (request.clearStartsAt == true) null else request.startsAt ?: existing.couponStartsAt,
+            expiresAt = if (request.clearExpiresAt == true) null else request.expiresAt ?: existing.couponExpiresAt,
         )
         checkTerms(terms)
         // Only a newly sent expiry must be in the future; an expired coupon can still have its other fields edited.
         request.expiresAt?.let(::checkNotPast)
-        if (terms.usageLimit != null && terms.usageLimit < existing.usageCount) {
-            throw ConflictException("Already used ${existing.usageCount} times, so usageLimit cannot be lower than that")
+        if (terms.usageLimit != null && terms.usageLimit < existing.couponUsageCount!!) {
+            throw ConflictException("Already used ${existing.couponUsageCount} times, so usageLimit cannot be lower than that")
         }
 
         couponRepository.update(couponId, terms)
@@ -161,7 +161,7 @@ class CouponService(
     }
 
     private fun findNotDeleted(couponId: Int): Coupon =
-        couponRepository.findById(couponId)?.takeUnless { it.status == CouponStatus.DELETED } ?: throw couponNotFound()
+        couponRepository.findById(couponId)?.takeUnless { it.couponStatus == CouponStatus.DELETED } ?: throw couponNotFound()
 
     private fun couponNotFound() = NotFoundException("Coupon not found")
 

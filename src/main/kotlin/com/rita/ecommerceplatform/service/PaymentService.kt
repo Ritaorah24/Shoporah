@@ -55,28 +55,28 @@ class PaymentService(
      */
     fun initialize(customerId: Long, orderReference: String): PaymentInitResult {
         val start = transactionTemplate.execute { startAttempt(customerId, orderReference) }!!
-        if (!start.isNew) return PaymentInitResult(PaymentInitResponse.from(start.payment, start.order.reference), created = false)
+        if (!start.isNew) return PaymentInitResult(PaymentInitResponse.from(start.payment, start.order.orderReference!!), created = false)
 
         // Outside any transaction: Paystack can take up to 10 s, and no lock is held meanwhile.
         val page = try {
             paymentGateway.initialize(
                 GatewayInitRequest(
-                    reference = start.payment.reference,
+                    reference = start.payment.paymentReference!!,
                     email = start.email!!,
-                    amountKobo = toKobo(start.payment.amount),
-                    currency = start.payment.currency,
+                    amountKobo = toKobo(start.payment.paymentAmount!!),
+                    currency = start.payment.paymentCurrency!!,
                     callbackUrl = callbackUrl.ifBlank { null },
                 ),
             )
         } catch (e: Exception) {
             // One statement, so it commits on its own. The order can then be paid with a new attempt.
-            paymentRepository.markFailed(start.payment.paymentId, NOT_STARTED)
+            paymentRepository.markFailed(start.payment.paymentId!!, NOT_STARTED)
             throw e
         }
 
-        paymentRepository.saveAuthorizationUrl(start.payment.paymentId, page.authorizationUrl)
-        val payment = paymentRepository.findById(start.payment.paymentId)!!
-        return PaymentInitResult(PaymentInitResponse.from(payment, start.order.reference), created = true)
+        paymentRepository.saveAuthorizationUrl(start.payment.paymentId!!, page.authorizationUrl)
+        val payment = paymentRepository.findById(start.payment.paymentId!!)!!
+        return PaymentInitResult(PaymentInitResponse.from(payment, start.order.orderReference!!), created = true)
     }
 
     /**
@@ -87,14 +87,14 @@ class PaymentService(
     fun verify(customerId: Long, paymentReference: String): PaymentVerifyResponse {
         val payment = paymentRepository.findByReferenceForCustomer(paymentReference, customerId)
             ?: throw NotFoundException("Payment not found")
-        val settled = if (payment.status != PaymentStatus.PENDING) {
+        val settled = if (payment.paymentStatus != PaymentStatus.PENDING) {
             payment
         } else {
             // Outside any transaction, like initialize: no lock is held while the provider answers.
-            val result = paymentGateway.verify(payment.reference)
-            paymentSettlement.settle(payment.paymentId, result)
+            val result = paymentGateway.verify(payment.paymentReference!!)
+            paymentSettlement.settle(payment.paymentId!!, result)
         }
-        val order = orderRepository.findById(settled.orderId, customerId)!!
+        val order = orderRepository.findById(settled.paymentOrderId!!, customerId)!!
         return PaymentVerifyResponse.from(settled, order)
     }
 
@@ -128,32 +128,32 @@ class PaymentService(
             log.warn("Paystack webhook {} for unknown reference {}", event.event, event.reference)
             return
         }
-        if (payment.status != PaymentStatus.PENDING) return
+        if (payment.paymentStatus != PaymentStatus.PENDING) return
 
         // Outside any transaction, like verify. If Paystack cannot be reached this is a 502 and Paystack retries.
-        val result = paymentGateway.verify(payment.reference)
-        val settled = paymentSettlement.settle(payment.paymentId, result)
-        log.info("Paystack webhook {} settled payment {} as {}", event.event, settled.reference, settled.status)
+        val result = paymentGateway.verify(payment.paymentReference!!)
+        val settled = paymentSettlement.settle(payment.paymentId!!, result)
+        log.info("Paystack webhook {} settled payment {} as {}", event.event, settled.paymentReference, settled.paymentStatus)
     }
 
     /** Runs in one short transaction: checks the order and returns its open attempt or a new PENDING one. */
     private fun startAttempt(customerId: Long, orderReference: String): Start {
         // Payment starts for the same order run one at a time; another customer's order is "not found" too.
         val order = orderRepository.lockByReference(orderReference, customerId) ?: throw NotFoundException("Order not found")
-        if (order.status != OrderStatus.PENDING || order.paymentStatus != OrderPaymentStatus.UNPAID) {
+        if (order.orderStatus != OrderStatus.PENDING || order.orderPaymentStatus != OrderPaymentStatus.UNPAID) {
             throw ConflictException("This order cannot be paid")
         }
 
         // An attempt still without a page after STALE_START_SECONDS was left by a crashed request.
-        paymentRepository.failStaleStarts(order.orderId, STALE_START_SECONDS, NOT_STARTED)
-        paymentRepository.findOpenAttempt(order.orderId)?.let { open ->
-            if (open.authorizationUrl != null) return Start(order, open, email = null, isNew = false)
+        paymentRepository.failStaleStarts(order.orderId!!, STALE_START_SECONDS, NOT_STARTED)
+        paymentRepository.findOpenAttempt(order.orderId!!)?.let { open ->
+            if (open.paymentAuthorizationUrl != null) return Start(order, open, email = null, isNew = false)
             // Another request is waiting for Paystack right now; it will return the page.
             throw ConflictException("A payment for this order is already being started, try again in a moment")
         }
 
-        val email = customerRepository.findById(customerId)?.email ?: throw NotFoundException("Order not found")
-        val paymentId = paymentRepository.insert(order.orderId, newReference(), PROVIDER, order.total, CURRENCY)
+        val email = customerRepository.findById(customerId)?.customerEmail ?: throw NotFoundException("Order not found")
+        val paymentId = paymentRepository.insert(order.orderId!!, newReference(), PROVIDER, order.orderTotal!!, CURRENCY)
         return Start(order, paymentRepository.findById(paymentId)!!, email, isNew = true)
     }
 

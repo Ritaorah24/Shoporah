@@ -15,13 +15,13 @@ data class PaymentInitResponse(
 ) {
     companion object {
         fun from(payment: Payment, orderReference: String) = PaymentInitResponse(
-            paymentReference = payment.reference,
+            paymentReference = payment.paymentReference!!,
             orderReference = orderReference,
-            amount = payment.amount,
-            currency = payment.currency,
-            status = payment.status.name,
-            authorizationUrl = payment.authorizationUrl
-                ?: throw IllegalStateException("Payment ${payment.reference} has no authorization URL"),
+            amount = payment.paymentAmount!!,
+            currency = payment.paymentCurrency!!,
+            status = payment.paymentStatus!!.name,
+            authorizationUrl = payment.paymentAuthorizationUrl
+                ?: throw IllegalStateException("Payment ${payment.paymentReference} has no authorization URL"),
         )
     }
 }

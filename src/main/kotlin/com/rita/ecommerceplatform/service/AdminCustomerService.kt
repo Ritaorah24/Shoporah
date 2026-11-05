@@ -25,7 +25,7 @@ class AdminCustomerService(
         val safeSize = Paging.size(size)
         val customers = customerRepository.search(statusFilter, contains, safeSize, Paging.offset(safePage, safeSize))
         // One grouped query for the whole page, not one per customer.
-        val orderCounts = orderRepository.countByCustomerIds(customers.map { it.customerId })
+        val orderCounts = orderRepository.countByCustomerIds(customers.map { it.customerId!! })
         return PageResponse.of(
             customers.map { AdminCustomerSummaryResponse.from(it, orderCounts[it.customerId] ?: 0) },
             safePage,

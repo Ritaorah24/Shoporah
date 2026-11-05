@@ -7,13 +7,13 @@ import java.time.LocalDateTime
  * storageKey is how the storage knows it (to delete it). At most one per product is primary (uq__ec_productimage__primary).
  */
 data class ProductImage(
-    val imageId: Long,
-    val productId: Long,
-    val url: String,
-    val storageKey: String,
-    val altText: String?,
-    val sortOrder: Int,
-    val isPrimary: Boolean,
-    val createdAt: LocalDateTime,
-    val updatedAt: LocalDateTime,
+    var productImageId: Long? = null,
+    var productImageProductId: Long? = null,
+    var productImageUrl: String? = null,
+    var productImageStorageKey: String? = null,
+    var productImageAltText: String? = null,
+    var productImageSortOrder: Int? = null,
+    var productImageIsPrimary: Boolean? = null,
+    var productImageCreatedAt: LocalDateTime? = null,
+    var productImageUpdatedAt: LocalDateTime? = null,
 )

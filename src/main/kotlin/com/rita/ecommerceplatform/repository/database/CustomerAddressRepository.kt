@@ -5,7 +5,6 @@ import org.jdbi.v3.core.Jdbi
 import org.jdbi.v3.core.kotlin.mapTo
 import com.rita.ecommerceplatform.model.entity.AddressDetails
 import com.rita.ecommerceplatform.model.entity.CustomerAddress
-import org.jdbi.v3.core.mapper.RowMapper
 import org.springframework.stereotype.Repository
 import java.time.LocalDateTime
 
@@ -45,31 +44,11 @@ interface CustomerAddressRepository {
 @Repository
 class CustomerAddressRepositoryImpl(private val jdbi: Jdbi) : CustomerAddressRepository {
 
-    private val rowMapper = RowMapper { rs, _ ->
-        CustomerAddress(
-            addressId = rs.getLong("customeraddressid"),
-            customerId = rs.getLong("customeraddresscustomerid"),
-            details = AddressDetails(
-                recipientName = rs.getString("customeraddressrecipientname"),
-                recipientPhoneNumber = rs.getString("customeraddressrecipientphonenumber"),
-                addressLine1 = rs.getString("customeraddressline1"),
-                addressLine2 = rs.getString("customeraddressline2"),
-                city = rs.getString("customeraddresscity"),
-                state = rs.getString("customeraddressstate"),
-                country = rs.getString("customeraddresscountry"),
-                postalCode = rs.getString("customeraddresspostalcode"),
-            ),
-            isDefault = rs.getBoolean("customeraddressisdefault"),
-            createdAt = rs.getObject("customeraddresscreatedat", LocalDateTime::class.java),
-            updatedAt = rs.getObject("customeraddressupdatedat", LocalDateTime::class.java),
-        )
-    }
-
     override fun findByCustomer(customerId: Long): List<CustomerAddress> =
         jdbi.withHandle<List<CustomerAddress>, Exception> { handle ->
             handle.createQuery(CustomerAddressQuery.FIND_BY_CUSTOMER)
                 .bind("customerId", customerId)
-                .map(rowMapper)
+                .mapTo<CustomerAddress>()
                 .list()
         }
 
@@ -78,7 +57,7 @@ class CustomerAddressRepositoryImpl(private val jdbi: Jdbi) : CustomerAddressRep
             handle.createQuery(CustomerAddressQuery.FIND_BY_ID)
                 .bind("addressId", addressId)
                 .bind("customerId", customerId)
-                .map(rowMapper)
+                .mapTo<CustomerAddress>()
                 .findOne()
                 .orElse(null)
         }
@@ -87,7 +66,7 @@ class CustomerAddressRepositoryImpl(private val jdbi: Jdbi) : CustomerAddressRep
         jdbi.withHandle<CustomerAddress?, Exception> { handle ->
             handle.createQuery(CustomerAddressQuery.FIND_DEFAULT)
                 .bind("customerId", customerId)
-                .map(rowMapper)
+                .mapTo<CustomerAddress>()
                 .findOne()
                 .orElse(null)
         }

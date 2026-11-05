@@ -15,12 +15,12 @@ data class DeliveryMethodResponse(
 ) {
     companion object {
         fun from(method: DeliveryMethod) = DeliveryMethodResponse(
-            code = method.code,
-            name = method.name,
-            description = method.description,
-            fee = method.fee,
-            estimatedMinDays = method.estimatedMinDays,
-            estimatedMaxDays = method.estimatedMaxDays,
+            code = method.deliveryMethodCode!!,
+            name = method.deliveryMethodName!!,
+            description = method.deliveryMethodDescription,
+            fee = method.deliveryMethodFee!!,
+            estimatedMinDays = method.deliveryMethodEstimatedMinDays,
+            estimatedMaxDays = method.deliveryMethodEstimatedMaxDays,
         )
     }
 }
@@ -40,16 +40,16 @@ data class AdminDeliveryMethodResponse(
 ) {
     companion object {
         fun from(method: DeliveryMethod) = AdminDeliveryMethodResponse(
-            deliveryMethodId = method.deliveryMethodId,
-            code = method.code,
-            name = method.name,
-            description = method.description,
-            fee = method.fee,
-            estimatedMinDays = method.estimatedMinDays,
-            estimatedMaxDays = method.estimatedMaxDays,
-            status = method.status.name,
-            createdAt = method.createdAt,
-            updatedAt = method.updatedAt,
+            deliveryMethodId = method.deliveryMethodId!!,
+            code = method.deliveryMethodCode!!,
+            name = method.deliveryMethodName!!,
+            description = method.deliveryMethodDescription,
+            fee = method.deliveryMethodFee!!,
+            estimatedMinDays = method.deliveryMethodEstimatedMinDays,
+            estimatedMaxDays = method.deliveryMethodEstimatedMaxDays,
+            status = method.deliveryMethodStatus!!.name,
+            createdAt = method.deliveryMethodCreatedAt!!,
+            updatedAt = method.deliveryMethodUpdatedAt!!,
         )
     }
 }
@@ -57,6 +57,6 @@ data class AdminDeliveryMethodResponse(
 /** Which delivery method an order used, as shown on the order. */
 data class OrderDeliveryMethodResponse(val code: String, val name: String) {
     companion object {
-        fun from(method: DeliveryMethod) = OrderDeliveryMethodResponse(method.code, method.name)
+        fun from(method: DeliveryMethod) = OrderDeliveryMethodResponse(method.deliveryMethodCode!!, method.deliveryMethodName!!)
     }
 }

@@ -60,7 +60,7 @@ class ProductService(
         val safeSize = Paging.size(size)
         val products = productRepository.search(criteria, safeSize, Paging.offset(safePage, safeSize))
         // One query for the whole page's images, not one per product.
-        val images = productImageRepository.findByProductIds(products.map { it.productId })
+        val images = productImageRepository.findByProductIds(products.map { it.productId!! })
         return PageResponse.of(
             products.map { ProductResponse.from(it, images[it.productId].orEmpty()) },
             safePage,
@@ -99,7 +99,7 @@ class ProductService(
         val safePage = Paging.page(page)
         val safeSize = Paging.size(size)
         val products = productRepository.search(criteria, safeSize, Paging.offset(safePage, safeSize))
-        val images = productImageRepository.findByProductIds(products.map { it.productId })
+        val images = productImageRepository.findByProductIds(products.map { it.productId!! })
         return PageResponse.of(
             products.map { AdminProductResponse.from(it, images[it.productId].orEmpty()) },
             safePage,
@@ -122,7 +122,7 @@ class ProductService(
         findNotDeleted(productId)
         // Null here means removing more than there is; the stock is read again, as an order may have just taken some.
         val stockAfter = productRepository.adjustStock(productId, change)
-            ?: throw ConflictException("Only ${productRepository.findById(productId)!!.stockQuantity} in stock")
+            ?: throw ConflictException("Only ${productRepository.findById(productId)!!.productStockQuantity} in stock")
         val type = if (change > 0) InventoryMovementType.RESTOCK else InventoryMovementType.ADJUSTMENT
         inventoryMovementRepository.insert(productId, type, change, stockAfter, adminId, request.reason!!.trim())
         return getForAdmin(productId)
@@ -183,44 +183,44 @@ class ProductService(
     @Transactional
     fun update(adminId: Int, productId: Long, request: UpdateProductRequest): AdminProductResponse {
         val existing = productRepository.findByIdForUpdate(productId)
-        if (existing == null || existing.status == ProductStatus.DELETED) throw productNotFound()
+        if (existing == null || existing.productStatus == ProductStatus.DELETED) throw productNotFound()
 
-        val categoryId = request.categoryId ?: existing.categoryId
-        if (request.categoryId != null) requireUsableCategory(categoryId)
+        val categoryId = request.categoryId ?: existing.productCategoryId
+        if (request.categoryId != null) requireUsableCategory(categoryId!!)
 
-        val sku = request.sku?.uppercase() ?: existing.sku
-        if (productRepository.existsBySku(sku, excludingProductId = productId)) throw skuInUse()
+        val sku = request.sku?.uppercase() ?: existing.productSku
+        if (productRepository.existsBySku(sku!!, excludingProductId = productId)) throw skuInUse()
 
         // Checked on the merged values: a new price must still be above the existing discount.
-        val price = request.price ?: existing.price
+        val price = request.price ?: existing.productPrice
         val discountPrice = when {
             request.clearDiscountPrice == true -> null
             request.discountPrice != null -> request.discountPrice
-            else -> existing.discountPrice
+            else -> existing.productDiscountPrice
         }
-        checkDiscount(price, discountPrice)
+        checkDiscount(price!!, discountPrice)
 
-        val stock = request.stockQuantity ?: existing.stockQuantity
+        val stock = request.stockQuantity ?: existing.productStockQuantity
         try {
             productRepository.update(
                 productId = productId,
-                categoryId = categoryId,
-                name = request.name ?: existing.name,
-                description = if (request.description != null) request.description.blankToNull() else existing.description,
-                sku = sku,
-                price = price,
+                categoryId = categoryId!!,
+                name = request.name ?: existing.productName!!,
+                description = if (request.description != null) request.description.blankToNull() else existing.productDescription,
+                sku = sku!!,
+                price = price!!,
                 discountPrice = discountPrice,
-                stockQuantity = stock,
-                lowStockThreshold = request.lowStockThreshold ?: existing.lowStockThreshold,
+                stockQuantity = stock!!,
+                lowStockThreshold = request.lowStockThreshold ?: existing.productLowStockThreshold,
             )
         } catch (e: DuplicateKeyException) {
             throw skuInUse()
         }
 
-        val change = stock - existing.stockQuantity
+        val change = stock!! - existing.productStockQuantity!!
         if (change != 0) {
             val type = if (change > 0) InventoryMovementType.RESTOCK else InventoryMovementType.ADJUSTMENT
-            inventoryMovementRepository.insert(productId, type, change, stock, adminId, "Edited by admin")
+            inventoryMovementRepository.insert(productId, type, change, stock!!, adminId, "Edited by admin")
         }
         return getForAdmin(productId)
     }
@@ -282,7 +282,7 @@ class ProductService(
     /** Deleted products behave as if they do not exist (D3). */
     private fun findNotDeleted(productId: Long): Product {
         val product = productRepository.findById(productId)
-        if (product == null || product.status == ProductStatus.DELETED) throw productNotFound()
+        if (product == null || product.productStatus == ProductStatus.DELETED) throw productNotFound()
         return product
     }
 
@@ -293,7 +293,7 @@ class ProductService(
      */
     private fun requireUsableCategory(categoryId: Int) {
         val category = categoryRepository.findById(categoryId)
-        if (category == null || category.status == CategoryStatus.DELETED) {
+        if (category == null || category.categoryStatus == CategoryStatus.DELETED) {
             throw BadRequestException("Category $categoryId does not exist")
         }
     }

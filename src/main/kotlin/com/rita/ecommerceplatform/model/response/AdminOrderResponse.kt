@@ -58,30 +58,30 @@ data class AdminOrderResponse(
             canCancel: Boolean,
             canRefund: Boolean,
         ) = AdminOrderResponse(
-            orderId = row.order.orderId,
-            reference = row.order.reference,
-            customerId = row.order.customerId,
+            orderId = row.order.orderId!!,
+            reference = row.order.orderReference!!,
+            customerId = row.order.orderCustomerId!!,
             customerName = row.customerName,
             customerEmail = row.customerEmail,
-            status = row.order.status.name,
-            paymentStatus = row.order.paymentStatus.name,
-            paidAt = row.order.paidAt,
+            status = row.order.orderStatus!!.name,
+            paymentStatus = row.order.orderPaymentStatus!!.name,
+            paidAt = row.order.orderPaidAt,
             nextStatuses = nextStatuses.map { it.name },
             canCancel = canCancel,
             canRefund = canRefund,
             items = items.map(OrderItemResponse::from),
-            subtotal = row.order.subtotal,
+            subtotal = row.order.orderSubtotal!!,
             deliveryMethod = OrderDeliveryMethodResponse.from(deliveryMethod),
-            deliveryFee = row.order.deliveryFee,
+            deliveryFee = row.order.orderDeliveryFee!!,
             couponCode = couponCode,
-            discountAmount = row.order.discountAmount,
-            total = row.order.total,
+            discountAmount = row.order.orderDiscountAmount!!,
+            total = row.order.orderTotal!!,
             deliveryAddress = DeliveryAddressResponse.from(row.order.deliveryAddress),
             statusHistory = history.map(AdminStatusChangeResponse::from),
             payments = payments.map(AdminPaymentResponse::from),
             refunds = refunds.map(AdminRefundResponse::from),
-            createdAt = row.order.createdAt,
-            updatedAt = row.order.updatedAt,
+            createdAt = row.order.orderCreatedAt!!,
+            updatedAt = row.order.orderUpdatedAt!!,
         )
     }
 }
@@ -97,16 +97,16 @@ data class AdminStatusChangeResponse(
 ) {
     companion object {
         fun from(change: OrderStatusChange) = AdminStatusChangeResponse(
-            fromStatus = change.fromStatus?.name,
-            status = change.toStatus.name,
+            fromStatus = change.orderStatusHistoryFromStatus?.name,
+            status = change.orderStatusHistoryToStatus!!.name,
             changedBy = when {
-                change.changedByAdminId != null -> "ADMIN"
-                change.changedByCustomerId != null -> "CUSTOMER"
+                change.orderStatusHistoryChangedByAdminId != null -> "ADMIN"
+                change.orderStatusHistoryChangedByCustomerId != null -> "CUSTOMER"
                 else -> "SYSTEM"
             },
-            adminId = change.changedByAdminId,
-            changedAt = change.createdAt,
-            note = change.note,
+            adminId = change.orderStatusHistoryChangedByAdminId,
+            changedAt = change.orderStatusHistoryCreatedAt!!,
+            note = change.orderStatusHistoryNote,
         )
     }
 }
@@ -125,15 +125,15 @@ data class AdminPaymentResponse(
 ) {
     companion object {
         fun from(payment: Payment) = AdminPaymentResponse(
-            reference = payment.reference,
-            provider = payment.provider,
-            status = payment.status.name,
-            amount = payment.amount,
-            currency = payment.currency,
-            channel = payment.channel,
-            gatewayResponse = payment.gatewayResponse,
-            paidAt = payment.paidAt,
-            createdAt = payment.createdAt,
+            reference = payment.paymentReference!!,
+            provider = payment.paymentProvider!!,
+            status = payment.paymentStatus!!.name,
+            amount = payment.paymentAmount!!,
+            currency = payment.paymentCurrency!!,
+            channel = payment.paymentChannel,
+            gatewayResponse = payment.paymentGatewayResponse,
+            paidAt = payment.paymentPaidAt,
+            createdAt = payment.paymentCreatedAt!!,
         )
     }
 }

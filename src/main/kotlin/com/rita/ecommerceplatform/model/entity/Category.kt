@@ -4,13 +4,13 @@ import java.time.LocalDateTime
 
 /** One row of public.ec_category. */
 data class Category(
-    val categoryId: Int,
-    val name: String,
-    val description: String?,
-    val createdByAdminId: Int,
-    val status: CategoryStatus,
-    val createdAt: LocalDateTime,
-    val updatedAt: LocalDateTime,
+    var categoryId: Int? = null,
+    var categoryName: String? = null,
+    var categoryDescription: String? = null,
+    var categoryCreatedByAdminId: Int? = null,
+    var categoryStatus: CategoryStatus? = null,
+    var categoryCreatedAt: LocalDateTime? = null,
+    var categoryUpdatedAt: LocalDateTime? = null,
 )
 
 /** Allowed values of ec_category.categorystatus (ck__ec_category__status). DELETED is a soft delete. */

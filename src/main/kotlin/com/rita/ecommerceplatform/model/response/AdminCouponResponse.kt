@@ -27,22 +27,22 @@ data class AdminCouponResponse(
 ) {
     companion object {
         fun from(coupon: Coupon, now: LocalDateTime) = AdminCouponResponse(
-            couponId = coupon.couponId,
-            code = coupon.code,
-            description = coupon.description,
-            discountType = coupon.discountType.name,
-            discountValue = coupon.discountValue,
-            maxDiscountAmount = coupon.maxDiscountAmount,
-            minimumOrderValue = coupon.minimumOrderValue,
-            usageLimit = coupon.usageLimit,
-            usageCount = coupon.usageCount,
-            startsAt = coupon.startsAt,
-            expiresAt = coupon.expiresAt,
-            status = coupon.status.name,
+            couponId = coupon.couponId!!,
+            code = coupon.couponCode!!,
+            description = coupon.couponDescription,
+            discountType = coupon.couponDiscountType!!.name,
+            discountValue = coupon.couponDiscountValue!!,
+            maxDiscountAmount = coupon.couponMaxDiscountAmount,
+            minimumOrderValue = coupon.couponMinimumOrderValue!!,
+            usageLimit = coupon.couponUsageLimit,
+            usageCount = coupon.couponUsageCount!!,
+            startsAt = coupon.couponStartsAt,
+            expiresAt = coupon.couponExpiresAt,
+            status = coupon.couponStatus!!.name,
             state = coupon.state(now).name,
-            createdByAdminId = coupon.createdByAdminId,
-            createdAt = coupon.createdAt,
-            updatedAt = coupon.updatedAt,
+            createdByAdminId = coupon.couponCreatedByAdminId!!,
+            createdAt = coupon.couponCreatedAt!!,
+            updatedAt = coupon.couponUpdatedAt!!,
         )
     }
 }

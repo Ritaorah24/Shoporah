@@ -5,7 +5,6 @@ import org.jdbi.v3.core.Jdbi
 import org.jdbi.v3.core.kotlin.mapTo
 import com.rita.ecommerceplatform.model.entity.CustomerAuth
 import com.rita.ecommerceplatform.model.entity.CustomerAuthStatus
-import org.jdbi.v3.core.mapper.RowMapper
 import org.springframework.stereotype.Repository
 import java.time.LocalDateTime
 
@@ -39,24 +38,6 @@ interface CustomerAuthRepository {
 @Repository
 class CustomerAuthRepositoryImpl(private val jdbi: Jdbi) : CustomerAuthRepository {
 
-    private val rowMapper = RowMapper { rs, _ ->
-        CustomerAuth(
-            customerAuthId = rs.getLong("customerauthid"),
-            customerId = rs.getLong("customerauthcustomerid"),
-            passwordHash = rs.getString("customerauthpasswordhash"),
-            passwordChangedAt = rs.getObject("customerauthpasswordchangedat", LocalDateTime::class.java),
-            failedLoginAttempts = rs.getInt("customerauthfailedloginattempts"),
-            lastFailedLoginAt = rs.getObject("customerauthlastfailedloginat", LocalDateTime::class.java),
-            lockedUntil = rs.getObject("customerauthlockeduntil", LocalDateTime::class.java),
-            lastLoginAt = rs.getObject("customerauthlastloginat", LocalDateTime::class.java),
-            resetTokenHash = rs.getString("customerauthresettokenhash"),
-            resetTokenExpiresAt = rs.getObject("customerauthresettokenexpiresat", LocalDateTime::class.java),
-            status = CustomerAuthStatus.valueOf(rs.getString("customerauthstatus").uppercase()),
-            createdAt = rs.getObject("customerauthcreatedat", LocalDateTime::class.java),
-            updatedAt = rs.getObject("customerauthupdatedat", LocalDateTime::class.java),
-        )
-    }
-
     override fun insert(customerId: Long, passwordHash: String): Long =
         jdbi.withHandle<Long, Exception> { handle ->
             handle.createQuery(CustomerAuthQuery.INSERT)
@@ -70,7 +51,7 @@ class CustomerAuthRepositoryImpl(private val jdbi: Jdbi) : CustomerAuthRepositor
         jdbi.withHandle<CustomerAuth?, Exception> { handle ->
             handle.createQuery(CustomerAuthQuery.FIND_BY_CUSTOMER_ID)
                 .bind("customerId", customerId)
-                .map(rowMapper)
+                .mapTo<CustomerAuth>()
                 .findOne()
                 .orElse(null)
         }
@@ -104,7 +85,7 @@ class CustomerAuthRepositoryImpl(private val jdbi: Jdbi) : CustomerAuthRepositor
         jdbi.withHandle<CustomerAuth?, Exception> { handle ->
             handle.createQuery(CustomerAuthQuery.FIND_BY_VALID_RESET_TOKEN_HASH)
                 .bind("tokenHash", tokenHash)
-                .map(rowMapper)
+                .mapTo<CustomerAuth>()
                 .findOne()
                 .orElse(null)
         }

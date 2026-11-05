@@ -15,13 +15,13 @@ data class CustomerProfileResponse(
 ) {
     companion object {
         fun from(customer: Customer) = CustomerProfileResponse(
-            customerId = customer.customerId,
-            firstName = customer.firstName,
-            lastName = customer.lastName,
-            email = customer.email,
-            phoneNumber = customer.phoneNumber,
-            status = customer.status.name,
-            createdAt = customer.createdAt,
+            customerId = customer.customerId!!,
+            firstName = customer.customerFirstName!!,
+            lastName = customer.customerLastName!!,
+            email = customer.customerEmail!!,
+            phoneNumber = customer.customerPhoneNumber,
+            status = customer.customerStatus!!.name,
+            createdAt = customer.customerCreatedAt!!,
         )
     }
 }

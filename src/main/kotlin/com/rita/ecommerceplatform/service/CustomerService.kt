@@ -23,9 +23,9 @@ class CustomerService(private val customerRepository: CustomerRepository) {
 
         customerRepository.updateProfile(
             customerId = customerId,
-            firstName = request.firstName?.trim() ?: existing.firstName,
-            lastName = request.lastName?.trim() ?: existing.lastName,
-            phoneNumber = request.phoneNumber ?: existing.phoneNumber,
+            firstName = request.firstName?.trim() ?: existing.customerFirstName!!,
+            lastName = request.lastName?.trim() ?: existing.customerLastName!!,
+            phoneNumber = request.phoneNumber ?: existing.customerPhoneNumber,
         )
 
         val updated = customerRepository.findById(customerId)
@@ -39,7 +39,7 @@ class CustomerService(private val customerRepository: CustomerRepository) {
      */
     private fun findActiveCustomer(customerId: Long): Customer {
         val customer = customerRepository.findById(customerId) ?: throw NotFoundException("Customer not found")
-        if (customer.status != CustomerStatus.ACTIVE) throw AccountNotActiveException()
+        if (customer.customerStatus != CustomerStatus.ACTIVE) throw AccountNotActiveException()
         return customer
     }
 }

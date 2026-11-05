@@ -4,20 +4,20 @@ import java.time.LocalDateTime
 
 /** One row of public.ec_admin_auth (1:1 with ec_admin). Holds hashes only. */
 data class AdminAuth(
-    val adminAuthId: Int,
-    val adminId: Int,
-    val passwordHash: String?,
-    val passwordStatus: PasswordStatus,
-    val passwordChangedAt: LocalDateTime?,
-    val failedLoginAttempts: Int,
-    val lastFailedLoginAt: LocalDateTime?,
-    val lockedUntil: LocalDateTime?,
-    val lastLoginAt: LocalDateTime?,
-    val resetTokenHash: String?,
-    val resetTokenExpiresAt: LocalDateTime?,
-    val status: AdminAuthStatus,
-    val createdAt: LocalDateTime,
-    val updatedAt: LocalDateTime,
+    var adminAuthId: Int? = null,
+    var adminAuthAdminId: Int? = null,
+    var adminAuthPasswordHash: String? = null,
+    var adminAuthPasswordStatus: PasswordStatus? = null,
+    var adminAuthPasswordChangedAt: LocalDateTime? = null,
+    var adminAuthFailedLoginAttempts: Int? = null,
+    var adminAuthLastFailedLoginAt: LocalDateTime? = null,
+    var adminAuthLockedUntil: LocalDateTime? = null,
+    var adminAuthLastLoginAt: LocalDateTime? = null,
+    var adminAuthResetTokenHash: String? = null,
+    var adminAuthResetTokenExpiresAt: LocalDateTime? = null,
+    var adminAuthStatus: AdminAuthStatus? = null,
+    var adminAuthCreatedAt: LocalDateTime? = null,
+    var adminAuthUpdatedAt: LocalDateTime? = null,
 )
 
 /** Allowed values of ec_admin_auth.adminauthpasswordstatus (ck__ec_adminauth__passwordstatus). */

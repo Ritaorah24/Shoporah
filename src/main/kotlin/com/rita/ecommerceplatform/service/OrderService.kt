@@ -88,11 +88,11 @@ class OrderService(
         } else {
             CouponCheck.discountFor(coupon, couponCode, subtotal, CouponService.now())
         }
-        val total = subtotal + deliveryMethod.fee - discount
+        val total = subtotal + deliveryMethod.deliveryMethodFee!! - discount
         if (coupon != null) {
             // Paystack cannot take ₦0, and stock is only taken when a payment is confirmed.
-            if (total.signum() <= 0) CouponCheck.refuse("Coupon ${coupon.code} would make the order free, which is not supported")
-            check(couponRepository.redeem(coupon.couponId) == 1) { "Coupon ${coupon.couponId} changed while locked" }
+            if (total.signum() <= 0) CouponCheck.refuse("Coupon ${coupon.couponCode} would make the order free, which is not supported")
+            check(couponRepository.redeem(coupon.couponId!!) == 1) { "Coupon ${coupon.couponId} changed while locked" }
         }
 
         val orderId = try {
@@ -101,12 +101,12 @@ class OrderService(
                     reference = newReference(),
                     idempotencyKey = idempotencyKey,
                     customerId = customerId,
-                    customerAddressId = address.addressId,
-                    deliveryMethodId = deliveryMethod.deliveryMethodId,
+                    customerAddressId = address.customerAddressId,
+                    deliveryMethodId = deliveryMethod.deliveryMethodId!!,
                     couponId = coupon?.couponId,
                     deliveryAddress = address.details,
                     subtotal = subtotal,
-                    deliveryFee = deliveryMethod.fee,
+                    deliveryFee = deliveryMethod.deliveryMethodFee!!,
                     discountAmount = discount,
                     total = total,
                 ),
@@ -118,7 +118,7 @@ class OrderService(
 
         // Snapshot of each product as it is now, so later product edits never change the order.
         items.forEach { item ->
-            orderItemRepository.insert(orderId, item.productId, item.productName, item.productSku, item.sellingPrice, item.quantity)
+            orderItemRepository.insert(orderId, item.productId!!, item.productName!!, item.productSku!!, item.productSellingPrice!!, item.cartItemQuantity!!)
         }
         statusHistoryRepository.insert(
             orderId = orderId,
@@ -137,7 +137,7 @@ class OrderService(
         notificationService.queueToCustomer(
             NotificationType.ORDER_CONFIRMATION,
             customer,
-            NotificationMessages.orderPlaced(customer.firstName, order, orderItemRepository.findByOrderId(orderId)),
+            NotificationMessages.orderPlaced(customer.customerFirstName!!, order, orderItemRepository.findByOrderId(orderId)),
             orderId = orderId,
         )
 
@@ -150,7 +150,7 @@ class OrderService(
         val safeSize = Paging.size(size)
         val orders = orderRepository.findByCustomer(customerId, safeSize, Paging.offset(safePage, safeSize))
         // One grouped query for the whole page, not one per order.
-        val quantities = orderItemRepository.quantitiesByOrderIds(orders.map { it.orderId })
+        val quantities = orderItemRepository.quantitiesByOrderIds(orders.map { it.orderId!! })
         return PageResponse.of(
             orders.map { OrderSummaryResponse.from(it, quantities[it.orderId] ?: 0) },
             safePage,
@@ -170,7 +170,7 @@ class OrderService(
      */
     fun cancel(customerId: Long, orderId: Long, request: CancelOrderRequest?): OrderResponse {
         val order = orderRepository.findById(orderId, customerId) ?: throw NotFoundException("Order not found")
-        if (order.status != OrderStatus.PENDING || order.paymentStatus != OrderPaymentStatus.UNPAID) {
+        if (order.orderStatus != OrderStatus.PENDING || order.orderPaymentStatus != OrderPaymentStatus.UNPAID) {
             throw OrderCancellation.notCancellable()
         }
 
@@ -203,10 +203,10 @@ class OrderService(
     private fun toResponse(order: Order): OrderResponse =
         OrderResponse.from(
             order,
-            orderItemRepository.findByOrderId(order.orderId),
-            statusHistoryRepository.findByOrderId(order.orderId),
-            deliveryMethodRepository.findById(order.deliveryMethodId)!!,
-            order.couponId?.let { couponRepository.findById(it)!!.code },
+            orderItemRepository.findByOrderId(order.orderId!!),
+            statusHistoryRepository.findByOrderId(order.orderId!!),
+            deliveryMethodRepository.findById(order.orderDeliveryMethodId!!)!!,
+            order.orderCouponId?.let { couponRepository.findById(it)!!.couponCode },
         )
 
     companion object {

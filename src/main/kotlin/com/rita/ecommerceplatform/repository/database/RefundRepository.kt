@@ -5,7 +5,6 @@ import org.jdbi.v3.core.Jdbi
 import org.jdbi.v3.core.kotlin.mapTo
 import com.rita.ecommerceplatform.model.entity.Refund
 import com.rita.ecommerceplatform.model.entity.RefundStatus
-import org.jdbi.v3.core.mapper.RowMapper
 import org.springframework.stereotype.Repository
 import java.math.BigDecimal
 import java.time.LocalDateTime
@@ -75,26 +74,6 @@ interface RefundRepository {
 @Repository
 class RefundRepositoryImpl(private val jdbi: Jdbi) : RefundRepository {
 
-    private val rowMapper = RowMapper { rs, _ ->
-        Refund(
-            refundId = rs.getLong("refundid"),
-            orderId = rs.getLong("refundorderid"),
-            paymentId = rs.getLong("refundpaymentid"),
-            amount = rs.getBigDecimal("refundamount"),
-            currency = rs.getString("refundcurrency"),
-            status = RefundStatus.valueOf(rs.getString("refundstatus").uppercase()),
-            providerRefundId = rs.getString("refundproviderrefundid"),
-            providerStatus = rs.getString("refundproviderstatus"),
-            reason = rs.getString("refundreason"),
-            restock = rs.getBoolean("refundrestock"),
-            requestedByAdminId = rs.getInt("refundrequestedbyadminid"),
-            failureReason = rs.getString("refundfailurereason"),
-            processedAt = rs.getObject("refundprocessedat", LocalDateTime::class.java),
-            createdAt = rs.getObject("refundcreatedat", LocalDateTime::class.java),
-            updatedAt = rs.getObject("refundupdatedat", LocalDateTime::class.java),
-        )
-    }
-
     override fun insert(
         orderId: Long,
         paymentId: Long,
@@ -121,7 +100,7 @@ class RefundRepositoryImpl(private val jdbi: Jdbi) : RefundRepository {
         jdbi.withHandle<Refund?, Exception> { handle ->
             handle.createQuery(RefundQuery.FIND_BY_ID)
                 .bind("refundId", refundId)
-                .map(rowMapper)
+                .mapTo<Refund>()
                 .findOne()
                 .orElse(null)
         }
@@ -130,7 +109,7 @@ class RefundRepositoryImpl(private val jdbi: Jdbi) : RefundRepository {
         jdbi.withHandle<Refund?, Exception> { handle ->
             handle.createQuery(RefundQuery.LOCK_BY_ID)
                 .bind("refundId", refundId)
-                .map(rowMapper)
+                .mapTo<Refund>()
                 .findOne()
                 .orElse(null)
         }
@@ -139,7 +118,7 @@ class RefundRepositoryImpl(private val jdbi: Jdbi) : RefundRepository {
         jdbi.withHandle<List<Refund>, Exception> { handle ->
             handle.createQuery(RefundQuery.FIND_BY_ORDER)
                 .bind("orderId", orderId)
-                .map(rowMapper)
+                .mapTo<Refund>()
                 .list()
         }
 
@@ -147,7 +126,7 @@ class RefundRepositoryImpl(private val jdbi: Jdbi) : RefundRepository {
         jdbi.withHandle<Refund?, Exception> { handle ->
             handle.createQuery(RefundQuery.FIND_BY_PROVIDER_REFUND_ID)
                 .bind("providerRefundId", providerRefundId)
-                .map(rowMapper)
+                .mapTo<Refund>()
                 .findOne()
                 .orElse(null)
         }
@@ -156,7 +135,7 @@ class RefundRepositoryImpl(private val jdbi: Jdbi) : RefundRepository {
         jdbi.withHandle<Refund?, Exception> { handle ->
             handle.createQuery(RefundQuery.FIND_UNCONFIRMED_FOR_PAYMENT)
                 .bind("paymentId", paymentId)
-                .map(rowMapper)
+                .mapTo<Refund>()
                 .findOne()
                 .orElse(null)
         }

@@ -7,7 +7,6 @@ import com.rita.ecommerceplatform.utility.constant.PrefixConstant
 import com.rita.ecommerceplatform.utility.containsPattern
 import com.rita.ecommerceplatform.model.entity.Product
 import com.rita.ecommerceplatform.model.entity.ProductStatus
-import org.jdbi.v3.core.mapper.RowMapper
 import org.springframework.stereotype.Repository
 import java.math.BigDecimal
 import java.time.LocalDateTime
@@ -125,26 +124,6 @@ interface ProductRepository {
 @Repository
 class ProductRepositoryImpl(private val jdbi: Jdbi) : ProductRepository {
 
-    private val rowMapper = RowMapper { rs, _ ->
-        Product(
-            productId = rs.getLong("productid"),
-            categoryId = rs.getInt("productcategoryid"),
-            categoryName = rs.getString("categoryname"),
-            name = rs.getString("productname"),
-            description = rs.getString("productdescription"),
-            sku = rs.getString("productsku"),
-            price = rs.getBigDecimal("productprice"),
-            discountPrice = rs.getBigDecimal("productdiscountprice"),
-            sellingPrice = rs.getBigDecimal("productsellingprice"),
-            stockQuantity = rs.getInt("productstockquantity"),
-            lowStockThreshold = rs.getObject("productlowstockthreshold", Int::class.javaObjectType),
-            createdByAdminId = rs.getInt("productcreatedbyadminid"),
-            status = ProductStatus.valueOf(rs.getString("productstatus").uppercase()),
-            createdAt = rs.getObject("productcreatedat", LocalDateTime::class.java),
-            updatedAt = rs.getObject("productupdatedat", LocalDateTime::class.java),
-        )
-    }
-
     override fun existsBySku(sku: String, excludingProductId: Long?): Boolean =
         jdbi.withHandle<Boolean, Exception> { handle ->
             handle.createQuery(ProductQuery.EXISTS_BY_SKU)
@@ -184,7 +163,7 @@ class ProductRepositoryImpl(private val jdbi: Jdbi) : ProductRepository {
         jdbi.withHandle<Product?, Exception> { handle ->
             handle.createQuery(ProductQuery.FIND_BY_ID)
                 .bind("productId", productId)
-                .map(rowMapper)
+                .mapTo<Product>()
                 .findOne()
                 .orElse(null)
         }
@@ -193,7 +172,7 @@ class ProductRepositoryImpl(private val jdbi: Jdbi) : ProductRepository {
         jdbi.withHandle<Product?, Exception> { handle ->
             handle.createQuery(ProductQuery.FIND_PUBLIC_BY_ID)
                 .bind("productId", productId)
-                .map(rowMapper)
+                .mapTo<Product>()
                 .findOne()
                 .orElse(null)
         }
@@ -202,7 +181,7 @@ class ProductRepositoryImpl(private val jdbi: Jdbi) : ProductRepository {
         jdbi.withHandle<Product?, Exception> { handle ->
             handle.createQuery(ProductQuery.FIND_BY_ID_FOR_UPDATE)
                 .bind("productId", productId)
-                .map(rowMapper)
+                .mapTo<Product>()
                 .findOne()
                 .orElse(null)
         }
@@ -276,7 +255,7 @@ class ProductRepositoryImpl(private val jdbi: Jdbi) : ProductRepository {
             handle.createQuery("${ProductQuery.SELECT_WITH_CATEGORY} $where ORDER BY ${criteria.sort.orderBy} LIMIT :limit OFFSET :offset")
                 .bindList("statuses", criteria.statuses.map { it.name })
                 .bindMap(params + mapOf("limit" to limit, "offset" to offset))
-                .map(rowMapper)
+                .mapTo<Product>()
                 .list()
         }
     }

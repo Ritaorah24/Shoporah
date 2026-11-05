@@ -68,20 +68,7 @@ class InventoryMovementRepositoryImpl(private val jdbi: Jdbi) : InventoryMovemen
                 .bind("productId", productId)
                 .bind("limit", limit)
                 .bind("offset", offset)
-            .map(RowMapper { rs, _ ->
-                    InventoryMovement(
-                        movementId = rs.getLong("inventorymovementid"),
-                        productId = rs.getLong("inventorymovementproductid"),
-                        type = InventoryMovementType.valueOf(rs.getString("inventorymovementtype").uppercase()),
-                        quantityChange = rs.getInt("inventorymovementquantitychange"),
-                        stockAfter = rs.getInt("inventorymovementstockafter"),
-                        orderId = rs.getObject("inventorymovementorderid", Long::class.javaObjectType),
-                        orderReference = rs.getString("orderreference"),
-                        adminId = rs.getObject("inventorymovementadminid", Int::class.javaObjectType),
-                        note = rs.getString("inventorymovementnote"),
-                        createdAt = rs.getObject("inventorymovementcreatedat", LocalDateTime::class.java),
-                    )
-            })
+            .mapTo<InventoryMovement>()
             .list()
         }
 

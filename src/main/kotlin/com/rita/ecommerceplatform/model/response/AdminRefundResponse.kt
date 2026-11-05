@@ -25,18 +25,18 @@ data class AdminRefundResponse(
 ) {
     companion object {
         fun from(refund: Refund) = AdminRefundResponse(
-            refundId = refund.refundId,
-            status = refund.status.name,
-            amount = refund.amount,
-            currency = refund.currency,
-            reason = refund.reason,
-            restock = refund.restock,
-            requestedByAdminId = refund.requestedByAdminId,
-            providerRefundId = refund.providerRefundId,
-            providerStatus = refund.providerStatus,
-            failureReason = refund.failureReason,
-            processedAt = refund.processedAt,
-            createdAt = refund.createdAt,
+            refundId = refund.refundId!!,
+            status = refund.refundStatus!!.name,
+            amount = refund.refundAmount!!,
+            currency = refund.refundCurrency!!,
+            reason = refund.refundReason!!,
+            restock = refund.refundRestock!!,
+            requestedByAdminId = refund.refundRequestedByAdminId!!,
+            providerRefundId = refund.refundProviderRefundId,
+            providerStatus = refund.refundProviderStatus,
+            failureReason = refund.refundFailureReason,
+            processedAt = refund.refundProcessedAt,
+            createdAt = refund.refundCreatedAt!!,
         )
     }
 }

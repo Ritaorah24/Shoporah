@@ -59,16 +59,16 @@ class DeliveryMethodService(private val deliveryMethodRepository: DeliveryMethod
     @Transactional
     fun update(deliveryMethodId: Int, request: UpdateDeliveryMethodRequest): AdminDeliveryMethodResponse {
         val existing = find(deliveryMethodId)
-        val minDays = request.estimatedMinDays ?: existing.estimatedMinDays
-        val maxDays = request.estimatedMaxDays ?: existing.estimatedMaxDays
+        val minDays = request.estimatedMinDays ?: existing.deliveryMethodEstimatedMinDays
+        val maxDays = request.estimatedMaxDays ?: existing.deliveryMethodEstimatedMaxDays
         // Checked on the merged values, so sending only one of the two is compared with the stored other.
         checkDays(minDays, maxDays)
 
         deliveryMethodRepository.update(
             deliveryMethodId = deliveryMethodId,
-            name = request.name ?: existing.name,
-            description = if (request.description != null) request.description.blankToNull() else existing.description,
-            fee = request.fee ?: existing.fee,
+            name = request.name ?: existing.deliveryMethodName!!,
+            description = if (request.description != null) request.description.blankToNull() else existing.deliveryMethodDescription,
+            fee = request.fee ?: existing.deliveryMethodFee!!,
             estimatedMinDays = minDays,
             estimatedMaxDays = maxDays,
         )
@@ -81,7 +81,7 @@ class DeliveryMethodService(private val deliveryMethodRepository: DeliveryMethod
         val existing = find(deliveryMethodId)
         val status = DeliveryMethodStatus.valueOf(request.status!!.uppercase())
         // Checkout falls back to STANDARD when no method is named, so it must always be available.
-        if (status == DeliveryMethodStatus.INACTIVE && existing.code.equals(OrderService.DEFAULT_DELIVERY_METHOD, ignoreCase = true)) {
+        if (status == DeliveryMethodStatus.INACTIVE && existing.deliveryMethodCode.equals(OrderService.DEFAULT_DELIVERY_METHOD, ignoreCase = true)) {
             throw ConflictException("${OrderService.DEFAULT_DELIVERY_METHOD} is the default delivery method and cannot be deactivated")
         }
         deliveryMethodRepository.updateStatus(deliveryMethodId, status)
